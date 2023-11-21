@@ -53,8 +53,9 @@ namespace troy {namespace utils {
         uint64_t value = ((static_cast<uint64_t>(1) << bit_size) - 1) / factor * factor + 1;
         uint64_t lower_bound = static_cast<uint64_t>(1) << (bit_size - 1);
         while (count > 0 && value > lower_bound) {
-            if (is_prime(value)) {
-                ret.push_back(Modulus(value));
+            Modulus modulus(value);
+            if (is_prime(modulus)) {
+                ret.push_back(modulus);
                 count--;
             }
             value -= factor;

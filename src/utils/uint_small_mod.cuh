@@ -104,6 +104,12 @@ namespace troy { namespace utils {
             this->set_quotient(modulus);
         }
 
+        __host__ __device__
+        inline MultiplyUint64Operand() {
+            this->operand = 0;
+            this->quotient = 0;
+        }
+
     };
 
     __host__ __device__

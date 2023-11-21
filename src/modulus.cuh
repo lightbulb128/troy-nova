@@ -16,7 +16,7 @@ namespace troy {
 
     public:
 
-        Modulus(uint64_t value = 0);
+        explicit Modulus(uint64_t value = 0);
 
         __host__ __device__
         inline uint64_t reduce(uint64_t input) const {

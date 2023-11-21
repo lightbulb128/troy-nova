@@ -40,6 +40,10 @@ namespace troy { namespace utils {
         }
     }
 
+    inline bool try_invert_uint64_mod(const uint64_t& value, const Modulus& modulus, uint64_t& result) {
+        return try_invert_uint64_mod_uint64(value, modulus.value(), result);
+    }
+
     std::vector<Modulus> get_primes(uint64_t factor, size_t bit_size, size_t count);
 
     inline Modulus get_prime(uint64_t factor, size_t bit_size) {

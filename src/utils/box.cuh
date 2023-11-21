@@ -37,29 +37,51 @@ namespace troy { namespace utils {
     public:
 
         Box(T* object, bool device) : pointer(object), device(device) {}
-        Box(T&& object) : pointer(new T(std::move(object))), device(false) {}
+        Box(T&& object) : device(false) {
+            pointer = reinterpret_cast<T*>(malloc(sizeof(T)));
+            *pointer = std::move(object);
+        }
         Box(Box&& other) : pointer(other.pointer), device(other.device) { other.pointer = nullptr; }
 
         __host__ __device__ bool on_device() const { return device; }
+
+        inline void release() {
+            if (!pointer) return;
+            if (!device) free(reinterpret_cast<void*>(pointer));
+            else kernel_provider::free(pointer);
+            pointer = nullptr;
+        }
     
         ~Box() { 
-            if (!pointer) return;
-            if (!device) delete pointer;
-            else kernel_provider::free(pointer);
+            release();
         }
 
-        Box& operator=(T&& object) = delete;
+        Box& operator=(T&& object) {
+            release();
+            pointer = object.pointer;
+            device = object.device;
+            object.pointer = nullptr;
+            return *this;
+        }
+
         Box(const Box&) = delete;
         Box& operator=(const Box&) = delete;
         
         Box clone() const {
-            T cloned = *pointer;
-            return Box(std::move(cloned), device);
+            if (!device) {
+                T* cloned = reinterpret_cast<T*>(malloc(sizeof(T)));
+                memcpy(cloned, pointer, sizeof(T));
+                return Box(std::move(cloned), device);
+            } else {
+                T* cloned = kernel_provider::malloc<T>(1);
+                kernel_provider::copy_device_to_device(cloned, pointer, 1);
+                return Box(std::move(cloned), device);
+            }
         }
 
         Box to_host() const {
             if (!device) return this->clone();
-            T* cloned = new T();
+            T* cloned = reinterpret_cast<T*>(malloc(sizeof(T)));
             kernel_provider::copy_device_to_host(&cloned, pointer, 1);
             return Box(cloned, false);
         }
@@ -69,6 +91,24 @@ namespace troy { namespace utils {
             T* cloned = kernel_provider::malloc<T>(1);
             kernel_provider::copy_host_to_device(cloned, pointer, 1);
             return Box(cloned, true);
+        }
+
+        void to_host_inplace() {
+            if (!device) return;
+            T* cloned = reinterpret_cast<T*>(malloc(sizeof(T)));
+            kernel_provider::copy_device_to_host(&cloned, pointer, 1);
+            release();
+            pointer = cloned;
+            device = false;
+        }
+
+        void to_device_inplace() {
+            if (device) return;
+            T* cloned = kernel_provider::malloc<T>(1);
+            kernel_provider::copy_host_to_device(cloned, pointer, 1);
+            release();
+            pointer = cloned;
+            device = true;
         }
 
         T* operator->() { return pointer; }
@@ -125,26 +165,47 @@ namespace troy { namespace utils {
         bool device;
     public:
 
+        Array() : len(0), device(false), pointer(nullptr) {}
         Array(size_t count, bool device) : len(count), device(device) {
+            if (count == 0) {
+                pointer = nullptr;
+                return;
+            }
             if (device) {
                 pointer = kernel_provider::malloc<T>(count);
                 kernel_provider::memset_zero(pointer, count);
             } else {
-                pointer = new T[count];
+                pointer = reinterpret_cast<T*>(malloc(count * sizeof(T)));
                 memset(pointer, 0, count * sizeof(T));
             }
         }
-        ~Array() { 
+
+        inline void release() {
             if (!pointer) return;
-            if (!device) delete[] pointer;
+            if (!device) free(reinterpret_cast<void*>(pointer));
             else kernel_provider::free(pointer);
+        }
+        ~Array() { 
+            release();
+        }
+
+        Array& operator=(Array&& other) {
+            release();
+            pointer = other.pointer;
+            len = other.len;
+            device = other.device;
+            other.pointer = nullptr;
+            other.len = 0;
+            return *this;
         }
         
         __host__ __device__ bool on_device() const { return device; }
 
-        Array(Array&& other) : pointer(other.pointer), len(other.len), device(other.device) { other.pointer = nullptr; }
+        Array(Array&& other) : pointer(other.pointer), len(other.len), device(other.device) { 
+            other.pointer = nullptr;
+            other.len = 0; 
+        }
 
-        Array& operator=(T&& object) = delete;
         Array(const Array&) = delete;
         Array& operator=(const Array&) = delete;
 
@@ -164,7 +225,7 @@ namespace troy { namespace utils {
         __host__ __device__ const T& operator[](size_t index) const { return pointer[index]; }
         __host__ __device__ T& operator[](size_t index) { return pointer[index]; }
 
-        Array clone() const {
+        inline Array clone() const {
             Array cloned(len, device);
             if (device) {
                 kernel_provider::copy_device_to_device(cloned.pointer, pointer, len);
@@ -174,18 +235,36 @@ namespace troy { namespace utils {
             return cloned;
         }
 
-        Array to_host() const {
+        inline Array to_host() const {
             if (!device) return this->clone();
             Array cloned(len, false);
             kernel_provider::copy_device_to_host(cloned.pointer, pointer, len);
             return cloned;
         }
 
-        Array to_device() const {
+        inline Array to_device() const {
             if (device) return this->clone();
             Array cloned(len, true);
             kernel_provider::copy_host_to_device(cloned.pointer, pointer, len);
             return cloned;
+        }
+
+        inline void to_host_inplace() {
+            if (!device) return;
+            T* cloned = reinterpret_cast<T*>(malloc(len * sizeof(T)));
+            kernel_provider::copy_device_to_host(cloned, pointer, len);
+            release();
+            pointer = cloned;
+            device = false;
+        }
+
+        inline void to_device_inplace() {
+            if (device) return;
+            T* cloned = kernel_provider::malloc<T>(len);
+            kernel_provider::copy_host_to_device(cloned, pointer, len);
+            release();
+            pointer = cloned;
+            device = true;
         }
 
         inline void copy_from_slice(ConstSlice<T> slice) {
