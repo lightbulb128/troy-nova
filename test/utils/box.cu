@@ -1,0 +1,48 @@
+#include <gtest/gtest.h>
+#include "../test.cuh"
+#include "../../src/utils/box.cuh"
+
+using namespace troy::utils;
+
+class Foo {
+    int num;
+public:
+    Foo(int num) : num(num) {}
+    int get_num() const { return num; }
+    void set_num(int num) { this->num = num; }
+};
+
+namespace box {
+
+    TEST(Box, ItCompiles) {
+        EXPECT_EQ(1, 1);
+    }
+
+    TEST(Box, HostBox) {
+
+        int x = 1;
+        Box<int> x_box(std::move(x));
+        EXPECT_EQ(*x_box, 1);
+
+        *x_box = 2;
+        EXPECT_EQ(*x_box, 2);
+
+        Foo f(12);
+        Box<Foo> f_box(std::move(f));
+        EXPECT_EQ(f_box->get_num(), 12);
+
+        f_box->set_num(13);
+        EXPECT_EQ(f_box->get_num(), 13);
+
+        ConstPointer<Foo> f_const_ptr = f_box.as_const_pointer();
+        EXPECT_EQ(f_const_ptr->get_num(), 13);
+
+        Pointer<Foo> f_ptr = f_box.as_pointer();
+        EXPECT_EQ(f_ptr->get_num(), 13);
+        f_ptr->set_num(14);
+        EXPECT_EQ(f_ptr->get_num(), 14);
+        EXPECT_EQ(f_box->get_num(), 14);
+
+    }
+
+}
