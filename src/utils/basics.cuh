@@ -567,7 +567,7 @@ namespace troy { namespace utils {
         result[1] = static_cast<uint64_t>(temp_result >> 64);
     }
 
-    __host__
+    __host__ __device__
     inline void multiply_uint_uint64(ConstSlice<uint64_t> operand1, uint64_t operand2, Slice<uint64_t> result) {
         if (operand1.size() == 0 || operand2 == 0) {
             set_zero_uint(result);
@@ -666,6 +666,7 @@ namespace troy { namespace utils {
             if (a > b) return 1;
             if (a < b) return -1;
         }
+        return 0;
     }
 
     __host__ __device__

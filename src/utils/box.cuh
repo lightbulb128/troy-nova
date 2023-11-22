@@ -1,6 +1,8 @@
 #pragma once
 #include <cstdint>
+#include <iostream>
 #include <memory>
+#include <vector>
 #include "../kernel_provider.cuh"
 
 namespace troy { namespace utils {
@@ -156,6 +158,15 @@ namespace troy { namespace utils {
         __host__ __device__ static Slice<T> from_pointer(Pointer<T> pointer) {
             return Slice<T>(pointer.get(), 1, pointer.on_device());
         }
+        void copy_from_slice(ConstSlice<T> slice) {
+            if (slice.size() != len) throw std::runtime_error("Slice size does not match array size");
+            if (slice.on_device() != device) throw std::runtime_error("Slice device does not match array device");
+            if (device) {
+                kernel_provider::copy_device_to_device(pointer, slice.raw_pointer(), len);
+            } else {
+                memcpy(pointer, slice.raw_pointer(), len * sizeof(T));
+            }
+        }
     };
 
     template<class T>
@@ -274,6 +285,42 @@ namespace troy { namespace utils {
                 kernel_provider::copy_device_to_device(pointer, slice.raw_pointer(), len);
             } else {
                 memcpy(pointer, slice.raw_pointer(), len * sizeof(T));
+            }
+        }
+
+        inline static Array<T> create_and_copy_from_slice(ConstSlice<T> slice) {
+            Array<T> array(slice.size(), slice.on_device());
+            array.copy_from_slice(slice);
+            return array;
+        }
+
+        inline static Array<T> from_vector(std::vector<T>&& vector) {
+            Array<T> array(vector.size(), false);
+            memcpy(array.pointer, vector.data(), vector.size() * sizeof(T));
+            return array;
+        }
+
+        inline std::vector<T> to_vector() const {
+            if (device) {
+                Array<T> host_array = this->to_host();
+                return host_array.to_vector();
+            }
+            std::vector<T> vector(len);
+            memcpy(vector.data(), pointer, len * sizeof(T));
+            return vector;
+        }
+
+        inline void print() {
+            if (device) {
+                Array<T> host_array = this->to_host();
+                host_array.print();
+            } else {
+                std::cout << "[";
+                for (size_t i = 0; i < len; i++) {
+                    std::cout << pointer[i];
+                    if (i != len - 1) std::cout << ", ";
+                }
+                std::cout << "]";
             }
         }
 

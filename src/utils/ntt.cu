@@ -62,6 +62,7 @@ namespace troy {namespace utils {
         this->inv_degree_modulo_ = inv_degree_modulo_operand;
         this->root_powers_ = std::move(root_powers);
         this->inv_root_powers_ = std::move(inv_root_powers);
+        this->device = false;
 
     }
 
@@ -95,6 +96,12 @@ namespace troy {namespace utils {
 
     void ntt_multiply_inv_degree(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables) {
         bool device = operand.on_device();
+        // same device
+        for (size_t i = 0; i < tables.size(); i++) {
+            if (device != tables[i].on_device()) {
+                throw std::invalid_argument("Operand and tables must be on the same device.");
+            }
+        }
         if (device) {
             size_t total = (pcount * tables.size()) << log_degree;
             size_t block_count = ceil_div<size_t>(total, KERNEL_THREAD_COUNT);
@@ -181,6 +188,13 @@ namespace troy {namespace utils {
     }
 
     void ntt_transfer_to_rev(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers) {
+        bool device = operand.on_device();
+        // same device
+        for (size_t i = 0; i < tables.size(); i++) {
+            if (device != tables[i].on_device()) {
+                throw std::invalid_argument("Operand and tables must be on the same device.");
+            }
+        }
         size_t m = 1; size_t layer = 0;
         size_t n = static_cast<size_t>(1) << log_degree;
         for (; m <= (n >> 1); m <<= 1) {
@@ -262,6 +276,13 @@ namespace troy {namespace utils {
     }
 
     void ntt_transfer_from_rev(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers) {
+        bool device = operand.on_device();
+        // same device
+        for (size_t i = 0; i < tables.size(); i++) {
+            if (device != tables[i].on_device()) {
+                throw std::invalid_argument("Operand and tables must be on the same device.");
+            }
+        }
         size_t n = static_cast<size_t>(1) << log_degree;
         size_t m = n >> 1;
         size_t layer = 0;
@@ -314,6 +335,12 @@ namespace troy {namespace utils {
 
     void ntt_transfer_last_reduce(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables) {
         bool device = operand.on_device();
+        // same device
+        for (size_t i = 0; i < tables.size(); i++) {
+            if (device != tables[i].on_device()) {
+                throw std::invalid_argument("Operand and tables must be on the same device.");
+            }
+        }
         if (device) {
             size_t total = (pcount * tables.size()) << log_degree;
             size_t block_count = ceil_div<size_t>(total, KERNEL_THREAD_COUNT);

@@ -16,10 +16,11 @@ namespace troy {namespace utils {
         MultiplyUint64Operand inv_degree_modulo_;
         Array<MultiplyUint64Operand> root_powers_;
         Array<MultiplyUint64Operand> inv_root_powers_;
+        bool device;
 
     public:
 
-        NTTTables() {}
+        NTTTables(): device(false) {}
 
         NTTTables(size_t coeff_count_power, const Modulus& modulus);
 
@@ -33,6 +34,10 @@ namespace troy {namespace utils {
             copied.root_powers_ = root_powers_.clone();
             copied.inv_root_powers_ = inv_root_powers_.clone();
             return copied;
+        }
+
+        __host__ __device__ bool on_device() const {
+            return device;
         }
 
         __host__ __device__ uint64_t root() const { return root_; }
@@ -53,6 +58,7 @@ namespace troy {namespace utils {
         inline void to_device_inplace() {
             root_powers_.to_device_inplace();
             inv_root_powers_.to_device_inplace();
+            device = true;
         }
 
         /* This function moves all the arrays in the struct into device. */

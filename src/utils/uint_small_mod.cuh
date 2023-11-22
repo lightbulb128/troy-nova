@@ -157,11 +157,11 @@ namespace troy { namespace utils {
                 return modulus.reduce(value[0]);
             }
         } else {
-            uint64_t temp[2]; 
+            uint64_t temp[2]; temp[0] = 0; temp[1] = value[value.size() - 1];
             ConstSlice<uint64_t> temp_slice(temp, 2, on_device());
-            for (int i = value.size() - 1; i >= 0; i--) {
+            for (int i = value.size() - 2; i >= 0; i--) {
                 temp[0] = value[i];
-                temp[i] = modulus.reduce_uint128(temp_slice);
+                temp[1] = modulus.reduce_uint128(temp_slice);
             }
             return temp[1];
         }

@@ -133,4 +133,39 @@ namespace ntt {
 
     }
 
+    TEST(NTT, DeviceInverseNegacyclicNTT) {
+
+        size_t coeff_count_power = 5;
+        size_t n = 1 << coeff_count_power;
+        Modulus modulus(0xffffffffffc0001);
+        
+        Box<NTTTables> tables(NTTTables(coeff_count_power, modulus));
+        tables->to_device_inplace(); // this moves the arrays into device, but not the table itself
+        Box<NTTTables> tables_device = tables.to_device();
+        ConstSlice<NTTTables> table_slice = ConstSlice<NTTTables>::from_pointer(tables_device.as_const_pointer());
+
+        Array<uint64_t> poly(n, false);
+        set_zero_uint(poly.reference());
+        poly.to_device_inplace();
+        inverse_ntt_negacyclic_harvey_p(poly.reference(), poly.size(), table_slice);
+        poly.to_host_inplace();
+        for (size_t i = 0; i < n; i++) {
+            EXPECT_EQ(poly[i], 0);
+        }
+
+        Array<uint64_t> original(n, false);
+        for (size_t i = 0; i < n; i++) {
+            original[i] = i;
+        }
+        poly = original.clone();
+        poly.to_device_inplace();
+        ntt_negacyclic_harvey_p(poly.reference(), n, table_slice);
+        inverse_ntt_negacyclic_harvey_p(poly.reference(), n, table_slice);
+        poly.to_host_inplace();
+        for (size_t i = 0; i < n; i++) {
+            EXPECT_EQ(poly[i], original[i]);
+        }
+
+    }
+
 }
