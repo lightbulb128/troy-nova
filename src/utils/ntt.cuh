@@ -143,4 +143,20 @@ namespace troy {namespace utils {
         inverse_ntt_negacyclic_harvey_ps(operand, 1, degree, tables);
     }
 
+    inline void ntt_negacyclic_harvey_lazy(Slice<uint64_t> operand, size_t degree, ConstPointer<NTTTables> tables) {
+        ntt_negacyclic_harvey_lazy_ps(operand, 1, degree, ConstSlice<NTTTables>::from_pointer(tables));
+    }
+
+    inline void ntt_negacyclic_harvey(Slice<uint64_t> operand, size_t degree, ConstPointer<NTTTables> tables) {
+        ntt_negacyclic_harvey_ps(operand, 1, degree, ConstSlice<NTTTables>::from_pointer(tables));
+    }
+
+    inline void inverse_ntt_negacyclic_harvey_lazy(Slice<uint64_t> operand, size_t degree, ConstPointer<NTTTables> tables) {
+        inverse_ntt_negacyclic_harvey_lazy_ps(operand, 1, degree, ConstSlice<NTTTables>::from_pointer(tables));
+    }
+
+    inline void inverse_ntt_negacyclic_harvey(Slice<uint64_t> operand, size_t degree, ConstPointer<NTTTables> tables) {
+        inverse_ntt_negacyclic_harvey_ps(operand, 1, degree, ConstSlice<NTTTables>::from_pointer(tables));
+    }
+
 }}

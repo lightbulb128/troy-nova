@@ -1,18 +1,6 @@
 #include "uint_small_mod.cuh"
 
 namespace troy {namespace utils {
-
-    __host__ __device__
-    void MultiplyUint64Operand::set_quotient(const Modulus& modulus) {
-        uint64_t wide_quotient[2]{0, 0};
-        uint64_t wide_coeff[2]{0, this->operand};
-        divide_uint128_uint64_inplace(
-            Slice<uint64_t>(wide_coeff, 2, on_device()),
-            modulus.value(),
-            Slice<uint64_t>(wide_quotient, 2, on_device())
-        );
-        this->quotient = wide_quotient[0];
-    }
     
     __host__
     void divide_uint_mod_inplace(Slice<uint64_t> numerator, const Modulus& modulus, Slice<uint64_t> quotient) {

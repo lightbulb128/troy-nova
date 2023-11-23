@@ -46,6 +46,7 @@ namespace troy {namespace utils {
         Box<Modulus> t_;
         Box<Modulus> gamma_;
 
+        uint64_t m_tilde_value_;
         uint64_t inv_q_last_mod_t_;
         uint64_t q_last_mod_t_;
         uint64_t q_last_half_;
@@ -61,8 +62,31 @@ namespace troy {namespace utils {
         inline const RNSBase& base_Bsk_m_tilde() const noexcept { return base_Bsk_m_tilde_; }
         inline const RNSBase& base_t_gamma() const { return base_t_gamma_.value(); }
 
-        inline ConstSlice<MultiplyUint64Operand> inv_q_last_mod_q() const { return inv_q_last_mod_q_.const_reference(); }
+        inline const BaseConverter& base_q_to_Bsk_conv() const noexcept { return base_q_to_Bsk_conv_; }
+        inline const BaseConverter& base_q_to_m_tilde_conv() const noexcept { return base_q_to_m_tilde_conv_; }
+        inline const BaseConverter& base_B_to_q_conv() const noexcept { return base_B_to_q_conv_; }
+        inline const BaseConverter& base_B_to_m_sk_conv() const noexcept { return base_B_to_m_sk_conv_; }
+        inline const BaseConverter& base_q_to_t_gamma_conv() const { return base_q_to_t_gamma_conv_.value(); }
+        inline const BaseConverter& base_q_to_t_conv() const { return base_q_to_t_conv_.value(); }
 
+        inline ConstSlice<MultiplyUint64Operand> inv_prod_q_mod_Bsk() const { return inv_prod_q_mod_Bsk_.const_reference(); }
+        inline MultiplyUint64Operand neg_inv_prod_q_mod_m_tilde() const noexcept { return neg_inv_prod_q_mod_m_tilde_; }
+        inline MultiplyUint64Operand inv_prod_B_mod_m_sk() const noexcept { return inv_prod_B_mod_m_sk_; }
+        inline MultiplyUint64Operand inv_gamma_mod_t() const { return inv_gamma_mod_t_.value(); }
+        inline ConstSlice<uint64_t> prod_B_mod_q() const { return prod_B_mod_q_.const_reference(); }
+        inline ConstSlice<MultiplyUint64Operand> inv_m_tilde_mod_Bsk() const { return inv_m_tilde_mod_Bsk_.const_reference(); }
+        inline ConstSlice<uint64_t> prod_q_mod_Bsk() const { return prod_q_mod_Bsk_.const_reference(); }
+        inline ConstSlice<MultiplyUint64Operand> neg_inv_q_mod_t_gamma() const { return neg_inv_q_mod_t_gamma_.value().const_reference(); }
+        inline ConstSlice<MultiplyUint64Operand> prod_t_gamma_mod_q() const { return prod_t_gamma_mod_q_.value().const_reference(); }
+        inline ConstSlice<MultiplyUint64Operand> inv_q_last_mod_q() const { return inv_q_last_mod_q_.const_reference(); }
+        inline ConstSlice<NTTTables> base_Bsk_ntt_tables() const { return base_Bsk_ntt_tables_.const_reference(); }
+
+        inline ConstPointer<Modulus> m_tilde() const { return m_tilde_.as_const_pointer(); }
+        inline ConstPointer<Modulus> m_sk() const { return m_sk_.as_const_pointer(); }
+        inline ConstPointer<Modulus> t() const { return t_.as_const_pointer(); }
+        inline ConstPointer<Modulus> gamma() const { return gamma_.as_const_pointer(); }
+
+        inline uint64_t m_tilde_value() const noexcept { return m_tilde_value_; }
         inline uint64_t q_last_half() const noexcept { return q_last_half_; }
 
         RNSTool() {}
@@ -80,6 +104,16 @@ namespace troy {namespace utils {
         }
 
         void divide_and_round_q_last_inplace(Slice<uint64_t> input) const;
+
+        void divide_and_round_q_last_ntt_inplace(Slice<uint64_t> input, ConstSlice<NTTTables> rns_ntt_tables) const;
+
+        void fast_b_conv_sk(ConstSlice<uint64_t> input, Slice<uint64_t> destination) const;
+
+        void sm_mrq(ConstSlice<uint64_t> input, Slice<uint64_t> destination) const;
+
+        void fast_floor(ConstSlice<uint64_t> input, Slice<uint64_t> destination) const;
+
+        void fast_b_conv_m_tilde(ConstSlice<uint64_t> input, Slice<uint64_t> destination) const;
 
     };
 

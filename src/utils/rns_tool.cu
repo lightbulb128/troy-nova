@@ -1,4 +1,6 @@
 #include "rns_tool.cuh"
+#include "uint_small_mod.cuh"
+
 namespace troy {namespace utils {
 
     
@@ -57,6 +59,7 @@ namespace troy {namespace utils {
 
         // Set m_tilde to a non-prime value
         Modulus m_tilde(1ul << 32);
+        uint64_t m_tilde_value = m_tilde.value();
         
         // Populate the base arrays
         RNSBase base_q = q.clone();
@@ -240,6 +243,7 @@ namespace troy {namespace utils {
         this->t_ = Box(Modulus(t));
         this->gamma_ = Box(std::move(gamma));
 
+        this->m_tilde_value_ = m_tilde_value;
         this->inv_q_last_mod_t_ = inv_q_last_mod_t;
         this->q_last_mod_t_ = q_last_mod_t;
         this->q_last_half_ = last_q.value() >> 1;
@@ -290,6 +294,7 @@ namespace troy {namespace utils {
 
         cloned.t_ = this->t_.clone();
         cloned.gamma_ = this->gamma_.clone();
+        cloned.m_tilde_value_ = this->m_tilde_value_;
         cloned.inv_q_last_mod_t_ = this->inv_q_last_mod_t_;
         cloned.q_last_mod_t_ = this->q_last_mod_t_;
         cloned.q_last_half_ = this->q_last_half_;
@@ -350,8 +355,6 @@ namespace troy {namespace utils {
         size_t half = self.q_last_half();
 
         Slice<uint64_t> input_last = input.slice(last_input_offset, last_input_offset + coeff_count);
-        // Add (qi-1)/2 to change from flooring to rounding
-        utils::add_scalar_inplace(input_last, half, last_modulus);
         Array<uint64_t> temp(coeff_count, false);
         for (size_t i = 0; i < base_q_size - 1; i++) {
             ConstPointer<Modulus> modulus = self.base_q().base().at(i);
@@ -374,28 +377,27 @@ namespace troy {namespace utils {
         ConstSlice<MultiplyUint64Operand> inv_q_last_mod_q, 
         Slice<uint64_t> input
     ) {
-        size_t j = blockIdx.x * blockDim.x + threadIdx.x;
-        if (j >= coeff_count) return;
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
         size_t base_q_size = base_q.size();
+        if (global_index >= coeff_count * (base_q_size - 1)) return;
+        size_t i = global_index / coeff_count;
+        size_t j = global_index % coeff_count;
+
         const Modulus& last_modulus = *base_q.at(base_q_size - 1);
         size_t last_input_offset = (base_q.size() - 1) * coeff_count;
         Slice<uint64_t> input_last = input.slice(last_input_offset, last_input_offset + coeff_count);
-        // Add (qi-1)/2 to change from flooring to rounding
-        input_last[j] = utils::add_uint64_mod(input_last[j], q_last_half, last_modulus);
-        for (size_t i = 0; i < base_q_size; i++) {
-            Slice<uint64_t> input_i = input.slice(i * coeff_count, (i + 1) * coeff_count);
-            uint64_t temp;
-            const Modulus& modulus = *base_q.at(i);
-            // (ct mod qk) mod qi
-            temp = modulus.reduce(input_last[j]);
-            // Subtract rounding correction here; the negative sign will turn into a plus in the next subtraction
-            uint64_t half_mod = modulus.reduce(q_last_half);
-            temp = utils::sub_uint64_mod(temp, half_mod, modulus);
-            // (ct mod qi) - (ct mod qk) mod qi
-            input_i[j] = utils::sub_uint64_mod(input_i[j], temp, modulus);
-            // qk^(-1) * ((ct mod qi) - (ct mod qk)) mod qi
-            input_i[j] = utils::multiply_uint64operand_mod(input_i[j], inv_q_last_mod_q[i], modulus);
-        }
+        Slice<uint64_t> input_i = input.slice(i * coeff_count, (i + 1) * coeff_count);
+        uint64_t temp;
+        const Modulus& modulus = *base_q.at(i);
+        // (ct mod qk) mod qi
+        temp = modulus.reduce(input_last[j]);
+        // Subtract rounding correction here; the negative sign will turn into a plus in the next subtraction
+        uint64_t half_mod = modulus.reduce(q_last_half);
+        temp = utils::sub_uint64_mod(temp, half_mod, modulus);
+        // (ct mod qi) - (ct mod qk) mod qi
+        input_i[j] = utils::sub_uint64_mod(input_i[j], temp, modulus);
+        // qk^(-1) * ((ct mod qi) - (ct mod qk)) mod qi
+        input_i[j] = utils::multiply_uint64operand_mod(input_i[j], inv_q_last_mod_q[i], modulus);
     }
 
     void RNSTool::divide_and_round_q_last_inplace(Slice<uint64_t> input) const {
@@ -403,8 +405,13 @@ namespace troy {namespace utils {
         if (device != input.on_device()) {
             throw std::invalid_argument("[RNSTool::divide_and_round_q_last_inplace] RNSTool and input must be on the same device.");
         }
+        size_t base_q_size = this->base_q().size();
+        size_t coeff_count = this->coeff_count();
+        Slice<uint64_t> input_last = input.slice((base_q_size - 1) * coeff_count, base_q_size * coeff_count);
+        // Add (qi-1)/2 to change from flooring to rounding
+        utils::add_scalar_inplace(input_last, this->q_last_half(), this->base_q().base().at(base_q_size - 1));
         if (device) {
-            size_t block_count = utils::ceil_div(this->coeff_count(), utils::KERNEL_THREAD_COUNT);
+            size_t block_count = utils::ceil_div(this->coeff_count() * (base_q_size - 1), utils::KERNEL_THREAD_COUNT);
             kernel_divide_and_round_q_last_inplace<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 this->base_q().base(),
                 this->coeff_count(),
@@ -415,6 +422,440 @@ namespace troy {namespace utils {
         } else {
             host_divide_and_round_q_last_inplace(*this, input);
         }
+    }
+
+    static void host_divide_and_round_q_last_ntt_inplace_step1(const RNSTool& self, Slice<uint64_t> input, Slice<uint64_t> temp) {
+        
+        size_t base_q_size = self.base_q().size();
+        size_t coeff_count = self.coeff_count();
+        Slice<uint64_t> input_last = input.slice((base_q_size - 1) * coeff_count, base_q_size * coeff_count);
+        ConstPointer<Modulus> last_modulus = self.base_q().base().at(base_q_size - 1);
+
+        for (size_t i = 0; i < base_q_size - 1; i++) {
+            ConstPointer<Modulus> modulus = self.base_q().base().at(i);
+            Slice<uint64_t> input_i = input.slice(i * coeff_count, (i + 1) * coeff_count);
+            Slice<uint64_t> temp_i = temp.slice(i * coeff_count, (i + 1) * coeff_count);
+            if (modulus->value() < last_modulus->value()) {
+                utils::modulo(input_last.as_const(), modulus, temp_i);
+            } else {
+                utils::set_uint(input_last.as_const(), coeff_count, temp_i);
+            }
+            uint64_t half_mod = modulus->reduce(self.q_last_half());
+            utils::sub_scalar_inplace(temp_i, half_mod, modulus);
+        }
+    }
+
+    __global__ static void kernel_divide_and_round_q_last_ntt_inplace_step1(
+        ConstSlice<Modulus> base_q, size_t coeff_count, size_t q_last_half,
+        Slice<uint64_t> input, Slice<uint64_t> temp
+    ) {
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        size_t base_q_size = base_q.size();
+        if (global_index >= coeff_count * (base_q_size - 1)) return;
+        size_t i = global_index / coeff_count;
+        size_t j = global_index % coeff_count;
+
+        const Modulus& last_modulus = *base_q.at(base_q_size - 1);
+        size_t last_input_offset = (base_q.size() - 1) * coeff_count;
+        Slice<uint64_t> input_last = input.slice(last_input_offset, last_input_offset + coeff_count);
+        Slice<uint64_t> input_i = input.slice(i * coeff_count, (i + 1) * coeff_count);
+        Slice<uint64_t> temp_i = temp.slice(i * coeff_count, (i + 1) * coeff_count);
+        uint64_t temp_value;
+        const Modulus& modulus = *base_q.at(i);
+        if (modulus.value() < last_modulus.value()) {
+            temp_value = modulus.reduce(input_last[j]);
+        } else {
+            temp_value = input_last[j];
+        }
+        uint64_t half_mod = modulus.reduce(q_last_half);
+        temp_value = utils::sub_uint64_mod(temp_value, half_mod, modulus);
+        temp_i[j] = temp_value;
+    }
+
+    void divide_and_round_q_last_ntt_inplace_step1(const RNSTool& self, Slice<uint64_t> input, Slice<uint64_t> temp) {
+        bool device = self.on_device();
+        size_t base_q_size = self.base_q().size();
+        size_t coeff_count = self.coeff_count();
+        Slice<uint64_t> input_last = input.slice((base_q_size - 1) * coeff_count, base_q_size * coeff_count);
+        if (device) {
+            size_t block_count = utils::ceil_div(self.coeff_count() * (base_q_size - 1), utils::KERNEL_THREAD_COUNT);
+            kernel_divide_and_round_q_last_ntt_inplace_step1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                self.base_q().base(),
+                self.coeff_count(),
+                self.q_last_half(),
+                input,
+                temp
+            );
+        } else {
+            host_divide_and_round_q_last_ntt_inplace_step1(self, input, temp);
+        }
+    }
+    
+    static void host_divide_and_round_q_last_ntt_inplace_step2(const RNSTool& self, Slice<uint64_t> input, ConstSlice<uint64_t> temp) {
+        
+        size_t base_q_size = self.base_q().size();
+        size_t coeff_count = self.coeff_count();
+        Slice<uint64_t> input_last = input.slice((base_q_size - 1) * coeff_count, base_q_size * coeff_count);
+        ConstPointer<Modulus> last_modulus = self.base_q().base().at(base_q_size - 1);
+
+        for (size_t i = 0; i < base_q_size - 1; i++) {
+            ConstPointer<Modulus> modulus = self.base_q().base().at(i);
+            Slice<uint64_t> input_i = input.slice(i * coeff_count, (i + 1) * coeff_count);
+            ConstSlice<uint64_t> temp_i = temp.const_slice(i * coeff_count, (i + 1) * coeff_count);
+            uint64_t qi_lazy = modulus->value() << 2;
+            utils::add_scalar_inplace(input_i, qi_lazy, modulus);
+            utils::sub_inplace(input_i, temp_i, modulus);
+            utils::multiply_uint64operand_inplace(input_i, self.inv_q_last_mod_q().at(i), modulus);
+        }
+    }
+
+    __global__ static void kernel_divide_and_round_q_last_ntt_inplace_step2(
+        ConstSlice<Modulus> base_q, size_t coeff_count,
+        ConstSlice<MultiplyUint64Operand> inv_q_last_mod_q,
+        Slice<uint64_t> input, ConstSlice<uint64_t> temp
+    ) {
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        size_t base_q_size = base_q.size();
+        if (global_index >= coeff_count * (base_q_size - 1)) return;
+        size_t i = global_index / coeff_count;
+        size_t j = global_index % coeff_count;
+
+        const Modulus& last_modulus = *base_q.at(base_q_size - 1);
+        size_t last_input_offset = (base_q.size() - 1) * coeff_count;
+        Slice<uint64_t> input_last = input.slice(last_input_offset, last_input_offset + coeff_count);
+        Slice<uint64_t> input_i = input.slice(i * coeff_count, (i + 1) * coeff_count);
+        ConstSlice<uint64_t> temp_i = temp.const_slice(i * coeff_count, (i + 1) * coeff_count);
+        uint64_t temp_value;
+        const Modulus& modulus = *base_q.at(i);
+        uint64_t qi_lazy = modulus.value() << 2;
+        input_i[j] = utils::add_uint64_mod(input_i[j], qi_lazy, modulus);
+        temp_value = temp_i[j];
+        input_i[j] = utils::sub_uint64_mod(input_i[j], temp_value, modulus);
+        input_i[j] = utils::multiply_uint64operand_mod(input_i[j], inv_q_last_mod_q[i], modulus);
+    }
+
+    void divide_and_round_q_last_ntt_inplace_step2(const RNSTool& self, Slice<uint64_t> input, ConstSlice<uint64_t> temp) {
+        bool device = self.on_device();
+        size_t base_q_size = self.base_q().size();
+        size_t coeff_count = self.coeff_count();
+        Slice<uint64_t> input_last = input.slice((base_q_size - 1) * coeff_count, base_q_size * coeff_count);
+        if (device) {
+            size_t block_count = utils::ceil_div(self.coeff_count() * (base_q_size - 1), utils::KERNEL_THREAD_COUNT);
+            kernel_divide_and_round_q_last_ntt_inplace_step2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                self.base_q().base(),
+                self.coeff_count(),
+                self.inv_q_last_mod_q(),
+                input,
+                temp
+            );
+        } else {
+            host_divide_and_round_q_last_ntt_inplace_step2(self, input, temp);
+        }
+    }
+    
+    void RNSTool::divide_and_round_q_last_ntt_inplace(Slice<uint64_t> input, ConstSlice<NTTTables> rns_ntt_tables) const {
+        bool device = this->on_device();
+        if (!utils::same(device, input.on_device(), rns_ntt_tables.on_device())) {
+            throw std::invalid_argument("[RNSTool::divide_and_round_q_last_ntt_inplace] RNSTool, input and ntt_tables must be on the same device.");
+        }
+
+        size_t base_q_size = this->base_q().size();
+        size_t coeff_count = this->coeff_count();
+        Slice<uint64_t> input_last = input.slice((base_q_size - 1) * coeff_count, base_q_size * coeff_count);
+        
+        utils::inverse_ntt_negacyclic_harvey(input_last, coeff_count, rns_ntt_tables.at(base_q_size - 1));
+        
+        // Add (qi-1)/2 to change from flooring to rounding
+        utils::add_scalar_inplace(input_last, this->q_last_half(), this->base_q().base().at(base_q_size - 1));
+
+        Array<uint64_t> temp(coeff_count * (base_q_size - 1), device);
+        divide_and_round_q_last_ntt_inplace_step1(*this, input, temp.reference());
+        
+        utils::ntt_negacyclic_harvey_lazy_p(temp.reference(), coeff_count, rns_ntt_tables.const_slice(0, base_q_size - 1));
+    
+        divide_and_round_q_last_ntt_inplace_step2(*this, input, temp.const_reference());
+    }
+
+    static void host_fast_b_conv_sk_step1(const RNSTool& self, ConstSlice<uint64_t> input, Slice<uint64_t> destination, ConstSlice<uint64_t> temp) {
+        size_t coeff_count = self.coeff_count();
+        const Modulus& m_sk = *self.m_sk();
+        uint64_t m_sk_value = m_sk.value();
+        uint64_t m_sk_div_2 = m_sk_value >> 1;
+        size_t base_B_size = self.base_B().size();
+        for (size_t j = 0; j < coeff_count; j++) {
+            uint64_t alpha_sk = multiply_uint64operand_mod(
+                temp[j] + (m_sk_value - input[base_B_size * coeff_count + j]),
+                self.inv_prod_B_mod_m_sk(),
+                m_sk
+            );
+            for (size_t i = 0; i < self.base_q().size(); i++) {
+                const Modulus& modulus = *self.base_q().base().at(i);
+                MultiplyUint64Operand prod_B_mod_q_elt(self.prod_B_mod_q()[i], modulus);
+                MultiplyUint64Operand neg_prod_B_mod_q_elt(modulus.value() - self.prod_B_mod_q()[i], modulus);
+                uint64_t& dest = destination[i * coeff_count + j];
+                if (alpha_sk > m_sk_div_2) {
+                    dest = utils::multiply_uint64operand_add_uint64_mod(
+                        utils::negate_uint64_mod(alpha_sk, m_sk), prod_B_mod_q_elt, dest, modulus
+                    );
+                } else {
+                    dest = utils::multiply_uint64operand_add_uint64_mod(
+                        alpha_sk, neg_prod_B_mod_q_elt, dest, modulus
+                    );
+                }
+            }
+        }
+    }
+
+    __global__ static void kernel_fast_b_conv_sk_step1(
+        ConstSlice<Modulus> base_B,
+        ConstSlice<Modulus> base_q,
+        ConstPointer<Modulus> m_sk,
+        MultiplyUint64Operand inv_prod_B_mod_m_sk,
+        ConstSlice<uint64_t> prod_B_mod_q,
+        size_t coeff_count,
+        ConstSlice<uint64_t> input,
+        Slice<uint64_t> destination,
+        ConstSlice<uint64_t> temp
+    ) {
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        size_t base_B_size = base_B.size();
+        size_t base_q_size = base_q.size();
+        if (global_index >= coeff_count * base_q_size) return;
+        size_t i = global_index / coeff_count;
+        size_t j = global_index % coeff_count;
+        uint64_t m_sk_value = m_sk->value();
+        uint64_t m_sk_div_2 = m_sk_value >> 1;
+        uint64_t alpha_sk = multiply_uint64operand_mod(
+            temp[j] + (m_sk_value - input[base_B_size * coeff_count + j]),
+            inv_prod_B_mod_m_sk,
+            *m_sk
+        );
+        const Modulus& modulus = *base_q.at(i);
+        MultiplyUint64Operand prod_B_mod_q_elt(prod_B_mod_q[i], modulus);
+        MultiplyUint64Operand neg_prod_B_mod_q_elt(modulus.value() - prod_B_mod_q[i], modulus);
+        uint64_t& dest = destination[i * coeff_count + j];
+        if (alpha_sk > m_sk_div_2) {
+            dest = utils::multiply_uint64operand_add_uint64_mod(
+                utils::negate_uint64_mod(alpha_sk, *m_sk), prod_B_mod_q_elt, dest, modulus
+            );
+        } else {
+            dest = utils::multiply_uint64operand_add_uint64_mod(
+                alpha_sk, neg_prod_B_mod_q_elt, dest, modulus
+            );
+        }
+    }
+    
+    void RNSTool::fast_b_conv_sk(ConstSlice<uint64_t> input, Slice<uint64_t> destination) const {
+        bool device = this->on_device();
+        if (!utils::same(device, input.on_device(), destination.on_device())) {
+            throw std::invalid_argument("[RNSTool::fast_b_conv_sk] RNSTool, input and destination must be on the same device.");
+        }
+        size_t coeff_count = this->coeff_count();
+        const RNSBase& base_B = this->base_B();
+        size_t base_B_size = base_B.size();
+
+        // Fast convert B -> q; input is in Bsk but we only use B
+        this->base_B_to_q_conv().fast_convert_array(input.const_slice(0, base_B_size * coeff_count), destination);
+        
+        // Compute alpha_sk
+        // Fast convert B -> {m_sk}; input is in Bsk but we only use B
+        Array<uint64_t> temp(coeff_count, device);
+        this->base_B_to_m_sk_conv().fast_convert_array(input.const_slice(0, base_B_size * coeff_count), temp.reference());
+
+        if (device) {
+            size_t base_q_size = this->base_q().size();
+            size_t block_count = utils::ceil_div(coeff_count * base_q_size, utils::KERNEL_THREAD_COUNT);
+            kernel_fast_b_conv_sk_step1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                base_B.base(),
+                this->base_q().base(),
+                this->m_sk(),
+                this->inv_prod_B_mod_m_sk(),
+                this->prod_B_mod_q(),
+                coeff_count,
+                input,
+                destination,
+                temp.const_reference()
+            );
+        } else {
+            host_fast_b_conv_sk_step1(*this, input, destination, temp.const_reference());
+        }
+
+    }
+
+    static void host_sm_mrq(const RNSTool& self, ConstSlice<uint64_t> input, Slice<uint64_t> destination) {
+        ConstSlice<Modulus> base_Bsk = self.base_Bsk().base();
+        size_t base_Bsk_size = base_Bsk.size();
+        size_t coeff_count = self.coeff_count();
+        ConstSlice<uint64_t> input_m_tilde = input.const_slice(base_Bsk_size * coeff_count, (base_Bsk_size + 1) * coeff_count);
+        uint64_t m_tilde_div_2 = self.m_tilde()->value() >> 1;
+        Array<MultiplyUint64Operand> prod_q_mod_Bsk_elt(base_Bsk_size, false);
+        for (size_t i = 0; i < base_Bsk_size; i++) {
+            const Modulus& modulus = *base_Bsk.at(i);
+            prod_q_mod_Bsk_elt[i] = MultiplyUint64Operand(self.prod_q_mod_Bsk()[i], modulus);
+        }
+        for (size_t j = 0; j < coeff_count; j++) {
+            uint64_t r_m_tilde = utils::multiply_uint64operand_mod(
+                input_m_tilde[j], 
+                self.neg_inv_prod_q_mod_m_tilde(),
+                *self.m_tilde()
+            );
+            for (size_t i = 0; i < base_Bsk_size; i++) {
+                const Modulus& modulus = *base_Bsk.at(i);
+                uint64_t temp = r_m_tilde;
+                if (temp >= m_tilde_div_2) {
+                    temp += modulus.value() - self.m_tilde()->value();
+                }
+                destination[i * coeff_count + j] = utils::multiply_uint64operand_mod(
+                    utils::multiply_uint64operand_add_uint64_mod(
+                        temp,
+                        prod_q_mod_Bsk_elt[i],
+                        input[i * coeff_count + j],
+                        modulus
+                    ),
+                    self.inv_m_tilde_mod_Bsk()[i],
+                    modulus
+                );
+            }
+        }
+    }
+
+    __global__ static void kernel_sm_mrq(
+        ConstSlice<Modulus> base_Bsk,
+        ConstPointer<Modulus> m_tilde,
+        MultiplyUint64Operand neg_inv_prod_q_mod_m_tilde,
+        ConstSlice<uint64_t> prod_q_mod_Bsk,
+        ConstSlice<MultiplyUint64Operand> inv_m_tilde_mod_Bsk,
+        size_t coeff_count,
+        ConstSlice<uint64_t> input,
+        Slice<uint64_t> destination
+    ) {
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        size_t base_Bsk_size = base_Bsk.size();
+        if (global_index >= coeff_count * base_Bsk_size) return;
+        size_t i = global_index / coeff_count;
+        size_t j = global_index % coeff_count;
+        const Modulus& modulus = *base_Bsk.at(i);
+        uint64_t m_tilde_div_2 = m_tilde->value() >> 1;
+        uint64_t r_m_tilde = utils::multiply_uint64operand_mod(
+            input[base_Bsk_size * coeff_count + j], 
+            neg_inv_prod_q_mod_m_tilde,
+            *m_tilde
+        );
+        uint64_t temp = r_m_tilde;
+        if (temp >= m_tilde_div_2) {
+            temp += modulus.value() - m_tilde->value();
+        }
+        uint64_t& dest = destination[i * coeff_count + j];
+        dest = utils::multiply_uint64operand_mod(
+            utils::multiply_uint64operand_add_uint64_mod(
+                temp,
+                MultiplyUint64Operand(prod_q_mod_Bsk[i], modulus),
+                input[i * coeff_count + j],
+                modulus
+            ),
+            inv_m_tilde_mod_Bsk[i],
+            modulus
+        );
+    }
+    
+    void RNSTool::sm_mrq(ConstSlice<uint64_t> input, Slice<uint64_t> destination) const {
+        bool device = this->on_device();
+        if (!utils::same(device, input.on_device(), destination.on_device())) {
+            throw std::invalid_argument("[RNSTool::sm_mrq] RNSTool, input and destination must be on the same device.");
+        }
+        size_t coeff_count = this->coeff_count();
+        const RNSBase& base_Bsk = this->base_Bsk();
+        size_t base_Bsk_size = base_Bsk.size();
+
+        if (device) {
+            size_t block_count = utils::ceil_div(coeff_count * base_Bsk_size, utils::KERNEL_THREAD_COUNT);
+            kernel_sm_mrq<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                base_Bsk.base(),
+                this->m_tilde(),
+                this->neg_inv_prod_q_mod_m_tilde(),
+                this->prod_q_mod_Bsk(),
+                this->inv_m_tilde_mod_Bsk(),
+                coeff_count,
+                input,
+                destination
+            );
+        } else {
+            host_sm_mrq(*this, input, destination);
+        }
+    }
+
+    static void host_fast_floor(const RNSTool& self, ConstSlice<uint64_t> input, Slice<uint64_t> destination) {
+        size_t base_q_size = self.base_q().size();
+        size_t base_Bsk_size = self.base_Bsk().size();
+        size_t coeff_count = self.coeff_count();
+        input = input.const_slice(base_q_size * coeff_count, input.size());
+        for (size_t i = 0; i < base_Bsk_size; i++) {
+            for (size_t j = 0; j < coeff_count; j++) {
+                size_t index = i * coeff_count + j;
+                destination[index] = utils::multiply_uint64operand_mod(
+                    input[index] + self.base_Bsk().base()[i].value() - destination[index],
+                    self.inv_prod_q_mod_Bsk()[i],
+                    self.base_Bsk().base()[i]
+                );
+            }
+        }
+    }
+
+    __global__ static void kernel_fast_floor(
+        ConstSlice<Modulus> base_Bsk,
+        ConstSlice<MultiplyUint64Operand> inv_prod_q_mod_Bsk,
+        size_t coeff_count,
+        ConstSlice<uint64_t> input,
+        Slice<uint64_t> destination
+    ) {
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        size_t base_Bsk_size = base_Bsk.size();
+        if (global_index >= coeff_count * base_Bsk_size) return;
+        size_t i = global_index / coeff_count;
+        uint64_t& dest = destination[global_index];
+        dest = utils::multiply_uint64operand_mod(
+            input[global_index] + base_Bsk[i].value() - dest,
+            inv_prod_q_mod_Bsk[i],
+            base_Bsk[i]
+        );
+    }
+
+    void RNSTool::fast_floor(ConstSlice<uint64_t> input, Slice<uint64_t> destination) const {
+        size_t base_q_size = this->base_q().size();
+        size_t base_Bsk_size = this->base_Bsk().size();
+        size_t coeff_count = this->coeff_count();
+
+        this->base_q_to_Bsk_conv().fast_convert_array(
+            input.const_slice(0, base_q_size * coeff_count),
+            destination
+        );
+
+        if (this->on_device()) {
+            size_t block_count = utils::ceil_div(coeff_count * base_Bsk_size, utils::KERNEL_THREAD_COUNT);
+            kernel_fast_floor<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                this->base_Bsk().base(),
+                this->inv_prod_q_mod_Bsk(),
+                coeff_count,
+                input,
+                destination
+            );
+        } else {
+            host_fast_floor(*this, input, destination);
+        }
+
+    }
+    
+    void RNSTool::fast_b_conv_m_tilde(ConstSlice<uint64_t> input, Slice<uint64_t> destination) const {
+        bool device = this->on_device();
+        size_t base_q_size = this->base_q().size();
+        size_t base_Bsk_size = this->base_Bsk().size();
+        size_t coeff_count = this->coeff_count();
+        Array<uint64_t> temp(coeff_count * base_q_size, device);
+        utils::multiply_scalar_p(input, this->m_tilde_value(), coeff_count, this->base_q().base(), temp.reference());
+        this->base_q_to_Bsk_conv().fast_convert_array(temp.const_reference(),
+            destination.slice(0, base_Bsk_size * coeff_count));
+        this->base_q_to_m_tilde_conv().fast_convert_array(temp.const_reference(),
+            destination.slice(base_Bsk_size * coeff_count, (base_Bsk_size + 1) * coeff_count));
     }
 
 }}

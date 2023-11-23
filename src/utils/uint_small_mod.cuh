@@ -95,7 +95,16 @@ namespace troy { namespace utils {
         uint64_t quotient;
 
         __host__ __device__
-        void set_quotient(const Modulus& modulus);
+        inline void set_quotient(const Modulus& modulus) {
+            uint64_t wide_quotient[2]{0, 0};
+            uint64_t wide_coeff[2]{0, this->operand};
+            divide_uint128_uint64_inplace(
+                Slice<uint64_t>(wide_coeff, 2, on_device()),
+                modulus.value(),
+                Slice<uint64_t>(wide_quotient, 2, on_device())
+            );
+            this->quotient = wide_quotient[0];
+        }
 
         __host__ __device__
         inline MultiplyUint64Operand(uint64_t operand, const Modulus& modulus) {
