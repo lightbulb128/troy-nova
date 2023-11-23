@@ -15,7 +15,7 @@ namespace troy {
         inline void initialize() {
             cudaError_t status = cudaSetDevice(0);
             if (status != cudaSuccess) {
-                runtime_error("cudaSetDevice failed", status);
+                runtime_error("[kernel_provider::initialize] cudaSetDevice failed", status);
             }
         }
 
@@ -24,7 +24,7 @@ namespace troy {
             T* ret;
             cudaError_t status = cudaMalloc((void**)&ret, length * sizeof(T));
             if (status != cudaSuccess) {
-                runtime_error("cudaMalloc failed", status);
+                runtime_error("[kernel_provider::malloc] cudaMalloc failed", status);
             }
             return ret;
         }
@@ -33,7 +33,7 @@ namespace troy {
         inline void free(T* ptr) {
             cudaError_t status = cudaFree(ptr);
             if (status != cudaSuccess) {
-                runtime_error("cudaFree failed", status);
+                runtime_error("[kernel_provider::free] cudaFree failed", status);
             }
         }
 
@@ -41,7 +41,7 @@ namespace troy {
         inline void copy_host_to_device(T* dst, const T* src, size_t length) {
             cudaError_t status = cudaMemcpy(dst, src, length * sizeof(T), cudaMemcpyHostToDevice);
             if (status != cudaSuccess) {
-                runtime_error("cudaMemcpy host to device failed", status);
+                runtime_error("[kernel_provider::copy_host_to_device] cudaMemcpy host to device failed", status);
             }
         }
 
@@ -49,7 +49,7 @@ namespace troy {
         inline void copy_device_to_host(T* dst, const T* src, size_t length) {
             cudaError_t status = cudaMemcpy(dst, src, length * sizeof(T), cudaMemcpyDeviceToHost);
             if (status != cudaSuccess) {
-                runtime_error("cudaMemcpy device to host failed", status);
+                runtime_error("[kernel_provider::copy_device_to_host] cudaMemcpy device to host failed", status);
             }
         }
 
@@ -57,7 +57,7 @@ namespace troy {
         inline void copy_device_to_device(T* dst, const T* src, size_t length) {
             cudaError_t status = cudaMemcpy(dst, src, length * sizeof(T), cudaMemcpyDeviceToDevice);
             if (status != cudaSuccess) {
-                runtime_error("cudaMemcpy device to device failed", status);
+                runtime_error("[kernel_provider::copy_device_to_device] cudaMemcpy device to device failed", status);
             }
         }
 
@@ -65,7 +65,7 @@ namespace troy {
         inline void memset(T* ptr, size_t length, int value) {
             cudaError_t status = cudaMemset(ptr, value, length * sizeof(T));
             if (status != cudaSuccess) {
-                runtime_error("cudaMemset failed", status);
+                runtime_error("[kernel_provider::memset] cudaMemset failed", status);
             }
         }
 

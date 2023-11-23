@@ -23,21 +23,21 @@ namespace troy {namespace utils {
     RNSBase::RNSBase(ConstSlice<Modulus> rnsbase) {
 
         if (rnsbase.on_device()) {
-            throw std::invalid_argument("RNSBase cannot be created from device memory.");
+            throw std::invalid_argument("[RNSBase::RNSBase] RNSBase cannot be created from device memory.");
         }
 
         if (rnsbase.size() == 0) {
-            throw std::invalid_argument("RNSBase cannot be empty.");
+            throw std::invalid_argument("[RNSBase::RNSBase] RNSBase cannot be empty.");
         }
 
         size_t n = rnsbase.size();
         for (size_t i = 0; i < n; i++) {
             if (rnsbase[i].is_zero()) {
-                throw std::invalid_argument("RNSBase cannot contain zero modulus.");
+                throw std::invalid_argument("[RNSBase::RNSBase] RNSBase cannot contain zero modulus.");
             }
             for (size_t j = i + 1; j < n; j++) {
                 if (!are_coprime(rnsbase[i].value(), rnsbase[j].value())) {
-                    throw std::invalid_argument("RNSBase moduli must be pairwise coprime.");
+                    throw std::invalid_argument("[RNSBase::RNSBase] RNSBase moduli must be pairwise coprime.");
                 }
             }
         }
@@ -86,7 +86,7 @@ namespace troy {namespace utils {
                 invertible = invertible &&
                     try_invert_uint64_mod(temp, this->base_[i], inv_temp);
                 if (!invertible) {
-                    throw std::invalid_argument("RNSBase product is not invertible.");
+                    throw std::invalid_argument("[RNSBase::initialize] RNSBase product is not invertible.");
                 }
                 inv_punctured_product_mod_base[i] = MultiplyUint64Operand(inv_temp, this->base_[i]);
             }
@@ -100,7 +100,7 @@ namespace troy {namespace utils {
 
     void RNSBase::decompose_single(Slice<uint64_t> value) const {
         if (value.size() != base_.size()) {
-            throw std::runtime_error("Invalid size of value.");
+            throw std::runtime_error("[RNSBase::decompose_single] Invalid size of value.");
         }
         if (this->size() > 1) {
             Array<uint64_t> copied = Array<uint64_t>::create_and_copy_from_slice(value.as_const());
@@ -139,7 +139,7 @@ namespace troy {namespace utils {
 
     void rnsbase_decompose_array(const RNSBase& self, ConstSlice<uint64_t> from, Slice<uint64_t> result) {
         if (self.on_device() != from.on_device()) {
-            throw std::invalid_argument("RNSBase and value must be on the same memory.");
+            throw std::invalid_argument("[rnsbase_decompose_array] RNSBase and value must be on the same memory.");
         }
         bool device = self.on_device();
         if (device) {
@@ -152,7 +152,7 @@ namespace troy {namespace utils {
 
     void RNSBase::decompose_array(Slice<uint64_t> value) const {
         if (value.size() % this->size() != 0) {
-            throw std::invalid_argument("Value size must be a multiple of RNSBase size.");
+            throw std::invalid_argument("[RNSBase::decompose_array] Value size must be a multiple of RNSBase size.");
         }
         if (this->size() == 1) {
             return; // nothing to do;
@@ -163,7 +163,7 @@ namespace troy {namespace utils {
 
     void RNSBase::compose_single(Slice<uint64_t> value) const {
         if (value.size() != base_.size()) {
-            throw std::runtime_error("Invalid size of value.");
+            throw std::runtime_error("[RNSBase::compose_single] Invalid size of value.");
         }
         if (this->size() > 1) {
             Array<uint64_t> copied = Array<uint64_t>::create_and_copy_from_slice(value.as_const());
@@ -221,7 +221,7 @@ namespace troy {namespace utils {
 
     void rnsbase_compose_array(const RNSBase& self, ConstSlice<uint64_t> from, Slice<uint64_t> result, Slice<uint64_t> temp_mpi) {
         if (self.on_device() != from.on_device()) {
-            throw std::invalid_argument("RNSBase and value must be on the same memory.");
+            throw std::invalid_argument("[rnsbase_compose_array] RNSBase and value must be on the same memory.");
         }
         bool device = self.on_device();
         if (device) {
@@ -260,7 +260,7 @@ namespace troy {namespace utils {
 
     void rnsbase_compose_rearrange_array(const RNSBase& self, ConstSlice<uint64_t> from, Slice<uint64_t> result) {
         if (self.on_device() != from.on_device()) {
-            throw std::invalid_argument("RNSBase and value must be on the same memory.");
+            throw std::invalid_argument("[rnsbase_compose_rearrange_array] RNSBase and value must be on the same memory.");
         }
         bool device = self.on_device();
         if (device) {
@@ -273,7 +273,7 @@ namespace troy {namespace utils {
 
     void RNSBase::compose_array(Slice<uint64_t> value) const {
         if (value.size() % this->size() != 0) {
-            throw std::invalid_argument("Value size must be a multiple of RNSBase size.");
+            throw std::invalid_argument("[RNSBase::compose_array] Value size must be a multiple of RNSBase size.");
         }
         if (this->size() == 1) {
             return; // nothing to do;
@@ -326,7 +326,7 @@ namespace troy {namespace utils {
 
     void fast_convert_array_step1(const BaseConverter& self, ConstSlice<uint64_t> input, Slice<uint64_t> temp) {
         if (self.on_device() != input.on_device()) {
-            throw std::invalid_argument("RNSBase and value must be on the same memory.");
+            throw std::invalid_argument("[fast_convert_array_step1] RNSBase and value must be on the same memory.");
         }
         bool device = self.on_device();
         if (device) {
@@ -378,7 +378,7 @@ namespace troy {namespace utils {
 
     void fast_convert_array_step2(const BaseConverter& self, ConstSlice<uint64_t> temp, Slice<uint64_t> output) {
         if (self.on_device() != temp.on_device()) {
-            throw std::invalid_argument("RNSBase and value must be on the same memory.");
+            throw std::invalid_argument("[fast_convert_array_step2] RNSBase and value must be on the same memory.");
         }
         bool device = self.on_device();
         if (device) {
@@ -399,10 +399,10 @@ namespace troy {namespace utils {
         size_t obase_size = this->output_base().size();
         size_t count = input.size() / ibase_size;
         if (input.size() != count * ibase_size) {
-            throw std::invalid_argument("Input size must be a multiple of input base size.");
+            throw std::invalid_argument("[BaseConverter::fast_convert_array] Input size must be a multiple of input base size.");
         }
         if (output.size() != count * obase_size) {
-            throw std::invalid_argument("Output size must be a multiple of output base size.");
+            throw std::invalid_argument("[BaseConverter::fast_convert_array] Output size must be a multiple of output base size.");
         }
         Array<uint64_t> temp(count * ibase_size, input.on_device());
         fast_convert_array_step1(*this, input, temp.reference());
@@ -459,7 +459,7 @@ namespace troy {namespace utils {
 
     void exact_convey_array_step1(const BaseConverter& self, ConstSlice<uint64_t> input, Slice<uint64_t> temp, Slice<double> v) {
         if (self.on_device() != input.on_device()) {
-            throw std::invalid_argument("RNSBase and value must be on the same memory.");
+            throw std::invalid_argument("[exact_convey_array_step1] RNSBase and value must be on the same memory.");
         }
         bool device = self.on_device();
         if (device) {
@@ -526,7 +526,7 @@ namespace troy {namespace utils {
 
     void exact_convey_array_step2(const BaseConverter& self, ConstSlice<uint64_t> temp, ConstSlice<double> v, Slice<uint64_t> output) {
         if (self.on_device() != temp.on_device()) {
-            throw std::invalid_argument("RNSBase and value must be on the same memory.");
+            throw std::invalid_argument("[exact_convey_array_step2] RNSBase and value must be on the same memory.");
         }
         bool device = self.on_device();
         if (device) {
@@ -546,14 +546,14 @@ namespace troy {namespace utils {
     void BaseConverter::exact_convey_array(ConstSlice<uint64_t> input, Slice<uint64_t> output) const {
         size_t ibase_size = this->input_base().size();
         if (this->output_base().size() != 1) {
-            throw std::invalid_argument("Output base size must be 1.");
+            throw std::invalid_argument("[BaseConverter::exact_convey_array] Output base size must be 1.");
         }
         size_t count = input.size() / ibase_size;
         if (input.size() != count * ibase_size) {
-            throw std::invalid_argument("Input size must be a multiple of input base size.");
+            throw std::invalid_argument("[BaseConverter::exact_convey_array] Input size must be a multiple of input base size.");
         }
         if (output.size() != count) {
-            throw std::invalid_argument("Output size must be a multiple of output base size.");
+            throw std::invalid_argument("[BaseConverter::exact_convey_array] Output size must be a multiple of output base size.");
         }
         Array<uint64_t> temp(count * ibase_size, input.on_device());
         Array<double> v(count * ibase_size, input.on_device());

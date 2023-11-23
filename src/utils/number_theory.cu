@@ -61,7 +61,7 @@ namespace troy {namespace utils {
             value -= factor;
         }
         if (count > 0) {
-            throw std::logic_error("Failed to find enough qualifying primes.");
+            throw std::logic_error("[get_primes] Failed to find enough qualifying primes.");
         }
         return ret;
     }

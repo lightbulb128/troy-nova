@@ -17,6 +17,9 @@ namespace troy { namespace utils {
         __host__ __device__ const T& operator*() const { return *pointer; }
         __host__ __device__ const T* get() const { return pointer; }
         __host__ __device__ bool on_device() const { return device; }
+        __host__ __device__ static ConstPointer<T> from_reference(const T& reference, bool device) {
+            return ConstPointer<T>(&reference, device);
+        }
     };
 
     template<class T>
@@ -30,6 +33,9 @@ namespace troy { namespace utils {
         __host__ __device__ T* get() { return pointer; }
         __host__ __device__ ConstPointer<T> as_const() const { return ConstPointer(pointer, device); } 
         __host__ __device__ bool on_device() const { return device; }
+        __host__ __device__ static Pointer<T> from_reference(T& reference, bool device) {
+            return Pointer<T>(&reference, device);
+        }
     };
 
     template<class T>
@@ -38,6 +44,7 @@ namespace troy { namespace utils {
         bool device;
     public:
 
+        Box(): pointer(nullptr), device(false) {}
         Box(T* object, bool device) : pointer(object), device(device) {}
         Box(T&& object) : device(false) {
             pointer = reinterpret_cast<T*>(malloc(sizeof(T)));
@@ -58,7 +65,7 @@ namespace troy { namespace utils {
             release();
         }
 
-        Box& operator=(T&& object) {
+        Box& operator=(Box<T>&& object) {
             release();
             pointer = object.pointer;
             device = object.device;
@@ -133,6 +140,7 @@ namespace troy { namespace utils {
         __host__ __device__ ConstSlice(const T* pointer, size_t len, bool device) : pointer(pointer), len(len), device(device) {}
         __host__ __device__ size_t size() const { return len; }
         __host__ __device__ const T& operator[](size_t index) const { return pointer[index]; }
+        __host__ __device__ ConstPointer<T> at(size_t index) const { return ConstPointer<T>(pointer + index, device); }
         __host__ __device__ ConstSlice<T> const_slice(size_t begin, size_t end) const { return ConstSlice<T>(pointer + begin, end - begin, device); }
         __host__ __device__ bool on_device() const { return device; }
         __host__ __device__ const T* raw_pointer() const { return pointer; }
@@ -150,6 +158,8 @@ namespace troy { namespace utils {
         __host__ __device__ Slice(T* pointer, size_t len, bool device) : pointer(pointer), len(len), device(device) {}
         __host__ __device__ size_t size() const { return len; }
         __host__ __device__ T& operator[](size_t index) { return pointer[index]; }
+        __host__ __device__ Pointer<T> at(size_t index) { return Pointer<T>(pointer + index, device); }
+        __host__ __device__ ConstPointer<T> const_at(size_t index) const { return ConstPointer<T>(pointer + index, device); }
         __host__ __device__ ConstSlice<T> as_const() const { return ConstSlice<T>(pointer, len, device); }
         __host__ __device__ ConstSlice<T> const_slice(size_t begin, size_t end) const { return ConstSlice<T>(pointer + begin, end - begin, device); }
         __host__ __device__ Slice<T> slice(size_t begin, size_t end) { return Slice<T>(pointer + begin, end - begin, device); }
@@ -159,8 +169,8 @@ namespace troy { namespace utils {
             return Slice<T>(pointer.get(), 1, pointer.on_device());
         }
         void copy_from_slice(ConstSlice<T> slice) {
-            if (slice.size() != len) throw std::runtime_error("Slice size does not match array size");
-            if (slice.on_device() != device) throw std::runtime_error("Slice device does not match array device");
+            if (slice.size() != len) throw std::runtime_error("[Slice::copy_from_slice] Slice size does not match array size");
+            if (slice.on_device() != device) throw std::runtime_error("[Slice::copy_from_slice] Slice device does not match array device");
             if (device) {
                 kernel_provider::copy_device_to_device(pointer, slice.raw_pointer(), len);
             } else {
@@ -235,6 +245,8 @@ namespace troy { namespace utils {
         }
         __host__ __device__ const T& operator[](size_t index) const { return pointer[index]; }
         __host__ __device__ T& operator[](size_t index) { return pointer[index]; }
+        __host__ __device__ Pointer<T> at(size_t index) { return Pointer<T>(pointer + index, device); }
+        __host__ __device__ ConstPointer<T> const_at(size_t index) const { return ConstPointer<T>(pointer + index, device); }
 
         inline Array clone() const {
             Array cloned(len, device);
@@ -279,8 +291,8 @@ namespace troy { namespace utils {
         }
 
         inline void copy_from_slice(ConstSlice<T> slice) {
-            if (slice.size() != len) throw std::runtime_error("Slice size does not match array size");
-            if (slice.on_device() != device) throw std::runtime_error("Slice device does not match array device");
+            if (slice.size() != len) throw std::runtime_error("[Array::copy_from_slice] Slice size does not match array size");
+            if (slice.on_device() != device) throw std::runtime_error("[Array::copy_from_slice] Slice device does not match array device");
             if (device) {
                 kernel_provider::copy_device_to_device(pointer, slice.raw_pointer(), len);
             } else {

@@ -14,12 +14,12 @@ namespace troy {namespace utils {
             modulus,
             root
         )) {
-            throw std::invalid_argument("Invalid modulus, unable to find primitive root.");
+            throw std::invalid_argument("[NTTTables::NTTTables] Invalid modulus, unable to find primitive root.");
         }
 
         uint64_t inv_root = 0;
         if (!try_invert_uint64_mod(root, modulus, inv_root)) {
-            throw std::invalid_argument("Invalid modulus, unable to invert.");
+            throw std::invalid_argument("[NTTTables::NTTTables] Invalid modulus, unable to invert.");
         }
 
         // Populate tables with powers of root in specific orders.
@@ -51,7 +51,7 @@ namespace troy {namespace utils {
         uint64_t degree_uint64 = static_cast<uint64_t>(coeff_count);
         uint64_t inv_degree_modulo = 0;
         if (!utils::try_invert_uint64_mod(degree_uint64, modulus, inv_degree_modulo)) {
-            throw std::invalid_argument("Invalid modulus, unable to invert degree.");
+            throw std::invalid_argument("[NTTTables::NTTTables] Invalid modulus, unable to invert degree.");
         }
         MultiplyUint64Operand inv_degree_modulo_operand(inv_degree_modulo, modulus);
 
@@ -97,10 +97,8 @@ namespace troy {namespace utils {
     void ntt_multiply_inv_degree(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables) {
         bool device = operand.on_device();
         // same device
-        for (size_t i = 0; i < tables.size(); i++) {
-            if (device != tables[i].on_device()) {
-                throw std::invalid_argument("Operand and tables must be on the same device.");
-            }
+        if (device != tables.on_device()) {
+            throw std::invalid_argument("[ntt_multiply_inv_degree] Operand and tables must be on the same device.");
         }
         if (device) {
             size_t total = (pcount * tables.size()) << log_degree;
@@ -190,10 +188,8 @@ namespace troy {namespace utils {
     void ntt_transfer_to_rev(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers) {
         bool device = operand.on_device();
         // same device
-        for (size_t i = 0; i < tables.size(); i++) {
-            if (device != tables[i].on_device()) {
-                throw std::invalid_argument("Operand and tables must be on the same device.");
-            }
+        if (device != tables.on_device()) {
+            throw std::invalid_argument("[ntt_transfer_to_rev] Operand and tables must be on the same device.");
         }
         size_t m = 1; size_t layer = 0;
         size_t n = static_cast<size_t>(1) << log_degree;
@@ -278,10 +274,8 @@ namespace troy {namespace utils {
     void ntt_transfer_from_rev(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers) {
         bool device = operand.on_device();
         // same device
-        for (size_t i = 0; i < tables.size(); i++) {
-            if (device != tables[i].on_device()) {
-                throw std::invalid_argument("Operand and tables must be on the same device.");
-            }
+        if (device != tables.on_device()) {
+            throw std::invalid_argument("[ntt_transfer_from_rev] Operand and tables must be on the same device.");
         }
         size_t n = static_cast<size_t>(1) << log_degree;
         size_t m = n >> 1;
@@ -335,11 +329,9 @@ namespace troy {namespace utils {
 
     void ntt_transfer_last_reduce(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables) {
         bool device = operand.on_device();
-        // same device
-        for (size_t i = 0; i < tables.size(); i++) {
-            if (device != tables[i].on_device()) {
-                throw std::invalid_argument("Operand and tables must be on the same device.");
-            }
+        // same device=
+        if (device != tables.on_device()) {
+            throw std::invalid_argument("[ntt_transfer_last_reduce] Operand and tables must be on the same device.");
         }
         if (device) {
             size_t total = (pcount * tables.size()) << log_degree;

@@ -1,13 +1,18 @@
 #pragma once
 #include "rns_base.cuh"
 #include "ntt.cuh"
+#include "poly_small_mod.cuh"
 #include <optional>
+#include <vector>
+
 
 namespace troy {namespace utils {
 
     class RNSTool {
 
     private:
+
+        bool device;
 
         size_t coeff_count_;
 
@@ -44,11 +49,37 @@ namespace troy {namespace utils {
         uint64_t inv_q_last_mod_t_;
         uint64_t q_last_mod_t_;
         uint64_t q_last_half_;
-        uint64_t gamma_half;
+        // uint64_t gamma_half_;
 
     public:
 
-        // RNSTool(size_t poly_modulus_degree, const RNSBase& q, const Modulus& t);
+        inline size_t coeff_count() const noexcept { return coeff_count_; }
+
+        inline const RNSBase& base_q() const noexcept { return base_q_; }
+        inline const RNSBase& base_B() const noexcept { return base_B_; }
+        inline const RNSBase& base_Bsk() const noexcept { return base_Bsk_; }
+        inline const RNSBase& base_Bsk_m_tilde() const noexcept { return base_Bsk_m_tilde_; }
+        inline const RNSBase& base_t_gamma() const { return base_t_gamma_.value(); }
+
+        inline ConstSlice<MultiplyUint64Operand> inv_q_last_mod_q() const { return inv_q_last_mod_q_.const_reference(); }
+
+        inline uint64_t q_last_half() const noexcept { return q_last_half_; }
+
+        RNSTool() {}
+
+        inline bool on_device() const noexcept { return device; } 
+
+        RNSTool(size_t poly_modulus_degree, const RNSBase& q, const Modulus& t);
+
+        RNSTool clone() const;
+        void to_device_inplace();
+        inline RNSTool to_device() const {
+            RNSTool res = clone();
+            res.to_device_inplace();
+            return res;
+        }
+
+        void divide_and_round_q_last_inplace(Slice<uint64_t> input) const;
 
     };
 

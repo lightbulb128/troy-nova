@@ -13,7 +13,7 @@ namespace troy {
             }
             this->is_prime_ = false;
         } else if ((value >> utils::HE_MOD_BIT_COUNT_MAX != 0) || (value == 1)) {
-            throw std::invalid_argument("Value can be at most 61-bit and cannot be 1.");
+            throw std::invalid_argument("[Modulus::set_value] Value can be at most 61-bit and cannot be 1.");
         } else {
             this->value_ = value;
             this->bit_count_ = utils::get_significant_bit_count(value);

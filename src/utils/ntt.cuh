@@ -92,7 +92,7 @@ namespace troy {namespace utils {
     inline void ntt_negacyclic_harvey_lazy_ps(Slice<uint64_t> operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables) {
         int logd = utils::get_power_of_two(degree);
         if (logd < 0) {
-            throw std::invalid_argument("degree is invalid");
+            throw std::invalid_argument("[ntt_negacyclic_harvey_lazy_ps] degree is invalid");
         }
         size_t log_degree = static_cast<size_t>(logd);
         ntt_transfer_to_rev(operand, pcount, log_degree, tables, false);
@@ -101,7 +101,7 @@ namespace troy {namespace utils {
     inline void ntt_negacyclic_harvey_ps(Slice<uint64_t> operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables) {
         int logd = utils::get_power_of_two(degree);
         if (logd < 0) {
-            throw std::invalid_argument("degree is invalid");
+            throw std::invalid_argument("[ntt_negacyclic_harvey_ps] degree is invalid");
         }
         size_t log_degree = static_cast<size_t>(logd);
         ntt_negacyclic_harvey_lazy_ps(operand, pcount, degree, tables);
@@ -111,7 +111,7 @@ namespace troy {namespace utils {
     inline void inverse_ntt_negacyclic_harvey_lazy_ps(Slice<uint64_t> operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables) {
         int logd = utils::get_power_of_two(degree);
         if (logd < 0) {
-            throw std::invalid_argument("degree is invalid");
+            throw std::invalid_argument("[inverse_ntt_negacyclic_harvey_lazy_ps] degree is invalid");
         }
         size_t log_degree = static_cast<size_t>(logd);
         ntt_transfer_from_rev(operand, pcount, log_degree, tables, true);
@@ -120,7 +120,7 @@ namespace troy {namespace utils {
     inline void inverse_ntt_negacyclic_harvey_ps(Slice<uint64_t> operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables) {
         int logd = utils::get_power_of_two(degree);
         if (logd < 0) {
-            throw std::invalid_argument("degree is invalid");
+            throw std::invalid_argument("[inverse_ntt_negacyclic_harvey_ps] degree is invalid");
         }
         size_t log_degree = static_cast<size_t>(logd);
         inverse_ntt_negacyclic_harvey_lazy_ps(operand, pcount, degree, tables);

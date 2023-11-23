@@ -26,7 +26,7 @@ namespace troy {namespace utils {
     void modulo_ps(ConstSlice<uint64_t> polys, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         bool device = result.on_device();
         if (!same(device, polys.on_device(), moduli.on_device())) {
-            throw std::runtime_error("All inputs must be on the same device");
+            throw std::runtime_error("[modulo_ps] All inputs must be on the same device");
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
@@ -58,7 +58,7 @@ namespace troy {namespace utils {
     void negate_ps(ConstSlice<uint64_t> polys, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         bool device = result.on_device();
         if (!same(device, polys.on_device(), moduli.on_device())) {
-            throw std::runtime_error("All inputs must be on the same device");
+            throw std::runtime_error("[negate_ps] All inputs must be on the same device");
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
@@ -92,7 +92,7 @@ namespace troy {namespace utils {
     void add_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         bool device = result.on_device();
         if (!same(device, polys1.on_device(), polys2.on_device(), moduli.on_device())) {
-            throw std::runtime_error("All inputs must be on the same device");
+            throw std::runtime_error("[add_ps] All inputs must be on the same device");
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
@@ -124,7 +124,7 @@ namespace troy {namespace utils {
     void sub_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         bool device = result.on_device();
         if (!same(device, polys1.on_device(), polys2.on_device(), moduli.on_device())) {
-            throw std::runtime_error("All inputs must be on the same device");
+            throw std::runtime_error("[sub_ps] All inputs must be on the same device");
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
@@ -158,7 +158,7 @@ namespace troy {namespace utils {
     void add_scalar_ps(ConstSlice<uint64_t> polys, uint64_t scalar, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         bool device = result.on_device();
         if (!same(device, polys.on_device(), moduli.on_device())) {
-            throw std::runtime_error("All inputs must be on the same device");
+            throw std::runtime_error("[add_scalar_ps] All inputs must be on the same device");
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
@@ -190,7 +190,7 @@ namespace troy {namespace utils {
     void sub_scalar_ps(ConstSlice<uint64_t> polys, uint64_t scalar, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         bool device = result.on_device();
         if (!same(device, polys.on_device(), moduli.on_device())) {
-            throw std::runtime_error("All inputs must be on the same device");
+            throw std::runtime_error("[sub_scalar_ps] All inputs must be on the same device");
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
@@ -222,7 +222,7 @@ namespace troy {namespace utils {
     void multiply_scalar_ps(ConstSlice<uint64_t> polys, uint64_t scalar, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         bool device = result.on_device();
         if (!same(device, polys.on_device(), moduli.on_device())) {
-            throw std::runtime_error("All inputs must be on the same device");
+            throw std::runtime_error("[multiply_scalar_ps] All inputs must be on the same device");
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
@@ -257,7 +257,7 @@ namespace troy {namespace utils {
     void multiply_scalars_ps(ConstSlice<uint64_t> polys, ConstSlice<uint64_t> scalars, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         bool device = result.on_device();
         if (!same(device, polys.on_device(), moduli.on_device())) {
-            throw std::runtime_error("All inputs must be on the same device");
+            throw std::runtime_error("[multiply_scalars_ps] All inputs must be on the same device");
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
@@ -291,7 +291,7 @@ namespace troy {namespace utils {
     void multiply_uint64operand_ps(ConstSlice<uint64_t> polys, ConstSlice<MultiplyUint64Operand> operand, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         bool device = result.on_device();
         if (!same(device, polys.on_device(), operand.on_device(), moduli.on_device())) {
-            throw std::runtime_error("All inputs must be on the same device");
+            throw std::runtime_error("[multiply_uint64operand_ps] All inputs must be on the same device");
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
@@ -346,7 +346,7 @@ namespace troy {namespace utils {
     void dyadic_product_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         bool device = result.on_device();
         if (!same(device, polys1.on_device(), polys2.on_device(), moduli.on_device())) {
-            throw std::runtime_error("All inputs must be on the same device");
+            throw std::runtime_error("[dyadic_product_ps] All inputs must be on the same device");
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
@@ -403,7 +403,7 @@ namespace troy {namespace utils {
     void negacyclic_shift_ps(ConstSlice<uint64_t> polys, size_t shift, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         bool device = result.on_device();
         if (!same(device, polys.on_device(), moduli.on_device())) {
-            throw std::runtime_error("All inputs must be on the same device");
+            throw std::runtime_error("[negacyclic_shift_ps] All inputs must be on the same device");
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);

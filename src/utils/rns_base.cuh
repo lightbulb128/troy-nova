@@ -90,7 +90,7 @@ namespace troy {namespace utils {
 
         inline RNSBase extend_modulus(const Modulus& modulus) {
             if (this->base_.on_device()) {
-                throw std::runtime_error("Cannot extend RNSBase from device memory.");
+                throw std::runtime_error("[RNSBase::extend_modulus] Cannot extend RNSBase from device memory.");
             }
             Array<Modulus> new_base(base_.size() + 1, false);
             for (size_t i = 0; i < base_.size(); ++i) {
@@ -175,7 +175,7 @@ namespace troy {namespace utils {
 
         inline BaseConverter(const RNSBase& ibase, const RNSBase& obase) {
             if (ibase.on_device() || obase.on_device()) {
-                throw std::runtime_error("Cannot create BaseConverter from device memory.");
+                throw std::runtime_error("[BaseConverter::BaseConverter] Cannot create BaseConverter from device memory.");
             }
             this->ibase = ibase.clone();
             this->obase = obase.clone();
