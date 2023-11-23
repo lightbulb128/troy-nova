@@ -1,0 +1,1 @@
+#include "rns_tool.cuh"

@@ -7,7 +7,7 @@ target_sources(troytest PRIVATE
     utils/basics.cu
     utils/uint_small_mod.cu
     utils/ntt.cu
-    utils/rns.cu
+    utils/rns_base.cu
 
     modulus.cu
 )

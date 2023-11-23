@@ -1,13 +1,13 @@
 #include <gtest/gtest.h>
 #include "../test.cuh"
-#include "../../src/utils/rns.cuh"
+#include "../../src/utils/rns_base.cuh"
 #include <vector>
 
 using namespace std;
 using namespace troy;
 using namespace troy::utils;
 
-namespace rns {
+namespace rns_base {
 
     bool test_compose_decompose_single(const RNSBase& base, vector<uint64_t> input, vector<uint64_t> output, bool device) {
 
@@ -34,7 +34,7 @@ namespace rns {
         return true;
     }
 
-    TEST(RNS, ComposeDecomposeSingle) {
+    TEST(RNSBase, ComposeDecomposeSingle) {
 
         bool device = false;
         
@@ -207,12 +207,54 @@ namespace rns {
 
     }
 
-    TEST(RNS, HostComposeDecomposeArray) {
+    TEST(RNSBase, HostComposeDecomposeArray) {
         test_body_compose_decompose_array(false);
     }
 
-    TEST(RNS, DeviceComposeDecomposeArray) {
+    TEST(RNSBase, DeviceComposeDecomposeArray) {
         test_body_compose_decompose_array(true);
+    }
+
+    bool test_fast_convert_array(vector<uint64_t> imod, vector<uint64_t> omod, vector<uint64_t> input, vector<uint64_t> output, bool device) {
+        // create rns base
+        vector<Modulus> imv; imv.reserve(imod.size());
+        for (size_t i = 0; i < imod.size(); i++) imv.push_back(Modulus(imod[i]));
+        Array<Modulus> im = Array<Modulus>::from_vector(std::move(imv));
+        RNSBase ibase(im.const_reference());
+        vector<Modulus> omv; omv.reserve(omod.size());
+        for (size_t i = 0; i < omod.size(); i++) omv.push_back(Modulus(omod[i]));
+        Array<Modulus> om = Array<Modulus>::from_vector(std::move(omv));
+        RNSBase obase(om.const_reference());
+        // create base converter
+        BaseConverter converter(ibase, obase);
+        if (device) converter.to_device_inplace();
+        // create input array
+        Array<uint64_t> x = Array<uint64_t>::from_vector(std::move(input));
+        if (device) x.to_device_inplace();
+        // convert
+        Array<uint64_t> y(output.size(), x.on_device());
+        converter.fast_convert_array(x.const_reference(), y.reference());
+        if (device) y.to_host_inplace();
+        // check
+        for (size_t i = 0; i < output.size(); i++) {
+            if (y[i] != output[i]) return false;
+        }
+        return true;
+    }
+
+    void test_body_fast_convert_array(bool device) {
+        test_fast_convert_array({3}, {2}, {0, 1, 2}, {0, 1, 0}, device);
+        test_fast_convert_array({2, 3}, {2}, {0, 1, 0, 0, 1, 2}, {0, 1, 0}, device);
+        test_fast_convert_array({2, 3}, {2, 3}, {1, 1, 0, 1, 2, 2}, {1, 1, 0, 1, 2, 2}, device);
+        test_fast_convert_array({2, 3}, {3, 4, 5}, {0, 1, 1, 0, 1, 2}, {0, 1, 2, 0, 3, 1, 0, 2, 0}, device);
+    }
+
+    TEST(RNSBase, HostFastConvertArray) {
+        test_body_fast_convert_array(false);
+    }
+
+    TEST(RNSBase, DeviceFastConvertArray) {
+        test_body_fast_convert_array(true);
     }
 
 }

@@ -154,4 +154,81 @@ namespace troy {namespace utils {
 
     };
 
+    class BaseConverter {
+
+        bool device;
+        RNSBase ibase;
+        RNSBase obase;
+
+        // o.len() * i.len()
+        Array<uint64_t> base_change_matrix_;
+
+    public:
+
+        __host__ __device__ inline bool on_device() const { return device; }
+        
+        const RNSBase& input_base() const { return ibase; }
+        const RNSBase& output_base() const { return obase; }
+        ConstSlice<uint64_t> base_change_matrix() const { return base_change_matrix_.const_reference(); }
+
+        inline BaseConverter(): device(false) {}
+
+        inline BaseConverter(const RNSBase& ibase, const RNSBase& obase) {
+            if (ibase.on_device() || obase.on_device()) {
+                throw std::runtime_error("Cannot create BaseConverter from device memory.");
+            }
+            this->ibase = ibase.clone();
+            this->obase = obase.clone();
+            this->device = false;
+            this->initialize();
+        }
+
+        inline void initialize() {
+            Array<uint64_t> base_change_matrix = Array<uint64_t>(
+                obase.size() * ibase.size(), false);
+            for (size_t i = 0; i < obase.size(); ++i) {
+                for (size_t j = 0; j < ibase.size(); ++j) {
+                    base_change_matrix[i * ibase.size() + j] = 
+                        utils::modulo_uint(
+                            this->ibase.punctured_product(j),
+                            this->obase.base()[i]
+                        );
+                }
+            }
+            this->base_change_matrix_ = std::move(base_change_matrix);
+        }
+
+        inline BaseConverter clone() const {
+            BaseConverter converter;
+            converter.ibase = ibase.clone();
+            converter.obase = obase.clone();
+            converter.base_change_matrix_ = base_change_matrix_.clone();
+            converter.device = device;
+            return converter;
+        }
+
+        inline void to_device_inplace() {
+            if (device) {
+                return;
+            }
+            ibase.to_device_inplace();
+            obase.to_device_inplace();
+            base_change_matrix_.to_device_inplace();
+            device = true;
+        }
+
+        inline BaseConverter to_device() const {
+            BaseConverter converter = this->clone();
+            converter.to_device_inplace();
+            return converter;
+        }
+        
+        void fast_convert_array(ConstSlice<uint64_t> input, Slice<uint64_t> output) const;
+        
+        // See "An Improved RNS Variant of the BFV Homomorphic Encryption Scheme" (CT-RSA 2019) for details
+        void exact_convey_array(ConstSlice<uint64_t> input, Slice<uint64_t> output) const;
+
+
+    };
+
 }}
