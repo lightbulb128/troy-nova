@@ -250,10 +250,12 @@ namespace troy { namespace utils {
 
         inline Array clone() const {
             Array cloned(len, device);
-            if (device) {
-                kernel_provider::copy_device_to_device(cloned.pointer, pointer, len);
-            } else {
-                memcpy(cloned.pointer, pointer, len * sizeof(T));
+            if (pointer && len > 0) {
+                if (device) {
+                    kernel_provider::copy_device_to_device(cloned.pointer, pointer, len);
+                } else {
+                    memcpy(cloned.pointer, pointer, len * sizeof(T));
+                }
             }
             return cloned;
         }
