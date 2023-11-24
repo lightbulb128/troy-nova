@@ -45,3 +45,18 @@ inline bool all_is_true(const troy::utils::Array<bool>& v) {
     }
     return true;
 }
+
+template<typename T> void print_vector(const std::vector<T>& v, bool end_line = true) {
+    size_t n = v.size();
+    std::cout << "[";
+    for (size_t i = 0; i < n; i++) {
+        std::cout << v[i]; 
+        if (i != n - 1) {
+            std::cout << ", ";
+        }
+    }
+    std::cout << "]";
+    if (end_line) {
+        std::cout << std::endl;
+    }
+}

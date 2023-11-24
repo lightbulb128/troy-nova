@@ -88,6 +88,9 @@ namespace troy {namespace utils {
 
         inline uint64_t m_tilde_value() const noexcept { return m_tilde_value_; }
         inline uint64_t q_last_half() const noexcept { return q_last_half_; }
+        inline uint64_t inv_q_last_mod_t() const noexcept { return inv_q_last_mod_t_; }
+        inline uint64_t q_last_mod_t() const noexcept { return q_last_mod_t_; }
+
 
         RNSTool() {}
 
@@ -114,6 +117,14 @@ namespace troy {namespace utils {
         void fast_floor(ConstSlice<uint64_t> input, Slice<uint64_t> destination) const;
 
         void fast_b_conv_m_tilde(ConstSlice<uint64_t> input, Slice<uint64_t> destination) const;
+
+        void decrypt_scale_and_round(ConstSlice<uint64_t> phase, Slice<uint64_t> destination) const;
+
+        void mod_t_and_divide_q_last_inplace(Slice<uint64_t> input) const;
+
+        inline void decrypt_mod_t(ConstSlice<uint64_t> phase, Slice<uint64_t> destination) const {
+            this->base_q_to_t_conv().exact_convey_array(phase, destination);
+        }
 
     };
 

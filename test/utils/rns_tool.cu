@@ -584,5 +584,209 @@ namespace rns_tool {
         ASSERT_TRUE(test_body_fast_b_conv_m_tilde(true));
     }
 
+    bool test_body_exact_scale_and_round(bool device) {
+        
+        {
+            size_t poly_modulus_degree = 2;
+            Modulus plain_t(3);
+            RNSTool rns_tool(poly_modulus_degree, to_rns_base({5, 7}), plain_t);
+            RNSTool rns_tool_cpu = rns_tool.clone();
+            if (device) rns_tool.to_device_inplace();
+
+            {
+                Array<uint64_t> input = Array<uint64_t>::from_vector({29, 65, 29, 65});
+                Array<uint64_t> output(poly_modulus_degree, false);
+                if (device) input.to_device_inplace();
+                if (device) output.to_device_inplace();
+                rns_tool.decrypt_scale_and_round(input.const_reference(), output.reference());
+                if (device) input.to_host_inplace();
+                if (device) output.to_host_inplace();
+                if (!same_array_vector(output.const_reference(), {2, 0})) return false;
+            }
+        }
+
+        return true;
+
+    }
+
+    TEST(RNSToolTest, HostExactScaleAndRound) {
+        ASSERT_TRUE(test_body_exact_scale_and_round(false));
+    }
+
+    TEST(RNSToolTest, DeviceExactScaleAndRound) {
+        ASSERT_TRUE(test_body_exact_scale_and_round(true));
+    }
     
+    
+    bool test_body_mod_t_and_divide_q_last_inplace(bool device) {
+        
+        {
+            size_t poly_modulus_degree = 2;
+            Modulus plain_t(3);
+            RNSTool rns_tool(poly_modulus_degree, to_rns_base({13, 7}), plain_t);
+            if (device) rns_tool.to_device_inplace();
+            size_t base_q_size = rns_tool.base_q().size();
+
+            {
+                Array<uint64_t> input = Array<uint64_t>::from_vector(vector<uint64_t>(poly_modulus_degree * base_q_size, 0));
+                if (device) input.to_device_inplace();
+                rns_tool.mod_t_and_divide_q_last_inplace(input.reference());
+                if (device) input.to_host_inplace();
+                if (!same_array_vector(input.const_slice(0, 2), vector<uint64_t>(2, 0))) return false;
+            }
+
+            {
+                Array<uint64_t> input = Array<uint64_t>::from_vector({1, 2, 1, 2});
+                if (device) input.to_device_inplace();
+                rns_tool.mod_t_and_divide_q_last_inplace(input.reference());
+                if (device) input.to_host_inplace();
+                if (!same_array_vector(input.const_slice(0, 2), vector<uint64_t>({11, 12}))) return false;
+            }
+            
+            {
+                Array<uint64_t> input = Array<uint64_t>::from_vector({12, 11, 4, 3});
+                if (device) input.to_device_inplace();
+                rns_tool.mod_t_and_divide_q_last_inplace(input.reference());
+                if (device) input.to_host_inplace();
+                if (!same_array_vector(input.const_slice(0, 2), vector<uint64_t>({1, 3}))) return false;
+            }
+        }
+        
+        {
+            size_t poly_modulus_degree = 2;
+            Modulus plain_t(3);
+            RNSTool rns_tool(poly_modulus_degree, to_rns_base({5, 7, 11}), plain_t);
+            if (device) rns_tool.to_device_inplace();
+            size_t base_q_size = rns_tool.base_q().size();
+
+            {
+                Array<uint64_t> input = Array<uint64_t>::from_vector(vector<uint64_t>(poly_modulus_degree * base_q_size, 0));
+                if (device) input.to_device_inplace();
+                rns_tool.mod_t_and_divide_q_last_inplace(input.reference());
+                if (device) input.to_host_inplace();
+                if (!same_array_vector(input.const_slice(0, 4), vector<uint64_t>(4, 0))) return false;
+            }
+
+            {
+                Array<uint64_t> input = Array<uint64_t>::from_vector({1, 2, 1, 2, 1, 2});
+                if (device) input.to_device_inplace();
+                rns_tool.mod_t_and_divide_q_last_inplace(input.reference());
+                if (device) input.to_host_inplace();
+                if (!same_array_vector(input.const_slice(0, 4), {4, 3, 6, 5})) return false;
+            }
+
+            {
+                Array<uint64_t> input = Array<uint64_t>::from_vector({0, 1, 0, 0, 4, 0});
+                if (device) input.to_device_inplace();
+                rns_tool.mod_t_and_divide_q_last_inplace(input.reference());
+                if (device) input.to_host_inplace();
+                if (!same_array_vector(input.const_slice(0, 4), {0, 1, 5, 0})) return false;
+            }
+            
+        }
+
+        return true;
+
+    }
+
+    TEST(RNSToolTest, HostModTAndDivideQLastInplace) {
+        ASSERT_TRUE(test_body_mod_t_and_divide_q_last_inplace(false));
+    }
+
+    TEST(RNSToolTest, DeviceModTAndDivideQLastInplace) {
+        ASSERT_TRUE(test_body_mod_t_and_divide_q_last_inplace(true));
+    }
+
+    bool test_body_decrypt_mod_t(bool device) {
+        
+        {
+            size_t poly_modulus_degree = 2;
+            Modulus plain_t(3);
+            RNSTool rns_tool(poly_modulus_degree, to_rns_base({13, 7}), plain_t);
+            RNSTool rns_tool_cpu = rns_tool.clone();
+            if (device) rns_tool.to_device_inplace();
+
+            {
+                Array<uint64_t> input = Array<uint64_t>::from_vector({0, 0, 0, 0});
+                Array<uint64_t> output(poly_modulus_degree, false);
+                if (device) input.to_device_inplace();
+                if (device) output.to_device_inplace();
+                rns_tool.decrypt_mod_t(input.const_reference(), output.reference());
+                if (device) input.to_host_inplace();
+                if (device) output.to_host_inplace();
+                if (!same_array_vector(output.const_reference(), {0, 0})) return false;
+            }
+            {
+                Array<uint64_t> input = Array<uint64_t>::from_vector({1, 2, 1, 2});
+                Array<uint64_t> output(poly_modulus_degree, false);
+                if (device) input.to_device_inplace();
+                if (device) output.to_device_inplace();
+                rns_tool.decrypt_mod_t(input.const_reference(), output.reference());
+                if (device) input.to_host_inplace();
+                if (device) output.to_host_inplace();
+                if (!same_array_vector(output.const_reference(), {1, 2})) return false;
+            }
+            {
+                Array<uint64_t> input = Array<uint64_t>::from_vector({12, 11, 4, 3});
+                Array<uint64_t> output(poly_modulus_degree, false);
+                if (device) input.to_device_inplace();
+                if (device) output.to_device_inplace();
+                rns_tool.decrypt_mod_t(input.const_reference(), output.reference());
+                if (device) input.to_host_inplace();
+                if (device) output.to_host_inplace();
+                if (!same_array_vector(output.const_reference(), {1, 0})) return false;
+            }
+        }
+
+        {
+            size_t poly_modulus_degree = 2;
+            Modulus plain_t(3);
+            RNSTool rns_tool(poly_modulus_degree, to_rns_base({5, 7, 11}), plain_t);
+            RNSTool rns_tool_cpu = rns_tool.clone();
+            if (device) rns_tool.to_device_inplace();
+
+            {
+                Array<uint64_t> input = Array<uint64_t>::from_vector({0, 0, 0, 0, 0, 0});
+                Array<uint64_t> output(poly_modulus_degree, false);
+                if (device) input.to_device_inplace();
+                if (device) output.to_device_inplace();
+                rns_tool.decrypt_mod_t(input.const_reference(), output.reference());
+                if (device) input.to_host_inplace();
+                if (device) output.to_host_inplace();
+                if (!same_array_vector(output.const_reference(), {0, 0})) return false;
+            }
+            {
+                Array<uint64_t> input = Array<uint64_t>::from_vector({1, 2, 1, 2, 1, 2});
+                Array<uint64_t> output(poly_modulus_degree, false);
+                if (device) input.to_device_inplace();
+                if (device) output.to_device_inplace();
+                rns_tool.decrypt_mod_t(input.const_reference(), output.reference());
+                if (device) input.to_host_inplace();
+                if (device) output.to_host_inplace();
+                if (!same_array_vector(output.const_reference(), {1, 2})) return false;
+            }
+            {
+                Array<uint64_t> input = Array<uint64_t>::from_vector({0, 1, 0, 0, 4, 0});
+                Array<uint64_t> output(poly_modulus_degree, false);
+                if (device) input.to_device_inplace();
+                if (device) output.to_device_inplace();
+                rns_tool.decrypt_mod_t(input.const_reference(), output.reference());
+                if (device) input.to_host_inplace();
+                if (device) output.to_host_inplace();
+                if (!same_array_vector(output.const_reference(), {1, 2})) return false;
+            }
+        }
+
+        return true;
+
+    }
+
+    TEST(RNSToolTest, HostDecryptModT) {
+        ASSERT_TRUE(test_body_decrypt_mod_t(false));
+    }
+
+    TEST(RNSToolTest, DeviceDecryptModT) {
+        ASSERT_TRUE(test_body_decrypt_mod_t(true));
+    }
+
 }
