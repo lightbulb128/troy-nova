@@ -10,6 +10,7 @@ target_sources(troytest PRIVATE
     utils/rns_base.cu
     utils/rns_tool.cu
     utils/galois.cu
+    utils/random_generator.cu
 
     modulus.cu
 )
