@@ -17,6 +17,7 @@ namespace troy { namespace utils {
         __host__ __device__ const T& operator*() const { return *pointer; }
         __host__ __device__ const T* get() const { return pointer; }
         __host__ __device__ bool on_device() const { return device; }
+        __host__ __device__ bool is_null() const { return pointer == nullptr; }
         __host__ __device__ static ConstPointer<T> from_reference(const T& reference, bool device) {
             return ConstPointer<T>(&reference, device);
         }
@@ -33,6 +34,7 @@ namespace troy { namespace utils {
         __host__ __device__ T* get() { return pointer; }
         __host__ __device__ ConstPointer<T> as_const() const { return ConstPointer(pointer, device); } 
         __host__ __device__ bool on_device() const { return device; }
+        __host__ __device__ bool is_null() const { return pointer == nullptr; }
         __host__ __device__ static Pointer<T> from_reference(T& reference, bool device) {
             return Pointer<T>(&reference, device);
         }
@@ -53,6 +55,8 @@ namespace troy { namespace utils {
         Box(Box&& other) : pointer(other.pointer), device(other.device) { other.pointer = nullptr; }
 
         __host__ __device__ bool on_device() const { return device; }
+        __host__ __device__ bool is_null() const { return pointer == nullptr; }
+        __host__ __device__ T* raw_pointer() { return pointer; }
 
         inline void release() {
             if (!pointer) return;
@@ -221,6 +225,7 @@ namespace troy { namespace utils {
         }
         
         __host__ __device__ bool on_device() const { return device; }
+        __host__ __device__ T* raw_pointer() { return pointer; }
 
         Array(Array&& other) : pointer(other.pointer), len(other.len), device(other.device) { 
             other.pointer = nullptr;

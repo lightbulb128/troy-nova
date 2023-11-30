@@ -28,6 +28,14 @@ namespace troy { namespace utils {
 
         void init_curand_states(size_t count);
 
+        inline void reset_seed(uint64_t seed) {
+            this->seed = seed;
+            this->counter = 0;
+            if (this->curand_states.size() > 0) {
+                this->init_curand_states(this->curand_states.size());
+            }
+        }
+
         void fill_bytes(Slice<uint8_t> bytes);
         void fill_uint64s(Slice<uint64_t> uint64s);
 
