@@ -194,6 +194,11 @@ namespace troy {namespace utils {
         if (device != moduli.on_device()) {
             throw std::runtime_error("[RandomGenerator::sample_poly_uniform] destination and modulus must be on the same device");
         }
+        if (device) {
+            if (degree != this->curand_states.size()) {
+                throw std::runtime_error("[RandomGenerator::sample_poly_uniform] degree must be equal to the number of curand states");
+            }
+        }
         this->fill_uint64s(destination);
         utils::modulo_inplace_p(destination, degree, moduli);
     }

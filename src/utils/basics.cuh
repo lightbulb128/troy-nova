@@ -636,7 +636,7 @@ namespace troy { namespace utils {
     __host__
     void divide_uint_inplace(Slice<uint64_t> numerator, ConstSlice<uint64_t> denominator, Slice<uint64_t> quotient);
 
-    __host__ __device__
+    __host__
     inline void divide_uint(ConstSlice<uint64_t> numerator, ConstSlice<uint64_t> denominator, Slice<uint64_t> quotient, Slice<uint64_t> remainder) {
         set_uint(numerator, remainder.size(), remainder);
         divide_uint_inplace(remainder, denominator, quotient);

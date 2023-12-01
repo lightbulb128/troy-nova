@@ -19,9 +19,9 @@ namespace troy { namespace utils {
 
         // remove all copy and move constructors
         RandomGenerator(const RandomGenerator&) = delete;
-        RandomGenerator(RandomGenerator&&) = delete;
+        RandomGenerator(RandomGenerator&&) = default;
         RandomGenerator& operator=(const RandomGenerator&) = delete;
-        RandomGenerator& operator=(RandomGenerator&&) = delete;
+        RandomGenerator& operator=(RandomGenerator&&) = default;
 
         inline RandomGenerator(uint64_t seed): seed(seed), counter(0), curand_states() {}
         inline RandomGenerator(): RandomGenerator(0) {}

@@ -33,6 +33,19 @@ namespace troy {namespace utils {
             this->permutation_tables = std::move(other.permutation_tables);
         }
 
+        inline GaloisTool& operator=(const GaloisTool& other) = delete;
+        inline GaloisTool& operator=(GaloisTool&& other) {
+            this->device = other.device;
+            this->coeff_count_power_ = other.coeff_count_power_;
+            this->coeff_count_ = other.coeff_count_;
+            // lock the other
+            std::unique_lock<std::shared_mutex> lock(other.permutation_tables_rwlock);
+            this->permutation_tables = std::move(other.permutation_tables);
+            // unlock the other
+            lock.unlock();
+            return *this;
+        }
+
         inline bool on_device() const noexcept { return device; }
         inline size_t coeff_count_power() const noexcept { return coeff_count_power_; }
         inline size_t coeff_count() const noexcept { return coeff_count_; }

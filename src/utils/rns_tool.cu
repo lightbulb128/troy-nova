@@ -238,10 +238,10 @@ namespace troy {namespace utils {
         this->inv_q_last_mod_q_ = std::move(inv_q_last_mod_q);
         this->base_Bsk_ntt_tables_ = std::move(base_Bsk_ntt_tables);
 
-        this->m_tilde_ = Box(std::move(m_tilde));
-        this->m_sk_ = Box(std::move(m_sk));
-        this->t_ = Box(Modulus(t));
-        this->gamma_ = Box(std::move(gamma));
+        this->m_tilde_ = Box(new Modulus(m_tilde), false);
+        this->m_sk_ = Box(new Modulus(m_sk), false);
+        this->t_ = Box(new Modulus(t), false);
+        this->gamma_ = Box(new Modulus(gamma), false);
 
         this->m_tilde_value_ = m_tilde_value;
         this->inv_q_last_mod_t_ = inv_q_last_mod_t;

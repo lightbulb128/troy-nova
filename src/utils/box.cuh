@@ -13,8 +13,18 @@ namespace troy { namespace utils {
         bool device;
     public:
         __host__ __device__ ConstPointer(const T* pointer, bool device) : pointer(pointer), device(device) {}
-        __host__ __device__ const T* operator->() const { return pointer; }
-        __host__ __device__ const T& operator*() const { return *pointer; }
+        __host__ __device__ const T* operator->() const { 
+            #ifndef __CUDA_ARCH__
+                if (!pointer) throw std::runtime_error("[ConstPointer::operator->] Null pointer");
+            #endif
+            return pointer; 
+        }
+        __host__ __device__ const T& operator*() const { 
+            #ifndef __CUDA_ARCH__
+                if (!pointer) throw std::runtime_error("[ConstPointer::operator*] Null pointer");
+            #endif
+            return *pointer; 
+        }
         __host__ __device__ const T* get() const { return pointer; }
         __host__ __device__ bool on_device() const { return device; }
         __host__ __device__ bool is_null() const { return pointer == nullptr; }
@@ -29,8 +39,18 @@ namespace troy { namespace utils {
         bool device;
     public:
         __host__ __device__ Pointer(T* pointer, bool device) : pointer(pointer), device(device) {}
-        __host__ __device__ T* operator->() { return pointer; }
-        __host__ __device__ T& operator*() { return *pointer; }
+        __host__ __device__ T* operator->() { 
+            #ifndef __CUDA_ARCH__
+                if (!pointer) throw std::runtime_error("[Pointer::operator->] Null pointer");
+            #endif
+            return pointer; 
+        }
+        __host__ __device__ T& operator*() { 
+            #ifndef __CUDA_ARCH__
+                if (!pointer) throw std::runtime_error("[Pointer::operator*] Null pointer");
+            #endif
+            return *pointer; 
+        }
         __host__ __device__ T* get() { return pointer; }
         __host__ __device__ ConstPointer<T> as_const() const { return ConstPointer(pointer, device); } 
         __host__ __device__ bool on_device() const { return device; }
@@ -48,10 +68,6 @@ namespace troy { namespace utils {
 
         Box(): pointer(nullptr), device(false) {}
         Box(T* object, bool device) : pointer(object), device(device) {}
-        Box(T&& object) : device(false) {
-            pointer = reinterpret_cast<T*>(malloc(sizeof(T)));
-            *pointer = std::move(object);
-        }
         Box(Box&& other) : pointer(other.pointer), device(other.device) { other.pointer = nullptr; }
 
         __host__ __device__ bool on_device() const { return device; }
@@ -60,7 +76,7 @@ namespace troy { namespace utils {
 
         inline void release() {
             if (!pointer) return;
-            if (!device) free(reinterpret_cast<void*>(pointer));
+            if (!device) free(pointer);
             else kernel_provider::free(pointer);
             pointer = nullptr;
         }
@@ -84,11 +100,11 @@ namespace troy { namespace utils {
             if (!device) {
                 T* cloned = reinterpret_cast<T*>(malloc(sizeof(T)));
                 memcpy(cloned, pointer, sizeof(T));
-                return Box(std::move(cloned), device);
+                return Box(cloned, device);
             } else {
                 T* cloned = kernel_provider::malloc<T>(1);
                 kernel_provider::copy_device_to_device(cloned, pointer, 1);
-                return Box(std::move(cloned), device);
+                return Box(cloned, device);
             }
         }
 
@@ -124,8 +140,18 @@ namespace troy { namespace utils {
             device = true;
         }
 
-        T* operator->() { return pointer; }
-        const T* operator->() const { return pointer; }
+        T* operator->() { 
+            #ifndef __CUDA_ARCH__
+                if (!pointer) throw std::runtime_error("[Box::operator->] Null pointer");
+            #endif
+            return pointer; 
+        }
+        const T* operator->() const { 
+            #ifndef __CUDA_ARCH__
+                if (!pointer) throw std::runtime_error("[Box::operator->] Null pointer");
+            #endif
+            return pointer; 
+        }
 
         T& operator*() { return *pointer; }
         const T& operator*() const { return *pointer; }
@@ -134,6 +160,15 @@ namespace troy { namespace utils {
         Pointer<T> as_pointer() { return Pointer(pointer, device); }
 
     };
+
+    // template<class T> class ConstSlice;
+
+    // template<class T>
+    // class Array {
+    //     static Array<T> create_and_copy_from_slice(ConstSlice<T> slice);
+    //     void to_host_inplace();
+    //     ConstSlice<T> const_reference() const;
+    // };
 
     template<class T>
     class ConstSlice {
@@ -151,6 +186,7 @@ namespace troy { namespace utils {
         __host__ __device__ static ConstSlice<T> from_pointer(ConstPointer<T> pointer) {
             return ConstSlice<T>(pointer.get(), 1, pointer.on_device());
         }
+
     };
 
     template<class T>
@@ -207,7 +243,7 @@ namespace troy { namespace utils {
 
         inline void release() {
             if (!pointer) return;
-            if (!device) free(reinterpret_cast<void*>(pointer));
+            if (!device) free(pointer);
             else kernel_provider::free(pointer);
         }
         ~Array() { 
@@ -329,20 +365,36 @@ namespace troy { namespace utils {
             return vector;
         }
 
-        inline void print() {
-            if (device) {
-                Array<T> host_array = this->to_host();
-                host_array.print();
-            } else {
-                std::cout << "[";
-                for (size_t i = 0; i < len; i++) {
-                    std::cout << pointer[i];
-                    if (i != len - 1) std::cout << ", ";
-                }
-                std::cout << "]";
-            }
-        }
-
     };
+
+    template<class T>
+    std::ostream& operator<<(std::ostream& os, const ConstSlice<T>& slice) {
+        if (slice.on_device()) {
+            os << "device";
+            Array<T> host_array = Array<T>::create_and_copy_from_slice(slice);
+            host_array.to_host_inplace();
+            os << host_array.const_reference();
+        } else {
+            os << "[";
+            for (size_t i = 0; i < slice.size(); i++) {
+                std::cout << slice[i];
+                if (i != slice.size() - 1) os << ", ";
+            }
+            os << "]";
+        }
+        return os;
+    }
+
+    template<class T>
+    std::ostream& operator<<(std::ostream& os, const Slice<T>& slice) {
+        os << slice.as_const();
+        return os;
+    }
+
+    template<class T>
+    std::ostream& operator<<(std::ostream& os, const Array<T>& array) {
+        os << array.const_reference();
+        return os;
+    }
 
 }}

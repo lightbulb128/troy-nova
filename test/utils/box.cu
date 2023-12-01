@@ -7,6 +7,7 @@ using namespace troy::utils;
 class Foo {
     int num;
 public:
+    Foo() : num(0) {}
     Foo(int num) : num(num) {}
     int get_num() const { return num; }
     void set_num(int num) { this->num = num; }
@@ -21,14 +22,14 @@ namespace box {
     TEST(Box, HostBox) {
 
         int x = 1;
-        Box<int> x_box(std::move(x));
+        Box<int> x_box(new int(x), false);
         EXPECT_EQ(*x_box, 1);
 
         *x_box = 2;
         EXPECT_EQ(*x_box, 2);
 
         Foo f(12);
-        Box<Foo> f_box(std::move(f));
+        Box<Foo> f_box(new Foo(f), false);
         EXPECT_EQ(f_box->get_num(), 12);
 
         f_box->set_num(13);

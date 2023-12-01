@@ -53,7 +53,7 @@ namespace galois_tool {
         if (device) {
             input.to_device_inplace(); output.to_device_inplace();
         }
-        Box<Modulus> modulus(Modulus(17));
+        Box<Modulus> modulus(new Modulus(17), false);
         if (device) {
             modulus.to_device_inplace();
         }

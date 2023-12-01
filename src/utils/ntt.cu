@@ -129,7 +129,7 @@ namespace troy {namespace utils {
                     size_t y_index = x_index + gap;
                     uint64_t x = operand[x_index];
                     uint64_t y = operand[y_index];
-                    uint64_t u = (x > two_times_modulus) ? (x - two_times_modulus) : x;
+                    uint64_t u = (x >= two_times_modulus) ? (x - two_times_modulus) : x;
                     uint64_t v = utils::multiply_uint64operand_mod_lazy(y, r, modulus);
                     x = u + v;
                     y = u + two_times_modulus - v;
@@ -166,7 +166,7 @@ namespace troy {namespace utils {
         size_t y_index = x_index + gap;
         uint64_t x = operand[x_index];
         uint64_t y = operand[y_index];
-        uint64_t u = (x > two_times_modulus) ? (x - two_times_modulus) : x;
+        uint64_t u = (x >= two_times_modulus) ? (x - two_times_modulus) : x;
         uint64_t v = utils::multiply_uint64operand_mod_lazy(y, r, modulus);
         x = u + v;
         y = u + two_times_modulus - v;

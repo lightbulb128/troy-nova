@@ -1,5 +1,6 @@
 #pragma once
-
+#include <iostream>
+#include <iomanip>
 #include <cstdint>
 #include <array>
 #include <stdexcept>
@@ -29,6 +30,22 @@ namespace troy {namespace utils {
                 throw std::runtime_error("blake2b failed");
             }
         }
+
     };
+    
+    inline std::ostream& operator<<(std::ostream& os, const HashFunction::HashBlock& hash)
+    {
+        os << "[";
+        for (auto i = 0; i < HashFunction::hash_block_uint64_count; ++i) {
+            os << std::hex << std::setfill('0') << std::setw(16) << hash[i];
+            if (i < HashFunction::hash_block_uint64_count - 1) {
+                os << ", ";
+            }
+        }
+        os << "]";
+        // reset default formatting
+        os << std::dec << std::setfill(' ') << std::setw(0);
+        return os;
+    }
 
 }}

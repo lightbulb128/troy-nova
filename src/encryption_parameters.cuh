@@ -27,7 +27,36 @@ namespace troy {
 
     public:
 
-        EncryptionParameters(SchemeType scheme_type) : scheme_(scheme_type), device(false) {}
+        inline EncryptionParameters(SchemeType scheme_type) : 
+            scheme_(scheme_type), device(false), plain_modulus_(new Modulus(0), false)
+        {}
+
+        inline EncryptionParameters(const EncryptionParameters& parms):
+            scheme_(parms.scheme_),
+            parms_id_(parms.parms_id_),
+            poly_modulus_degree_(parms.poly_modulus_degree_),
+            coeff_modulus_(parms.coeff_modulus_.clone()),
+            plain_modulus_(parms.plain_modulus_.clone()),
+            device(parms.device) {}
+            
+        EncryptionParameters(EncryptionParameters&& parms) = default;
+
+        // copy assignment
+        inline EncryptionParameters& operator=(const EncryptionParameters& parms) {
+            if (this == &parms) {
+                return *this;
+            }
+            scheme_ = parms.scheme_;
+            parms_id_ = parms.parms_id_;
+            poly_modulus_degree_ = parms.poly_modulus_degree_;
+            coeff_modulus_ = parms.coeff_modulus_.clone();
+            plain_modulus_ = parms.plain_modulus_.clone();
+            device = parms.device;
+            return *this;
+        }
+        // move assignment
+        inline EncryptionParameters& operator=(EncryptionParameters&& parms) = default;
+
         
         inline SchemeType scheme() const noexcept {
             return scheme_;
@@ -65,7 +94,7 @@ namespace troy {
             if (this->on_device() || coeff_modulus.on_device()) {
                 throw std::invalid_argument("[EncryptionParameters::set_coeff_modulus] Can only set coeff_modulus on host");
             }
-            coeff_modulus_.copy_from_slice(coeff_modulus);
+            coeff_modulus_ = utils::Array<Modulus>::create_and_copy_from_slice(coeff_modulus);
             compute_parms_id();
         }
 
@@ -73,19 +102,13 @@ namespace troy {
             if (this->on_device()) {
                 throw std::invalid_argument("[EncryptionParameters::set_plain_modulus] Can only set plain_modulus on host");
             }
-            utils::Box<Modulus> new_t = utils::Box<Modulus>(Modulus(plain_modulus));
+            utils::Box<Modulus> new_t = utils::Box<Modulus>(new Modulus(plain_modulus), false);
             plain_modulus_ = std::move(new_t);
             compute_parms_id();
         }
 
         inline EncryptionParameters clone() const {
-            EncryptionParameters new_t = EncryptionParameters(this->scheme());
-            new_t.poly_modulus_degree_ = this->poly_modulus_degree_;
-            new_t.coeff_modulus_ = this->coeff_modulus_.clone();
-            new_t.plain_modulus_ = this->plain_modulus_.clone();
-            new_t.parms_id_ = this->parms_id_;
-            new_t.device = this->device;
-            return new_t;
+            return EncryptionParameters(*this);
         }
 
         inline void to_device_inplace() {
@@ -105,22 +128,23 @@ namespace troy {
 
     };
 
-    enum SecurityLevel {
+    enum class SecurityLevel {
         None = 0,
         Classical128 = 128,
         Classical192 = 192,
         Classical256 = 256,
     };
 
-    enum ErrorType {
+    enum class EncryptionParameterErrorType {
         None = -1,
         Success = 0,
+        CreatedFromDeviceParms,
         InvalidScheme,
         InvalidCoeffModulusSize,
         InvalidCoeffModulusBitCount,
         InvalidCoeffModulusNoNTT,
         InvalidPolyModulusDegree,
-        InvalidPlyModulusDegreeNonPowerOfTwo,
+        InvalidPolyModulusDegreeNonPowerOfTwo,
         InvalidParametersTooLarge,
         InvalidParametersInsecure,
         FailedCreatingRNSBase,
@@ -129,21 +153,46 @@ namespace troy {
         InvalidPlainModulusTooLarge,
         InvalidPlainModulusNonZero,
         FailedCreatingRNSTool,
+        FailedCreatingGaloisTool,
     };
 
     struct EncryptionParameterQualifiers {
-        ErrorType parameter_error;
-        bool using_fft;
-        bool using_ntt;
-        bool using_batching;
-        bool using_fast_plain_lift;
-        bool using_descending_modulus_chain;
-        SecurityLevel security_level;
+        EncryptionParameterErrorType parameter_error = EncryptionParameterErrorType::None;
+        bool using_fft = false;
+        bool using_ntt = false;
+        bool using_batching = false;
+        bool using_fast_plain_lift = false;
+        bool using_descending_modulus_chain = false;
+        SecurityLevel security_level = SecurityLevel::None;
 
         bool parameters_set() const noexcept {
-            return parameter_error == ErrorType::Success;
+            return parameter_error == EncryptionParameterErrorType::Success;
         }
     };
 
+}
+
+namespace std {
+
+    struct TroyHashParmsID {
+        std::size_t operator()(const troy::ParmsID &parms_id) const {
+            std::uint64_t result = 17;
+            result = 31 * result + parms_id[0];
+            result = 31 * result + parms_id[1];
+            result = 31 * result + parms_id[2];
+            result = 31 * result + parms_id[3];
+            return static_cast<std::size_t>(result);
+        }
+    };
+
+    template <>
+    struct hash<troy::EncryptionParameters>
+    {
+        std::size_t operator()(const troy::EncryptionParameters &parms) const
+        {
+            TroyHashParmsID parms_id_hash;
+            return parms_id_hash(parms.parms_id());
+        }
+    };
 
 }

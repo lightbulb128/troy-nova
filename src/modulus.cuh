@@ -123,4 +123,9 @@ namespace troy {
 
     };
 
+    inline std::ostream& operator<<(std::ostream& os, const Modulus& modulus) {
+        os << "Modulus(" << modulus.value() << ")";
+        return os;
+    }
+
 }

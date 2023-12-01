@@ -131,6 +131,7 @@ namespace rns_tool {
         Array<NTTTables> ntt(2, false);
         ntt[0] = NTTTables(1, Modulus(53));
         ntt[1] = NTTTables(1, Modulus(13));
+
         if (device) {
             rns_tool.to_device_inplace();
             ntt[0].to_device_inplace();

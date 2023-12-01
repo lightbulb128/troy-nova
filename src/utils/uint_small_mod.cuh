@@ -120,6 +120,11 @@ namespace troy { namespace utils {
         }
 
     };
+    
+    inline std::ostream& operator<<(std::ostream& os, const MultiplyUint64Operand& operand) {
+        os << "Mo(" << operand.operand << ", " << operand.quotient << ")";
+        return os;
+    }
 
     __host__ __device__
     inline uint64_t multiply_uint64operand_mod(uint64_t x, const MultiplyUint64Operand& y, const Modulus& modulus) {

@@ -77,7 +77,7 @@ namespace ntt {
 
         size_t coeff_count_power = 1;
         Modulus modulus(0xffffffffffc0001);
-        Box<NTTTables> tables(NTTTables(coeff_count_power, modulus));
+        Box<NTTTables> tables(new NTTTables(coeff_count_power, modulus), false);
         tables->to_device_inplace(); // this moves the arrays into device, but not the table itself
         Box<NTTTables> tables_device = tables.to_device();
         ConstSlice<NTTTables> table_slice = ConstSlice<NTTTables>::from_pointer(tables_device.as_const_pointer());
@@ -139,7 +139,7 @@ namespace ntt {
         size_t n = 1 << coeff_count_power;
         Modulus modulus(0xffffffffffc0001);
         
-        Box<NTTTables> tables(NTTTables(coeff_count_power, modulus));
+        Box<NTTTables> tables(new NTTTables(coeff_count_power, modulus), false);
         tables->to_device_inplace(); // this moves the arrays into device, but not the table itself
         Box<NTTTables> tables_device = tables.to_device();
         ConstSlice<NTTTables> table_slice = ConstSlice<NTTTables>::from_pointer(tables_device.as_const_pointer());

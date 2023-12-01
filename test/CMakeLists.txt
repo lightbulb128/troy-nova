@@ -13,9 +13,14 @@ target_sources(troytest PRIVATE
     utils/random_generator.cu
 
     modulus.cu
+    he_context.cu
 )
 
 target_link_libraries(troytest gtest gtest_main troy)
 
 include(GoogleTest)
 gtest_discover_tests(troytest)
+
+add_executable(custom)
+target_sources(custom PRIVATE custom.cu)
+target_link_libraries(custom troy)
