@@ -117,17 +117,22 @@ namespace troy {namespace utils {
             return inner.to_vector();
         }
 
-        void print() {
-            inner.print();
-        }
-
         void resize(size_t new_size) {
+            if (new_size == this->inner.size()) {
+                return;
+            }
             Array<T> new_inner(new_size, this->on_device());
             size_t copy_length = std::min(this->inner.size(), new_size);
-            new_inner.copy_from_slice(this->inner.const_slice(0, copy_length));
+            new_inner.slice(0, copy_length).copy_from_slice(this->inner.const_slice(0, copy_length));
             this->inner = std::move(new_inner);
         }
 
     };
+
+    template <typename T>
+    std::ostream& operator<<(std::ostream& os, const DynamicArray<T>& arr) {
+        os << arr.const_reference();
+        return os;
+    }
 
 }}

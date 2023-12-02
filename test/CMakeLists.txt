@@ -14,6 +14,8 @@ target_sources(troytest PRIVATE
 
     modulus.cu
     he_context.cu
+    batch_encoder.cu
+    
 )
 
 target_link_libraries(troytest gtest gtest_main troy)

@@ -98,13 +98,33 @@ namespace troy {
             compute_parms_id();
         }
 
-        inline void set_plain_modulus(Modulus plain_modulus) {
+        inline void set_coeff_modulus(const std::vector<Modulus>& coeff_modulus) {
+            utils::Array<Modulus> array(coeff_modulus.size(), false);
+            for (size_t i = 0; i < coeff_modulus.size(); i++) {
+                array[i] = coeff_modulus[i];
+            }
+            set_coeff_modulus(array.const_reference());
+        }
+
+        inline void set_coeff_modulus(const std::vector<uint64_t>& coeff_modulus) {
+            utils::Array<Modulus> array(coeff_modulus.size(), false);
+            for (size_t i = 0; i < coeff_modulus.size(); i++) {
+                array[i] = Modulus(coeff_modulus[i]);
+            }
+            set_coeff_modulus(array.const_reference());
+        }
+
+        inline void set_plain_modulus(const Modulus& plain_modulus) {
             if (this->on_device()) {
                 throw std::invalid_argument("[EncryptionParameters::set_plain_modulus] Can only set plain_modulus on host");
             }
             utils::Box<Modulus> new_t = utils::Box<Modulus>(new Modulus(plain_modulus), false);
             plain_modulus_ = std::move(new_t);
             compute_parms_id();
+        }
+
+        inline void set_plain_modulus(uint64_t plain_modulus) {
+            set_plain_modulus(Modulus(plain_modulus));
         }
 
         inline EncryptionParameters clone() const {

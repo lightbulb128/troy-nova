@@ -3,6 +3,8 @@
 #include <vector>
 #include "../src/utils/box.cuh"
 
+using namespace troy;
+
 // #define FAIL std::cout << "Assertion failed at " << __FILE__ << ":" << __LINE__ << std::endl
 // #define EXPECT_EQ(a, b) if (a != b) { FAIL; return true; }
 // #define EXPECT_TRUE(a) if (!a) { FAIL; return true; }
@@ -36,7 +38,7 @@
         return false; \
     }
 
-inline bool all_is_true(const troy::utils::Array<bool>& v) {
+inline bool all_is_true(const utils::Array<bool>& v) {
     size_t n = v.size();
     for (size_t i = 0; i < n; i++) {
         if (!v[i]) {
@@ -44,6 +46,54 @@ inline bool all_is_true(const troy::utils::Array<bool>& v) {
         }
     }
     return true;
+}
+
+template<typename T>
+inline bool same_vector(utils::ConstSlice<T> a, utils::ConstSlice<T> b) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    if (a.on_device()) {
+        utils::Array<T> a_host = utils::Array<T>::create_and_copy_from_slice(a);
+        a_host.to_host_inplace();
+        return same_vector(a_host.const_reference(), b);
+    }
+    if (b.on_device()) {
+        utils::Array<T> b_host = utils::Array<T>::create_and_copy_from_slice(b);
+        b_host.to_host_inplace();
+        return same_vector(a, b_host.const_reference());
+    }
+    size_t n = a.size();
+    for (size_t i = 0; i < n; i++) {
+        if (a[i] != b[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+template<typename T>
+inline bool same_vector(const std::vector<T>& a, utils::ConstSlice<T> b) {
+    return same_vector(
+        utils::ConstSlice(a.data(), a.size(), false),
+        b
+    );
+}
+
+template<typename T>
+inline bool same_vector(utils::ConstSlice<T> a, const std::vector<T>& b) {
+    return same_vector(
+        a,
+        utils::ConstSlice(b.data(), b.size(), false)
+    );
+}
+
+template<typename T>
+inline bool same_vector(const std::vector<T>& a, const std::vector<T>& b) {
+    return same_vector(
+        utils::ConstSlice(a.data(), a.size(), false),
+        utils::ConstSlice(b.data(), b.size(), false)
+    );
 }
 
 template<typename T> void print_vector(const std::vector<T>& v, bool end_line = true) {

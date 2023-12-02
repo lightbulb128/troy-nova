@@ -210,11 +210,22 @@ namespace troy { namespace utils {
         }
         void copy_from_slice(ConstSlice<T> slice) {
             if (slice.size() != len) throw std::runtime_error("[Slice::copy_from_slice] Slice size does not match array size");
-            if (slice.on_device() != device) throw std::runtime_error("[Slice::copy_from_slice] Slice device does not match array device");
-            if (device) {
+            if (device && slice.on_device()) {
                 kernel_provider::copy_device_to_device(pointer, slice.raw_pointer(), len);
-            } else {
+            } else if (!device && !slice.on_device()) {
                 memcpy(pointer, slice.raw_pointer(), len * sizeof(T));
+            } else if (device && !slice.on_device()) {
+                kernel_provider::copy_host_to_device(pointer, slice.raw_pointer(), len);
+            } else {
+                kernel_provider::copy_device_to_host(pointer, slice.raw_pointer(), len);
+            }
+        }
+        void set_zero() {
+            if (len == 0) return;
+            if (device) {
+                kernel_provider::memset_zero(pointer, len);
+            } else {
+                memset(pointer, 0, len * sizeof(T));
             }
         }
     };
@@ -304,43 +315,45 @@ namespace troy { namespace utils {
         inline Array to_host() const {
             if (!device) return this->clone();
             Array cloned(len, false);
-            kernel_provider::copy_device_to_host(cloned.pointer, pointer, len);
+            if (len > 0) {
+                kernel_provider::copy_device_to_host(cloned.pointer, pointer, len);
+            }
             return cloned;
         }
 
         inline Array to_device() const {
             if (device) return this->clone();
             Array cloned(len, true);
-            kernel_provider::copy_host_to_device(cloned.pointer, pointer, len);
+            if (len > 0) {
+                kernel_provider::copy_host_to_device(cloned.pointer, pointer, len);
+            }
             return cloned;
         }
 
         inline void to_host_inplace() {
             if (!device) return;
-            T* cloned = reinterpret_cast<T*>(malloc(len * sizeof(T)));
-            kernel_provider::copy_device_to_host(cloned, pointer, len);
-            release();
-            pointer = cloned;
+            if (len > 0) {
+                T* cloned = reinterpret_cast<T*>(malloc(len * sizeof(T)));
+                kernel_provider::copy_device_to_host(cloned, pointer, len);
+                release();
+                pointer = cloned;
+            }
             device = false;
         }
 
         inline void to_device_inplace() {
             if (device) return;
-            T* cloned = kernel_provider::malloc<T>(len);
-            kernel_provider::copy_host_to_device(cloned, pointer, len);
-            release();
-            pointer = cloned;
+            if (len > 0) {
+                T* cloned = kernel_provider::malloc<T>(len);
+                kernel_provider::copy_host_to_device(cloned, pointer, len);
+                release();
+                pointer = cloned;
+            }
             device = true;
         }
 
         inline void copy_from_slice(ConstSlice<T> slice) {
-            if (slice.size() != len) throw std::runtime_error("[Array::copy_from_slice] Slice size does not match array size");
-            if (slice.on_device() != device) throw std::runtime_error("[Array::copy_from_slice] Slice device does not match array device");
-            if (device) {
-                kernel_provider::copy_device_to_device(pointer, slice.raw_pointer(), len);
-            } else {
-                memcpy(pointer, slice.raw_pointer(), len * sizeof(T));
-            }
+            this->reference().copy_from_slice(slice);
         }
 
         inline static Array<T> create_and_copy_from_slice(ConstSlice<T> slice) {
@@ -351,7 +364,9 @@ namespace troy { namespace utils {
 
         inline static Array<T> from_vector(std::vector<T>&& vector) {
             Array<T> array(vector.size(), false);
-            memcpy(array.pointer, vector.data(), vector.size() * sizeof(T));
+            if (vector.size() > 0) {
+                memcpy(array.pointer, vector.data(), vector.size() * sizeof(T));
+            }
             return array;
         }
 
@@ -361,8 +376,14 @@ namespace troy { namespace utils {
                 return host_array.to_vector();
             }
             std::vector<T> vector(len);
-            memcpy(vector.data(), pointer, len * sizeof(T));
+            if (len > 0) {
+                memcpy(vector.data(), pointer, len * sizeof(T));
+            }
             return vector;
+        }
+
+        void set_zero() {
+            this->reference().set_zero();
         }
 
     };
