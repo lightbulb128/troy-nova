@@ -30,6 +30,7 @@ namespace troy {
             this->galois_tool_.value().to_device_inplace();
         }
 
+        this->total_coeff_modulus_.to_device_inplace();
         this->coeff_div_plain_modulus_.to_device_inplace();
 
         this->plain_upper_half_increment_.to_device_inplace();
@@ -141,6 +142,7 @@ namespace troy {
             qualifiers.parameter_error = EncryptionParameterErrorType::InvalidCoeffModulusNoNTT;
             return;
         }
+        this->small_ntt_tables_ = std::move(small_ntt_tables);
 
         switch (parms.scheme()) {
             case SchemeType::BFV: case SchemeType::BGV: {

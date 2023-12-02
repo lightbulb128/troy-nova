@@ -17,7 +17,7 @@ namespace troy {
         ContextDataPointer context_data = context->first_context_data().value();
         const EncryptionParameters& parms = context_data->parms();
 
-        if (parms.scheme() != SchemeType::BFV && parms.scheme() != SchemeType::BFV) {
+        if (parms.scheme() != SchemeType::BFV && parms.scheme() != SchemeType::BGV) {
             throw std::invalid_argument("[BatchEncoder::BatchEncoder] Unsupported scheme.");
         }
 

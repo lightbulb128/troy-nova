@@ -89,6 +89,14 @@ namespace troy {namespace utils {
             return result;
         }
 
+        const Array<T>& get_inner() const {
+            return inner;
+        }
+
+        Array<T>& get_inner() {
+            return inner;
+        }
+
         void to_host_inplace() {
             inner.to_host_inplace();
         }

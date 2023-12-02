@@ -105,6 +105,7 @@ namespace troy {
             return this->parms_id_ != parms_id_zero;
         }
 
+        /*
         inline utils::ConstSlice<uint64_t> component(size_t index) const {
             return this->data_.const_slice(
                 index * this->coeff_count_,
@@ -118,6 +119,7 @@ namespace troy {
                 (index + 1) * this->coeff_count_
             );
         }
+        */
         
     };
 
