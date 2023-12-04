@@ -22,13 +22,15 @@ namespace troy {
         size_t poly_modulus_degree_;
         utils::Array<Modulus> coeff_modulus_;
         utils::Box<Modulus> plain_modulus_;
+        Modulus plain_modulus_host_;
 
         void compute_parms_id();
 
     public:
 
         inline EncryptionParameters(SchemeType scheme_type) : 
-            scheme_(scheme_type), device(false), plain_modulus_(new Modulus(0), false)
+            scheme_(scheme_type), device(false), plain_modulus_(new Modulus(0), false),
+            plain_modulus_host_(0)
         {}
 
         inline EncryptionParameters(const EncryptionParameters& parms):
@@ -37,6 +39,7 @@ namespace troy {
             poly_modulus_degree_(parms.poly_modulus_degree_),
             coeff_modulus_(parms.coeff_modulus_.clone()),
             plain_modulus_(parms.plain_modulus_.clone()),
+            plain_modulus_host_(parms.plain_modulus_host_),
             device(parms.device) {}
             
         EncryptionParameters(EncryptionParameters&& parms) = default;
@@ -51,6 +54,7 @@ namespace troy {
             poly_modulus_degree_ = parms.poly_modulus_degree_;
             coeff_modulus_ = parms.coeff_modulus_.clone();
             plain_modulus_ = parms.plain_modulus_.clone();
+            plain_modulus_host_ = parms.plain_modulus_host_;
             device = parms.device;
             return *this;
         }
@@ -62,7 +66,7 @@ namespace troy {
             return scheme_;
         }
 
-        inline ParmsID parms_id() const noexcept {
+        inline const ParmsID& parms_id() const noexcept {
             return parms_id_;
         }
 
@@ -76,6 +80,10 @@ namespace troy {
 
         inline utils::ConstPointer<Modulus> plain_modulus() const noexcept {
             return plain_modulus_.as_const_pointer();
+        }
+
+        inline const Modulus& plain_modulus_host() const noexcept {
+            return plain_modulus_host_;
         }
 
         inline bool on_device() const noexcept {
@@ -96,6 +104,10 @@ namespace troy {
             }
             coeff_modulus_ = utils::Array<Modulus>::create_and_copy_from_slice(coeff_modulus);
             compute_parms_id();
+        }
+
+        inline void set_coeff_modulus(const utils::Array<Modulus>& coeff_modulus) {
+            set_coeff_modulus(coeff_modulus.const_reference());
         }
 
         inline void set_coeff_modulus(const std::vector<Modulus>& coeff_modulus) {
@@ -120,6 +132,7 @@ namespace troy {
             }
             utils::Box<Modulus> new_t = utils::Box<Modulus>(new Modulus(plain_modulus), false);
             plain_modulus_ = std::move(new_t);
+            plain_modulus_host_ = plain_modulus;
             compute_parms_id();
         }
 

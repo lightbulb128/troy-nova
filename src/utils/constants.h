@@ -1,3 +1,4 @@
+#pragma once
 #include <cstdint>
 
 namespace troy {namespace utils {
@@ -17,5 +18,8 @@ namespace troy {namespace utils {
 
     const std::size_t HE_PLAIN_MOD_BIT_COUNT_MAX = HE_USER_MOD_BIT_COUNT_MAX;
     const std::size_t HE_PLAIN_MOD_BIT_COUNT_MIN = HE_USER_MOD_BIT_COUNT_MIN;
+
+    const std::size_t HE_CIPHERTEXT_SIZE_MIN = 2;
+    const std::size_t HE_CIPHERTEXT_SIZE_MAX = 16;
 
 }}

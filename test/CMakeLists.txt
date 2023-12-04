@@ -16,6 +16,7 @@ target_sources(troytest PRIVATE
     he_context.cu
     batch_encoder.cu
     ckks_encoder.cu
+    encryptor.cu
     
 )
 

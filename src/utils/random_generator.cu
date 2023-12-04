@@ -77,6 +77,17 @@ namespace troy {namespace utils {
             this->counter++;
         }
     }
+    
+    uint64_t RandomGenerator::sample_uint64() {
+        uint64_t ret;
+        blake2xb(
+            &ret, sizeof(ret),
+            &this->counter, sizeof(this->counter),
+            &this->seed, sizeof(this->seed)
+        );
+        this->counter++;
+        return ret;
+    }
 
     __global__ static void kernel_sample_poly_ternary(
         Slice<uint64_t> destination, size_t degree, Slice<curandState_t> states, ConstSlice<Modulus> moduli

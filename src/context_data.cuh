@@ -110,7 +110,7 @@ namespace troy {
             return chain_index_;
         }
 
-        inline ParmsID parms_id() const {
+        inline const ParmsID& parms_id() const {
             return parms_.parms_id();
         }
 

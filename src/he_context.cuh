@@ -37,7 +37,7 @@ namespace troy {
             return last_parms_id_;
         }
 
-        inline std::optional<ContextDataPointer> get_context_data(ParmsID parms_id) const noexcept {
+        inline std::optional<ContextDataPointer> get_context_data(const ParmsID& parms_id) const noexcept {
             auto it = context_data_map_.find(parms_id);
             if (it == context_data_map_.end()) {
                 return std::nullopt;

@@ -28,6 +28,10 @@ namespace troy { namespace utils {
 
         void init_curand_states(size_t count);
 
+        size_t curand_state_count() const {
+            return this->curand_states.size();
+        }
+
         inline void reset_seed(uint64_t seed) {
             this->seed = seed;
             this->counter = 0;
@@ -38,6 +42,7 @@ namespace troy { namespace utils {
 
         void fill_bytes(Slice<uint8_t> bytes);
         void fill_uint64s(Slice<uint64_t> uint64s);
+        uint64_t sample_uint64();
 
         void sample_poly_ternary(Slice<uint64_t> destination, size_t degree, ConstSlice<Modulus> moduli);
         void sample_poly_centered_binomial(Slice<uint64_t> destination, size_t degree, ConstSlice<Modulus> moduli);

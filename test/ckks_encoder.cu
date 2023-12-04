@@ -11,45 +11,6 @@ using std::complex;
 
 namespace ckks_encoder {
 
-    bool near_vector(vector<complex<double>> &a, vector<complex<double>> &b) {
-        if (a.size() != b.size()) {
-            return false;
-        }
-        for (size_t i = 0; i < a.size(); i++) {
-            if (std::abs(a[i].real() - b[i].real()) > 0.5) {
-                return false;
-            }
-            if (std::abs(a[i].imag() - b[i].imag()) > 0.5) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    bool near_vector(vector<double> &a, vector<double> &b) {
-        if (a.size() != b.size()) {
-            return false;
-        }
-        for (size_t i = 0; i < a.size(); i++) {
-            if (std::abs(a[i] - b[i]) > 0.5) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    bool near_vector(vector<int64_t> &a, vector<double> &b) {
-        if (a.size() != b.size()) {
-            return false;
-        }
-        for (size_t i = 0; i < a.size(); i++) {
-            if (std::abs(a[i] - b[i]) > 0.5) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     void print_complex_vector(vector<complex<double>> &a) {
         for (size_t i = 0; i < a.size(); i++) {
             std::cout << a[i] << " ";

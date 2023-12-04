@@ -20,6 +20,18 @@ namespace troy {
             parms_id_(parms_id_zero),
             scale_(1.0) {}
 
+        inline Plaintext(Plaintext&& source) = default;
+        inline Plaintext(const Plaintext& copy): Plaintext(copy.clone()) {}
+
+        inline Plaintext& operator =(Plaintext&& source) = default;
+        inline Plaintext& operator =(const Plaintext& assign) {
+            if (this == &assign) {
+                return *this;
+            }
+            *this = assign.clone();
+            return *this;
+        }
+
         inline Plaintext clone() const {
             Plaintext result;
             result.coeff_count_ = this->coeff_count_;

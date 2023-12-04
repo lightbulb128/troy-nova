@@ -1,9 +1,12 @@
 #pragma once
 #include <iostream>
 #include <vector>
+#include <complex>
 #include "../src/utils/box.cuh"
 
 using namespace troy;
+using std::complex;
+using std::vector;
 
 // #define FAIL std::cout << "Assertion failed at " << __FILE__ << ":" << __LINE__ << std::endl
 // #define EXPECT_EQ(a, b) if (a != b) { FAIL; return true; }
@@ -109,4 +112,70 @@ template<typename T> void print_vector(const std::vector<T>& v, bool end_line = 
     if (end_line) {
         std::cout << std::endl;
     }
+}
+
+inline bool near_vector(const vector<complex<double>> &a, const vector<complex<double>> &b) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < a.size(); i++) {
+        if (std::abs(a[i].real() - b[i].real()) > 0.5) {
+            return false;
+        }
+        if (std::abs(a[i].imag() - b[i].imag()) > 0.5) {
+            return false;
+        }
+    }
+    return true;
+}
+
+inline bool near_vector(const vector<double> &a, const vector<double> &b) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < a.size(); i++) {
+        if (std::abs(a[i] - b[i]) > 0.5) {
+            return false;
+        }
+    }
+    return true;
+}
+
+inline bool near_vector(const vector<int64_t> &a, const vector<double> &b) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < a.size(); i++) {
+        if (std::abs(a[i] - b[i]) > 0.5) {
+            return false;
+        }
+    }
+    return true;
+}
+
+inline vector<uint64_t> random_uint64_vector(size_t count, uint64_t mod) {
+    vector<uint64_t> vec(count);
+    for (size_t i = 0; i < count; i++) {
+        vec[i] = rand() % mod;
+    }
+    return vec;
+}
+
+inline vector<complex<double>> random_complex64_vector(size_t count, double component_max = 10.0) {
+    vector<complex<double>> vec(count);
+    for (size_t i = 0; i < count; i++) {
+        vec[i] = complex<double>(
+            (double)rand() / RAND_MAX * 2 * component_max - component_max,
+            (double)rand() / RAND_MAX * 2 * component_max - component_max
+        );
+    }
+    return vec;
+}
+
+inline vector<double> random_double_vector(size_t count, double max) {
+    vector<double> vec(count);
+    for (size_t i = 0; i < count; i++) {
+        vec[i] = (double)rand() / RAND_MAX * max;
+    }
+    return vec;
 }
