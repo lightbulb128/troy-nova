@@ -160,6 +160,10 @@ namespace tool {
             }
         }
 
+        inline GeneralVector square(uint64_t modulus) const {
+            return this->mul(*this, modulus);
+        }
+
         inline bool near_equal(const GeneralVector& other, double tolerance) const {
             if (complexes_) {
                 for (size_t i = 0; i < size(); i++) {

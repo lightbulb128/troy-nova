@@ -140,7 +140,7 @@ namespace evaluator {
         test_multiply(ghe);
     }
     TEST(EvaluatorTest, HostCKKSMultiply) {
-        GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 60, 40 }, false, 0x123, 10, 1ull<<20, 1e-2);
+        GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1ull<<20, 1e-2);
         test_multiply(ghe);
     }
     TEST(EvaluatorTest, DeviceBFVMultiply) {
@@ -152,8 +152,49 @@ namespace evaluator {
         test_multiply(ghe);
     }
     TEST(EvaluatorTest, DeviceCKKSMultiply) {
-        GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 60, 40 }, false, 0x123, 10, 1ull<<20, 1e-2);
+        GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1ull<<20, 1e-2);
         test_multiply(ghe);
     }
+
+    void test_square(const GeneralHeContext& context) {
+        uint64_t t = context.t();
+        double scale = context.scale();
+        double tolerance = context.tolerance();
+
+        GeneralVector message = context.random_simd_full();
+        Plaintext encoded = context.encoder().encode_simd(message, std::nullopt, scale);
+        Ciphertext encrypted = context.encryptor().encrypt_asymmetric_new(encoded);
+        Ciphertext squared = context.evaluator().square_new(encrypted);
+        Plaintext decrypted = context.decryptor().decrypt_new(squared);
+        GeneralVector result = context.encoder().decode_simd(decrypted);
+        GeneralVector truth = message.square(t);
+        ASSERT_TRUE(truth.near_equal(result, tolerance));
+    }
+
+    TEST(EvaluatorTest, HostBFVSquare) {
+        GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_square(ghe);
+    }
+    TEST(EvaluatorTest, HostBGVSquare) {
+        GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_square(ghe);
+    }
+    TEST(EvaluatorTest, HostCKKSSquare) {
+        GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1ull<<20, 1e-2);
+        test_square(ghe);
+    }
+    TEST(EvaluatorTest, DeviceBFVSquare) {
+        GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_square(ghe);
+    }
+    TEST(EvaluatorTest, DeviceBGVSquare) {
+        GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_square(ghe);
+    }
+    TEST(EvaluatorTest, DeviceCKKSSquare) {
+        GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1ull<<20, 1e-2);
+        test_square(ghe);
+    }
+
 
 }

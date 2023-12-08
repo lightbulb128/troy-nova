@@ -12,9 +12,14 @@ namespace troy {
         ContextDataPointer get_context_data(const char* prompt, const ParmsID& encrypted) const;
 
         void translate_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, bool subtract) const;
+        
         void bfv_multiply_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2) const;
         void ckks_multiply_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2) const;
         void bgv_multiply_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2) const;
+
+        void bfv_square_inplace(Ciphertext& encrypted) const;
+        void ckks_square_inplace(Ciphertext& encrypted) const;
+        void bgv_square_inplace(Ciphertext& encrypted) const;
 
     public:
         inline Evaluator(HeContextPointer context): context_(context) {}
@@ -66,6 +71,17 @@ namespace troy {
         inline Ciphertext multiply_new(const Ciphertext& encrypted1, const Ciphertext& encrypted2) const {
             Ciphertext destination;
             multiply(encrypted1, encrypted2, destination);
+            return destination;
+        }
+
+        void square_inplace(Ciphertext& encrypted) const;
+        inline void square(const Ciphertext& encrypted, Ciphertext& destination) const {
+            destination = encrypted;
+            square_inplace(destination);
+        }
+        inline Ciphertext square_new(const Ciphertext& encrypted) const {
+            Ciphertext destination;
+            square(encrypted, destination);
             return destination;
         }
 

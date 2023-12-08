@@ -311,7 +311,6 @@ namespace troy {
         utils::inverse_ntt_negacyclic_harvey_ps(temp_dest_q.reference(), dest_size, coeff_count, base_q_ntt_tables);
         utils::inverse_ntt_negacyclic_harvey_ps(temp_dest_Bsk.reference(), dest_size, coeff_count, base_Bsk_ntt_tables);
 
-
         // Perform BEHZ steps (6)-(8)
         Buffer<uint64_t> temp_q_Bsk(base_q_size + base_Bsk_size, coeff_count, device);
         Buffer<uint64_t> temp_Bsk(base_Bsk_size, coeff_count, device);
@@ -489,5 +488,241 @@ namespace troy {
             }
         }
     }
+
+    void Evaluator::bfv_square_inplace(Ciphertext& encrypted) const {
+        check_is_not_ntt_form("[Evaluator::bfv_square_inplace]", encrypted);
+        
+        // Extract encryption parameters.
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::bfv_square_inplace]", encrypted.parms_id());
+        const EncryptionParameters& parms = context_data->parms();
+        size_t coeff_count = parms.poly_modulus_degree();
+        ConstSlice<Modulus> base_q = parms.coeff_modulus();
+        size_t base_q_size = base_q.size();
+        size_t encrypted_size = encrypted.polynomial_count();
+
+        if (encrypted_size != 2) {
+            this->bfv_multiply_inplace(encrypted, encrypted);
+            return;
+        }
+        
+        const RNSTool& rns_tool = context_data->rns_tool();
+        ConstSlice<Modulus> base_Bsk = rns_tool.base_Bsk().base();
+        size_t base_Bsk_size = base_Bsk.size();
+        ConstSlice<Modulus> base_Bsk_m_tilde = rns_tool.base_Bsk_m_tilde().base();
+        size_t base_Bsk_m_tilde_size = base_Bsk_m_tilde.size();
+        
+        // Determine destination.size()
+        size_t dest_size = 2 * encrypted_size - 1;
+        ConstSlice<NTTTables> base_q_ntt_tables = context_data->small_ntt_tables();
+        ConstSlice<NTTTables> base_Bsk_ntt_tables = rns_tool.base_Bsk_ntt_tables();
+        
+        // Microsoft SEAL uses BEHZ-style RNS multiplication. This process is somewhat complex and consists of the
+        // following steps:
+        //
+        // (1) Lift encrypted1 and encrypted2 (initially in base q) to an extended base q U Bsk U {m_tilde}
+        // (2) Remove extra multiples of q from the results with Montgomery reduction, switching base to q U Bsk
+        // (3) Transform the data to NTT form
+        // (4) Compute the ciphertext polynomial product using dyadic multiplication
+        // (5) Transform the data back from NTT form
+        // (6) Multiply the result by t (plain_modulus)
+        // (7) Scale the result by q using a divide-and-floor algorithm, switching base to Bsk
+        // (8) Use Shenoy-Kumaresan method to convert the result to base q
+
+        bool device = encrypted.on_device();
+        encrypted.resize(this->context(), context_data->parms_id(), dest_size);
+        // Allocate space for a base q output of behz_extend_base_convertToNtt for encrypted1
+        Buffer<uint64_t> encrypted_q(encrypted_size, base_q_size, coeff_count, device);
+        // Allocate space for a base Bsk output of behz_extend_base_convertToNtt for encrypted1
+        Buffer<uint64_t> encrypted_Bsk(encrypted_size, base_Bsk_size, coeff_count, device);
+
+        // Perform BEHZ steps (1)-(3) for encrypted1
+        // Make copy of input polynomial (in base q) and convert to NTT form
+        encrypted_q.copy_from_slice(encrypted.const_polys(0, encrypted_size));
+        // Lazy reduction
+        utils::ntt_negacyclic_harvey_lazy_ps(encrypted_q.reference(), encrypted_size, coeff_count, base_q_ntt_tables);
+        // Allocate temporary space for a polynomial in the Bsk U {m_tilde} base
+        Buffer<uint64_t> temp(base_Bsk_m_tilde_size, coeff_count, device);
+        for (size_t i = 0; i < encrypted_size; i++) {
+            // (1) Convert from base q to base Bsk U {m_tilde}
+            rns_tool.fast_b_conv_m_tilde(encrypted.const_poly(i), temp.reference());
+            // (2) Reduce q-overflows in with Montgomery reduction, switching base to Bsk
+            rns_tool.sm_mrq(temp.const_reference(), encrypted_Bsk.poly(i));
+        }
+        // Transform to NTT form in base Bsk
+        utils::ntt_negacyclic_harvey_lazy_ps(encrypted_Bsk.reference(), encrypted_size, coeff_count, base_Bsk_ntt_tables);
+
+        // Allocate temporary space for the output of step (4)
+        // We allocate space separately for the base q and the base Bsk components
+        Buffer<uint64_t> temp_dest_q(dest_size, base_q_size, coeff_count, device);
+        Buffer<uint64_t> temp_dest_Bsk(dest_size, base_Bsk_size, coeff_count, device);
+
+        // Perform the BEHZ ciphertext square both for base q and base Bsk
+
+        // Compute c0^2
+        Slice<uint64_t> eq0 = encrypted_q.poly(0);
+        Slice<uint64_t> eq1 = encrypted_q.poly(1);
+        utils::dyadic_product_p(eq0.as_const(), eq0.as_const(), coeff_count, base_q, temp_dest_q.poly(0));
+        // Compute 2*c0*c1
+        utils::dyadic_product_p(eq0.as_const(), eq1.as_const(), coeff_count, base_q, temp_dest_q.poly(1));
+        utils::add_inplace_p(temp_dest_q.poly(1), temp_dest_q.const_poly(1), coeff_count, base_q);
+        // Compute c1^2
+        utils::dyadic_product_p(eq1.as_const(), eq1.as_const(), coeff_count, base_q, temp_dest_q.poly(2));
+
+        Slice<uint64_t> eb0 = encrypted_Bsk.poly(0);
+        Slice<uint64_t> eb1 = encrypted_Bsk.poly(1);
+        utils::dyadic_product_p(eb0.as_const(), eb0.as_const(), coeff_count, base_Bsk, temp_dest_Bsk.poly(0));
+        utils::dyadic_product_p(eb0.as_const(), eb1.as_const(), coeff_count, base_Bsk, temp_dest_Bsk.poly(1));
+        utils::add_inplace_p(temp_dest_Bsk.poly(1), temp_dest_Bsk.const_poly(1), coeff_count, base_Bsk);
+        utils::dyadic_product_p(eb1.as_const(), eb1.as_const(), coeff_count, base_Bsk, temp_dest_Bsk.poly(2));
+        
+        // Perform BEHZ step (5): transform data from NTT form
+        // Lazy reduction here. The following multiplyPolyScalarCoeffmod will correct the value back to [0, p)
+        utils::inverse_ntt_negacyclic_harvey_ps(temp_dest_q.reference(), dest_size, coeff_count, base_q_ntt_tables);
+        utils::inverse_ntt_negacyclic_harvey_ps(temp_dest_Bsk.reference(), dest_size, coeff_count, base_Bsk_ntt_tables);
+
+        // Perform BEHZ steps (6)-(8)
+        Buffer<uint64_t> temp_q_Bsk(base_q_size + base_Bsk_size, coeff_count, device);
+        Buffer<uint64_t> temp_Bsk(base_Bsk_size, coeff_count, device);
+        uint64_t plain_modulus_value = parms.plain_modulus_host().value();
+        for (size_t i = 0; i < dest_size; i++) {
+            // Bring together the base q and base Bsk components into a single allocation
+            // Step (6): multiply base q components by t (plain_modulus)
+            utils::multiply_scalar_p(
+                temp_dest_q.const_slice(i*coeff_count*base_q_size, (i+1)*coeff_count*base_q_size),
+                plain_modulus_value,
+                coeff_count,
+                base_q,
+                temp_q_Bsk.components(0, base_q_size)
+            );
+            utils::multiply_scalar_p(
+                temp_dest_Bsk.const_slice(i*coeff_count*base_Bsk_size, (i+1)*coeff_count*base_Bsk_size),
+                plain_modulus_value,
+                coeff_count,
+                base_Bsk,
+                temp_q_Bsk.components(base_q_size, base_q_size + base_Bsk_size)
+            );
+            // Step (7): divide by q and floor, producing a result in base Bsk
+            rns_tool.fast_floor(temp_q_Bsk.const_reference(), temp_Bsk.reference());
+            // Step (8): use Shenoy-Kumaresan method to convert the result to base q and write to encrypted1
+            rns_tool.fast_b_conv_sk(temp_Bsk.const_reference(), encrypted.poly(i));
+        }
+    }
+
+    void Evaluator::ckks_square_inplace(Ciphertext& encrypted) const {
+        check_is_ntt_form("[Evaluator::ckks_square_inplace]", encrypted);
+        
+        // Extract encryption parameters.
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::ckks_square_inplace]", encrypted.parms_id());
+        const EncryptionParameters& parms = context_data->parms();
+        size_t coeff_count = parms.poly_modulus_degree();
+        ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
+        size_t coeff_modulus_size = coeff_modulus.size();
+        size_t encrypted_size = encrypted.polynomial_count();
+
+        if (encrypted_size != 2) {
+            this->ckks_multiply_inplace(encrypted, encrypted);
+            return;
+        }
+        
+        // Determine destination.size()
+        size_t dest_size = 2 * encrypted_size - 1;
+
+        encrypted.resize(this->context(), context_data->parms_id(), dest_size);
+        bool device = encrypted.on_device();
+        
+        Slice<uint64_t> c0 = encrypted.poly(0);
+        Slice<uint64_t> c1 = encrypted.poly(1);
+        Slice<uint64_t> c2 = encrypted.poly(2);
+        
+        utils::dyadic_product_p(c1.as_const(), c1.as_const(), coeff_count, coeff_modulus, c2);
+        utils::dyadic_product_p(c0.as_const(), c1.as_const(), coeff_count, coeff_modulus, c1);
+        utils::add_inplace_p(   c1,            c1.as_const(), coeff_count, coeff_modulus);
+        utils::dyadic_product_p(c0.as_const(), c0.as_const(), coeff_count, coeff_modulus, c0);
+
+        encrypted.scale() = encrypted.scale() * encrypted.scale();
+        if (!is_scale_within_bounds(encrypted.scale(), context_data)) {
+            throw std::invalid_argument("[Evaluator::ckks_multiply_inplace] Scale out of bounds");
+        }
+    }
+    
+    void Evaluator::bgv_square_inplace(Ciphertext& encrypted) const {
+        check_is_not_ntt_form("[Evaluator::bgv_square_inplace]", encrypted);
+        
+        // Extract encryption parameters.
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::bgv_square_inplace]", encrypted.parms_id());
+        const EncryptionParameters& parms = context_data->parms();
+        size_t coeff_count = parms.poly_modulus_degree();
+        ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
+        size_t coeff_modulus_size = coeff_modulus.size();
+        size_t encrypted_size = encrypted.polynomial_count();
+
+        if (encrypted_size != 2) {
+            this->bgv_multiply_inplace(encrypted, encrypted);
+            return;
+        }
+        
+        ConstSlice<NTTTables> ntt_tables = context_data->small_ntt_tables();
+        
+        // Determine destination.size()
+        size_t dest_size = 2 * encrypted_size - 1;
+
+        encrypted.resize(this->context(), context_data->parms_id(), dest_size);
+        bool device = encrypted.on_device();
+
+        utils::ntt_negacyclic_harvey_ps(
+            encrypted.polys(0, encrypted_size), 
+            encrypted_size, coeff_count, ntt_tables
+        );
+        Buffer<uint64_t> temp(dest_size, coeff_modulus_size, coeff_count, device);
+
+        ConstSlice<uint64_t> eq0 = encrypted.const_poly(0);
+        ConstSlice<uint64_t> eq1 = encrypted.const_poly(1);
+        Slice<uint64_t> tq0 = temp.poly(0);
+        Slice<uint64_t> tq1 = temp.poly(1);
+        Slice<uint64_t> tq2 = temp.poly(2);
+        
+        utils::dyadic_product_p(eq0, eq0, coeff_count, coeff_modulus, tq0);
+        // Compute 2*c0*c1
+        utils::dyadic_product_p(eq0, eq1, coeff_count, coeff_modulus, tq1);
+        utils::add_inplace_p(tq1, tq1.as_const(), coeff_count, coeff_modulus);
+        // Compute c1^2
+        utils::dyadic_product_p(eq1, eq1, coeff_count, coeff_modulus, tq2);
+
+        encrypted.polys(0, dest_size).copy_from_slice(temp.const_reference());
+        utils::inverse_ntt_negacyclic_harvey_ps(
+            encrypted.polys(0, dest_size), 
+            dest_size, coeff_count, ntt_tables
+        );
+        encrypted.correction_factor() = utils::multiply_uint64_mod(
+            encrypted.correction_factor(),
+            encrypted.correction_factor(),
+            parms.plain_modulus_host()
+        );
+    }
+
+    void Evaluator::square_inplace(Ciphertext& encrypted) const {
+        check_no_seed("[Evaluator::square_inplace]", encrypted);
+        SchemeType scheme = this->context()->first_context_data().value()->parms().scheme();
+        switch (scheme) {
+            case SchemeType::BFV: {
+                this->bfv_square_inplace(encrypted);
+                break;
+            }
+            case SchemeType::CKKS: {
+                this->ckks_square_inplace(encrypted);
+                break;
+            }
+            case SchemeType::BGV: {
+                this->bgv_square_inplace(encrypted);
+                break;
+            }
+            default: {
+                throw std::logic_error("[Evaluator::square_inplace] Scheme not implemented.");
+            }
+        }
+    }
+
+
+
 
 }
