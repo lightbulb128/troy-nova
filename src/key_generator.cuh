@@ -19,6 +19,9 @@ namespace troy {
 
         void create_secret_key_array();
         PublicKey generate_pk(bool save_seed, utils::RandomGenerator* u_prng) const;
+        
+        void compute_secret_key_array(size_t max_power);
+        void generate_one_kswitch_key(utils::ConstSlice<uint64_t> new_key, std::vector<PublicKey>& destination, bool save_seed) const;
 
     public:
 
@@ -57,7 +60,9 @@ namespace troy {
         }
 
         static void compute_secret_key_powers(HeContextPointer context, size_t max_power, utils::DynamicArray<uint64_t>& secret_key_array);
-
+    
+        KSwitchKeys create_keyswitching_key(const SecretKey& new_key, bool save_seed) const;
+    
     };
 
 }

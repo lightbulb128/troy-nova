@@ -21,5 +21,7 @@ namespace troy {namespace utils {
 
     const std::size_t HE_CIPHERTEXT_SIZE_MIN = 2;
     const std::size_t HE_CIPHERTEXT_SIZE_MAX = 16;
+    
+    const std::size_t HE_MULTIPLY_ACCUMULATE_USER_MOD_MAX = 1 << (128 - (HE_USER_MOD_BIT_COUNT_MAX << 1));
 
 }}

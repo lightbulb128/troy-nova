@@ -11,6 +11,7 @@ namespace troy {
     using utils::ConstPointer;
     using utils::RNSTool;
     using utils::Buffer;
+    using utils::MultiplyUint64Operand;
 
     template <typename C>
     inline static void check_no_seed(const char* prompt, const C& c) {
@@ -23,8 +24,8 @@ namespace troy {
         check_no_seed(prompt, ciphertext);
     }
 
-    template <typename C>
-    inline static void check_same_parms_id(const char* prompt, const C& a, const C& b) {
+    template <typename C1, typename C2>
+    inline static void check_same_parms_id(const char* prompt, const C1& a, const C2& b) {
         if (a.parms_id() != b.parms_id()) {
             throw std::invalid_argument(std::string(prompt) + " Arguments have different parms ID.");
         }
@@ -722,7 +723,597 @@ namespace troy {
         }
     }
 
+    __global__ static void kernel_ski_util1(
+        Slice<uint64_t> t_poly_lazy,
+        size_t coeff_count,
+        size_t key_component_count,
+        ConstSlice<uint64_t> key_vector_j,
+        size_t key_poly_coeff_size,
+        ConstSlice<uint64_t> t_operand,
+        size_t key_index,
+        ConstPointer<Modulus> key_modulus
+    ) {
+        size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+        if (i >= coeff_count) return;
+        uint64_t qword[2] {0, 0}; Slice<uint64_t> qword_slice(qword, 2, true);
+        for (size_t k = 0; k < key_component_count; k++) {
+            utils::multiply_uint64_uint64(t_operand[i], key_vector_j[k * key_poly_coeff_size + key_index * coeff_count + i], qword_slice);
+            size_t accumulator_l_offset = k * coeff_count * 2 + 2 * i;
+            Slice<uint64_t> accumulator_l = t_poly_lazy.slice(accumulator_l_offset, accumulator_l_offset + 2);
+            utils::add_uint128_inplace(qword_slice, accumulator_l.as_const());
+            accumulator_l[0] = key_modulus->reduce_uint128(qword_slice.as_const());
+            accumulator_l[1] = 0;
+        }
+    }
+
+    static void ski_util1(
+        Slice<uint64_t> t_poly_lazy,
+        size_t coeff_count,
+        size_t key_component_count,
+        ConstSlice<uint64_t> key_vector_j,
+        size_t key_poly_coeff_size,
+        ConstSlice<uint64_t> t_operand,
+        size_t key_index,
+        ConstPointer<Modulus> key_modulus
+    ) {
+        bool device = t_poly_lazy.on_device();
+        if (!device) {
+            uint64_t qword[2] {0, 0}; Slice<uint64_t> qword_slice(qword, 2, false);
+            for (size_t i = 0; i < coeff_count; i++) {
+                for (size_t k = 0; k < key_component_count; k++) {
+                    utils::multiply_uint64_uint64(t_operand[i], key_vector_j[k * key_poly_coeff_size + key_index * coeff_count + i], qword_slice);
+                    size_t accumulator_l_offset = k * coeff_count * 2 + 2 * i;
+                    Slice<uint64_t> accumulator_l = t_poly_lazy.slice(accumulator_l_offset, accumulator_l_offset + 2);
+                    utils::add_uint128_inplace(qword_slice, accumulator_l.as_const());
+                    accumulator_l[0] = key_modulus->reduce_uint128(qword_slice.as_const());
+                    accumulator_l[1] = 0;
+                }
+            }
+        } else {
+            size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
+            kernel_ski_util1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                t_poly_lazy, coeff_count, key_component_count, 
+                key_vector_j, key_poly_coeff_size, t_operand, key_index, key_modulus
+            );
+        }
+    }
+    
+    __global__ static void kernel_ski_util2(
+        Slice<uint64_t> t_poly_lazy,
+        size_t coeff_count,
+        size_t key_component_count,
+        ConstSlice<uint64_t> key_vector_j,
+        size_t key_poly_coeff_size,
+        ConstSlice<uint64_t> t_operand,
+        size_t key_index,
+        ConstPointer<Modulus> key_modulus
+    ) {
+        size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+        if (i >= coeff_count) return;
+        uint64_t qword[2] {0, 0}; Slice<uint64_t> qword_slice(qword, 2, true);
+        for (size_t k = 0; k < key_component_count; k++) {
+            utils::multiply_uint64_uint64(t_operand[i], key_vector_j[k * key_poly_coeff_size + key_index * coeff_count + i], qword_slice);
+            size_t accumulator_l_offset = k * coeff_count * 2 + 2 * i;
+            Slice<uint64_t> accumulator_l = t_poly_lazy.slice(accumulator_l_offset, accumulator_l_offset + 2);
+            utils::add_uint128_inplace(qword_slice, accumulator_l.as_const());
+            accumulator_l[0] = qword_slice[0];
+            accumulator_l[1] = qword_slice[1];
+        }
+    }
+
+    static void ski_util2(
+        Slice<uint64_t> t_poly_lazy,
+        size_t coeff_count,
+        size_t key_component_count,
+        ConstSlice<uint64_t> key_vector_j,
+        size_t key_poly_coeff_size,
+        ConstSlice<uint64_t> t_operand,
+        size_t key_index,
+        ConstPointer<Modulus> key_modulus
+    ) {
+        bool device = t_poly_lazy.on_device();
+        if (!device) {
+            uint64_t qword[2] {0, 0}; Slice<uint64_t> qword_slice(qword, 2, false);
+            for (size_t i = 0; i < coeff_count; i++) {
+                for (size_t k = 0; k < key_component_count; k++) {
+                    utils::multiply_uint64_uint64(t_operand[i], key_vector_j[k * key_poly_coeff_size + key_index * coeff_count + i], qword_slice);
+                    size_t accumulator_l_offset = k * coeff_count * 2 + 2 * i;
+                    Slice<uint64_t> accumulator_l = t_poly_lazy.slice(accumulator_l_offset, accumulator_l_offset + 2);
+                    utils::add_uint128_inplace(qword_slice, accumulator_l.as_const());
+                    accumulator_l[0] = qword_slice[0];
+                    accumulator_l[1] = qword_slice[1];
+                }
+            }
+        } else {
+            size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
+            kernel_ski_util2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                t_poly_lazy, coeff_count, key_component_count, 
+                key_vector_j, key_poly_coeff_size, t_operand, key_index, key_modulus
+            );
+        }
+    }
+
+    __global__ static void kernel_ski_util3(
+        ConstSlice<uint64_t> t_poly_lazy,
+        size_t coeff_count,
+        size_t key_component_count,
+        size_t rns_modulus_size,
+        Slice<uint64_t> t_poly_prod_iter
+    ) {
+        size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+        if (i >= coeff_count) return;
+        for (size_t k = 0; k < key_component_count; k++) {
+            size_t accumulator_l_offset = k * coeff_count * 2 + 2 * i;
+            t_poly_prod_iter[k * coeff_count * rns_modulus_size + i] = t_poly_lazy[accumulator_l_offset];
+        }
+    }
+
+    static void ski_util3(
+        ConstSlice<uint64_t> t_poly_lazy,
+        size_t coeff_count,
+        size_t key_component_count,
+        size_t rns_modulus_size,
+        Slice<uint64_t> t_poly_prod_iter
+    ) {
+        bool device = t_poly_lazy.on_device();
+        if (!device) {
+            for (size_t i = 0; i < coeff_count; i++) {
+                for (size_t k = 0; k < key_component_count; k++) {
+                    size_t accumulator_l_offset = k * coeff_count * 2 + 2 * i;
+                    t_poly_prod_iter[k * coeff_count * rns_modulus_size + i] = t_poly_lazy[accumulator_l_offset];
+                }
+            }
+        } else {
+            size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
+            kernel_ski_util3<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                t_poly_lazy, coeff_count, key_component_count, rns_modulus_size, t_poly_prod_iter
+            );
+        }
+    }
 
 
+    __global__ static void kernel_ski_util4(
+        ConstSlice<uint64_t> t_poly_lazy,
+        size_t coeff_count,
+        size_t key_component_count,
+        size_t rns_modulus_size,
+        Slice<uint64_t> t_poly_prod_iter,
+        ConstPointer<Modulus> key_modulus
+    ) {
+        size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+        if (i >= coeff_count) return;
+        for (size_t k = 0; k < key_component_count; k++) {
+            size_t accumulator_l_offset = k * coeff_count * 2 + 2 * i;
+            t_poly_prod_iter[k * coeff_count * rns_modulus_size + i] = key_modulus->reduce_uint128(
+                t_poly_lazy.const_slice(accumulator_l_offset, accumulator_l_offset + 2)
+            );
+        }
+    }
+
+    static void ski_util4(
+        ConstSlice<uint64_t> t_poly_lazy,
+        size_t coeff_count,
+        size_t key_component_count,
+        size_t rns_modulus_size,
+        Slice<uint64_t> t_poly_prod_iter,
+        ConstPointer<Modulus> key_modulus
+    ) {
+        bool device = t_poly_lazy.on_device();
+        if (!device) {
+            for (size_t i = 0; i < coeff_count; i++) {
+                for (size_t k = 0; k < key_component_count; k++) {
+                    size_t accumulator_l_offset = k * coeff_count * 2 + 2 * i;
+                    t_poly_prod_iter[k * coeff_count * rns_modulus_size + i] = key_modulus->reduce_uint128(
+                        t_poly_lazy.const_slice(accumulator_l_offset, accumulator_l_offset + 2)
+                    );
+                }
+            }
+        } else {
+            size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
+            kernel_ski_util4<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                t_poly_lazy, coeff_count, key_component_count, 
+                rns_modulus_size, t_poly_prod_iter, key_modulus
+            );
+        }
+    }
+
+    __global__ static void kernel_ski_util5(
+        ConstSlice<uint64_t> t_last,
+        Slice<uint64_t> t_poly_prod_i,
+        size_t coeff_count,
+        ConstPointer<Modulus> plain_modulus,
+        ConstSlice<Modulus> key_modulus,
+        size_t decomp_modulus_size,
+        size_t rns_modulus_size,
+        uint64_t qk_inv_qp,
+        uint64_t qk,
+        ConstSlice<MultiplyUint64Operand> modswitch_factors,
+        Slice<uint64_t> encrypted_i
+    ) {
+        size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+        if (i >= coeff_count) return;
+        uint64_t k = utils::barrett_reduce_uint64(t_last[i], *plain_modulus);
+        k = utils::negate_uint64_mod(k, *plain_modulus);
+        if (qk_inv_qp != 1) 
+            k = utils::multiply_uint64_mod(k, qk_inv_qp, *plain_modulus);
+        uint64_t delta = 0; uint64_t c_mod_qi = 0;
+        for (size_t j = 0; j < decomp_modulus_size; j++) {
+            delta = utils::barrett_reduce_uint64(k, key_modulus[j]);
+            delta = utils::multiply_uint64_mod(delta, qk, key_modulus[j]);
+            c_mod_qi = utils::barrett_reduce_uint64(t_last[i], key_modulus[j]);
+            const uint64_t Lqi = key_modulus[j].value() << 1;
+            uint64_t& target = t_poly_prod_i[j * coeff_count + i];
+            target = target + Lqi - (delta + c_mod_qi);
+            target = utils::multiply_uint64operand_mod(target, modswitch_factors[j], key_modulus[j]);
+            encrypted_i[j * coeff_count + i] = utils::add_uint64_mod(target, encrypted_i[j * coeff_count + i], key_modulus[j]);
+        }
+    }
+
+    static void ski_util5(
+        ConstSlice<uint64_t> t_last,
+        Slice<uint64_t> t_poly_prod_i,
+        size_t coeff_count,
+        ConstPointer<Modulus> plain_modulus,
+        ConstSlice<Modulus> key_modulus,
+        size_t decomp_modulus_size,
+        size_t rns_modulus_size,
+        uint64_t qk_inv_qp,
+        uint64_t qk,
+        ConstSlice<MultiplyUint64Operand> modswitch_factors,
+        Slice<uint64_t> encrypted_i
+    ) {
+        bool device = t_last.on_device();
+        if (!device) {
+            for (size_t i = 0; i < coeff_count; i++) {
+                uint64_t k = utils::barrett_reduce_uint64(t_last[i], *plain_modulus);
+                k = utils::negate_uint64_mod(k, *plain_modulus);
+                if (qk_inv_qp != 1) 
+                    k = utils::multiply_uint64_mod(k, qk_inv_qp, *plain_modulus);
+                uint64_t delta = 0; uint64_t c_mod_qi = 0;
+                for (size_t j = 0; j < decomp_modulus_size; j++) {
+                    delta = utils::barrett_reduce_uint64(k, key_modulus[j]);
+                    delta = utils::multiply_uint64_mod(delta, qk, key_modulus[j]);
+                    c_mod_qi = utils::barrett_reduce_uint64(t_last[i], key_modulus[j]);
+                    const uint64_t Lqi = key_modulus[j].value() << 1;
+                    uint64_t& target = t_poly_prod_i[j * coeff_count + i];
+                    target = target + Lqi - (delta + c_mod_qi);
+                    target = utils::multiply_uint64operand_mod(target, modswitch_factors[j], key_modulus[j]);
+                    encrypted_i[j * coeff_count + i] = utils::add_uint64_mod(target, encrypted_i[j * coeff_count + i], key_modulus[j]);
+                }
+            }
+        } else {
+            size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
+            kernel_ski_util5<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                t_last, t_poly_prod_i, coeff_count, plain_modulus, key_modulus, 
+                decomp_modulus_size, rns_modulus_size, qk_inv_qp, qk, modswitch_factors, encrypted_i
+            );
+        }
+    }
+
+    __global__ static void kernel_ski_util6(
+        Slice<uint64_t> t_last,
+        size_t coeff_count,
+        ConstPointer<Modulus> qk,
+        ConstSlice<Modulus> key_modulus,
+        size_t decomp_modulus_size,
+        Slice<uint64_t> t_ntt
+    ) {
+        size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+        if (i >= coeff_count) return;
+        uint64_t qk_half = qk->value() >> 1;
+        t_last[i] = utils::barrett_reduce_uint64(t_last[i] + qk_half, *qk);
+        for (size_t j = 0; j < decomp_modulus_size; j++) {
+            const Modulus& qi = key_modulus[j];
+            if (qk->value() > qi.value()) {
+                t_ntt[j * coeff_count + i] = utils::barrett_reduce_uint64(t_last[i], qi);
+            } else {
+                t_ntt[j * coeff_count + i] = t_last[i];
+            }
+            uint64_t fix = qi.value() - utils::barrett_reduce_uint64(qk_half, key_modulus[j]);
+            t_ntt[j * coeff_count + i] += fix;
+        }
+    }
+
+    static void ski_util6(
+        Slice<uint64_t> t_last,
+        size_t coeff_count,
+        ConstPointer<Modulus> qk,
+        ConstSlice<Modulus> key_modulus,
+        size_t decomp_modulus_size,
+        Slice<uint64_t> t_ntt
+    ) {
+        bool device = t_last.on_device();
+        if (!device) {
+            uint64_t qk_half = qk->value() >> 1;
+            for (size_t i = 0; i < coeff_count; i++) {
+                t_last[i] = utils::barrett_reduce_uint64(t_last[i] + qk_half, *qk);
+                for (size_t j = 0; j < decomp_modulus_size; j++) {
+                    const Modulus& qi = key_modulus[j];
+                    if (qk->value() > qi.value()) {
+                        t_ntt[j * coeff_count + i] = utils::barrett_reduce_uint64(t_last[i], qi);
+                    } else {
+                        t_ntt[j * coeff_count + i] = t_last[i];
+                    }
+                    uint64_t fix = qi.value() - utils::barrett_reduce_uint64(qk_half, key_modulus[j]);
+                    t_ntt[j * coeff_count + i] += fix;
+                }
+            }
+        } else {
+            size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
+            kernel_ski_util6<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                t_last, coeff_count, qk, key_modulus, decomp_modulus_size, t_ntt
+            );
+        }
+    }
+
+    __global__ static void kernel_ski_util7(
+        Slice<uint64_t> t_poly_prod_i,
+        ConstSlice<uint64_t> t_ntt,
+        size_t coeff_count, 
+        Slice<uint64_t> encrypted_i,
+        bool is_ckks,
+        size_t decomp_modulus_size,
+        ConstSlice<Modulus> key_modulus,
+        ConstSlice<MultiplyUint64Operand> modswitch_factors
+    ) {
+        size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+        if (i >= coeff_count) return;
+        for (size_t j = 0; j < decomp_modulus_size; j++) {
+            uint64_t& dest = t_poly_prod_i[j*coeff_count + i];
+            uint64_t qi = key_modulus[j].value();
+            dest += ((is_ckks) ? (qi << 2) : (qi << 1)) - t_ntt[j * coeff_count + i];
+            dest = utils::multiply_uint64operand_mod(dest, modswitch_factors[j], key_modulus[j]);
+            encrypted_i[j * coeff_count + i] = utils::add_uint64_mod(
+                encrypted_i[j * coeff_count + i], dest, key_modulus[j]
+            );
+        }
+    }
+
+    static void ski_util7(
+        Slice<uint64_t> t_poly_prod_i,
+        ConstSlice<uint64_t> t_ntt,
+        size_t coeff_count, 
+        Slice<uint64_t> encrypted_i,
+        bool is_ckks,
+        size_t decomp_modulus_size,
+        ConstSlice<Modulus> key_modulus,
+        ConstSlice<MultiplyUint64Operand> modswitch_factors
+    ) {
+        bool device = t_poly_prod_i.on_device();
+        if (!device) {
+            for (size_t i = 0; i < coeff_count; i++) {
+                for (size_t j = 0; j < decomp_modulus_size; j++) {
+                    uint64_t& dest = t_poly_prod_i[j*coeff_count + i];
+                    uint64_t qi = key_modulus[j].value();
+                    dest += ((is_ckks) ? (qi << 2) : (qi << 1)) - t_ntt[j * coeff_count + i];
+                    dest = utils::multiply_uint64operand_mod(dest, modswitch_factors[j], key_modulus[j]);
+                    encrypted_i[j * coeff_count + i] = utils::add_uint64_mod(
+                        encrypted_i[j * coeff_count + i], dest, key_modulus[j]
+                    );
+                }
+            }
+        } else {
+            size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
+            kernel_ski_util7<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                t_poly_prod_i, t_ntt, coeff_count, encrypted_i, is_ckks, 
+                decomp_modulus_size, key_modulus, modswitch_factors
+            );
+        }
+    }
+
+    void Evaluator::switch_key_inplace_internal(Ciphertext& encrypted, utils::ConstSlice<uint64_t> target, const KSwitchKeys& kswitch_keys, size_t kswitch_keys_index) const {
+        check_no_seed("[Evaluator::switch_key_inplace_internal]", encrypted);
+        if (!this->context()->using_keyswitching()) {
+            throw std::invalid_argument("[Evaluator::switch_key_inplace_internal] Keyswitching is not supported.");
+        }
+        if (kswitch_keys.parms_id() != this->context()->key_parms_id()) {
+            throw std::invalid_argument("[Evaluator::switch_key_inplace_internal] Keyswitching key has incorrect parms id.");
+        }
+        if (kswitch_keys_index >= kswitch_keys.data().size()) {
+            throw std::out_of_range("[Evaluator::switch_key_inplace_internal] Key switch keys index out of range.");
+        }
+
+        ParmsID parms_id = encrypted.parms_id();
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::switch_key_inplace_internal]", parms_id);
+        const EncryptionParameters& parms = context_data->parms();
+        ContextDataPointer key_context_data = this->context()->key_context_data().value();
+        const EncryptionParameters& key_parms = key_context_data->parms();
+        SchemeType scheme = parms.scheme();
+
+        switch (scheme) {
+            case SchemeType::BFV: case SchemeType::BGV: {
+                check_is_not_ntt_form("[Evaluator::switch_key_inplace_internal]", encrypted);
+                break;
+            }
+            case SchemeType::CKKS: {
+                check_is_ntt_form("[Evaluator::switch_key_inplace_internal]", encrypted);
+                break;
+            }
+            default: {
+                throw std::logic_error("[Evaluator::switch_key_inplace_internal] Scheme not implemented.");
+            }
+        }
+
+        size_t coeff_count = parms.poly_modulus_degree();
+        size_t decomp_modulus_size = parms.coeff_modulus().size();
+        ConstSlice<Modulus> key_modulus = key_parms.coeff_modulus();
+        Array<Modulus> key_modulus_host = Array<Modulus>::create_and_copy_from_slice(key_modulus);
+        key_modulus_host.to_host_inplace();
+        size_t key_modulus_size = key_modulus.size();
+        size_t rns_modulus_size = decomp_modulus_size + 1;
+        ConstSlice<NTTTables> key_ntt_tables = key_context_data->small_ntt_tables();
+        ConstSlice<MultiplyUint64Operand> modswitch_factors = key_context_data->rns_tool().inv_q_last_mod_q();
+
+        const std::vector<PublicKey>& key_vector = kswitch_keys.data()[kswitch_keys_index];
+        size_t key_component_count = key_vector[0].as_ciphertext().polynomial_count();
+        for (size_t i = 0; i < key_vector.size(); i++) {
+            check_no_seed("[Evaluator::switch_key_inplace_internal]", key_vector[i].as_ciphertext());
+        }
+
+        if (target.size() != decomp_modulus_size * coeff_count) {
+            throw std::invalid_argument("[Evaluator::switch_key_inplace_internal] Invalid target size.");
+        }
+        Array<uint64_t> target_copied = Array<uint64_t>::create_and_copy_from_slice(target);
+
+        // In CKKS target is in NTT form; switch back to normal form
+        if (scheme == SchemeType::CKKS) {
+            utils::inverse_ntt_negacyclic_harvey_p(
+                target_copied.reference(), coeff_count, key_ntt_tables.const_slice(0, decomp_modulus_size)
+            );
+        }
+
+        // Temporary result
+        bool device = target.on_device();
+        Array<uint64_t> poly_prod(key_component_count * coeff_count * rns_modulus_size, device);
+        Array<uint64_t> poly_lazy(key_component_count * coeff_count * 2, device);
+        Array<uint64_t> temp_ntt(coeff_count, device);
+        for (size_t i = 0; i < rns_modulus_size; i++) {
+            size_t key_index = (i == decomp_modulus_size ? key_modulus_size - 1 : i);
+
+            // Product of two numbers is up to 60 + 60 = 120 bits, so we can sum up to 256 of them without reduction.
+            size_t lazy_reduction_summand_bound = utils::HE_MULTIPLY_ACCUMULATE_USER_MOD_MAX;
+            size_t lazy_reduction_counter = lazy_reduction_summand_bound;
+
+            // Allocate memory for a lazy accumulator (128-bit coefficients)
+            poly_lazy.set_zero();
+
+            // Multiply with keys and perform lazy reduction on product's coefficients
+            temp_ntt.set_zero();
+            for (size_t j = 0; j < decomp_modulus_size; j++) {
+                ConstSlice<uint64_t> temp_operand(nullptr, 0, device);
+                if ((scheme == SchemeType::CKKS) && (i == j)) {
+                    temp_operand = target.const_slice(j * coeff_count, (j + 1) * coeff_count);
+                } else {
+                    if (key_modulus_host[j].value() <= key_modulus_host[key_index].value()) {
+                        temp_ntt.copy_from_slice(target_copied.const_slice(j * coeff_count, (j + 1) * coeff_count));
+                    } else {
+                        utils::modulo(target_copied.const_slice(j * coeff_count, (j + 1) * coeff_count), key_modulus.at(key_index), temp_ntt.reference());
+                    }
+                    utils::ntt_negacyclic_harvey_lazy(temp_ntt.reference(), coeff_count, key_ntt_tables.at(key_index));
+                    temp_operand = temp_ntt.const_reference();
+                }
+                
+                // Multiply with keys and modular accumulate products in a lazy fashion
+                size_t key_vector_poly_coeff_size = key_modulus_size * coeff_count;
+
+                if (!lazy_reduction_counter) {
+                    ski_util1(
+                        poly_lazy.reference(), coeff_count, key_component_count,
+                        key_vector[j].as_ciphertext().const_reference(),
+                        key_vector_poly_coeff_size,
+                        temp_operand, key_index, key_modulus.at(key_index)
+                    );
+                } else {
+                    ski_util2(
+                        poly_lazy.reference(), coeff_count, key_component_count,
+                        key_vector[j].as_ciphertext().const_reference(),
+                        key_vector_poly_coeff_size,
+                        temp_operand, key_index, key_modulus.at(key_index)
+                    );
+                }
+
+                lazy_reduction_counter -= 1;
+                if (lazy_reduction_counter == 0) {
+                    lazy_reduction_counter = lazy_reduction_summand_bound;
+                }
+            }
+            
+            Slice<uint64_t> t_poly_prod_iter = poly_prod.slice(i * coeff_count, poly_prod.size());
+
+            if (lazy_reduction_counter == lazy_reduction_summand_bound) {
+                ski_util3(
+                    poly_lazy.const_reference(), coeff_count, key_component_count,
+                    rns_modulus_size, t_poly_prod_iter
+                );
+            } else {
+                ski_util4(
+                    poly_lazy.const_reference(), coeff_count, key_component_count,
+                    rns_modulus_size, t_poly_prod_iter,
+                    key_modulus.at(key_index)
+                );
+            }
+        } // i
+        
+        // Accumulated products are now stored in t_poly_prod
+
+        temp_ntt = Array<uint64_t>(decomp_modulus_size * coeff_count, device);
+        for (size_t i = 0; i < key_component_count; i++) {
+            if (scheme == SchemeType::BGV) {
+                // qk is the special prime
+                uint64_t qk = key_modulus_host[key_modulus_size - 1].value();
+                uint64_t qk_inv_qp = this->context()->key_context_data().value()->rns_tool().inv_q_last_mod_t();
+
+                // Lazy reduction; this needs to be then reduced mod qi
+                size_t t_last_offset = coeff_count * rns_modulus_size * i + decomp_modulus_size * coeff_count;
+                Slice<uint64_t> t_last = poly_prod.slice(t_last_offset, t_last_offset + coeff_count);
+                utils::inverse_ntt_negacyclic_harvey(t_last, coeff_count, key_ntt_tables.at(key_modulus_size - 1));
+                utils::inverse_ntt_negacyclic_harvey_p(
+                    poly_prod.slice(
+                        i * coeff_count * rns_modulus_size, 
+                        i * coeff_count * rns_modulus_size + decomp_modulus_size * coeff_count
+                    ), 
+                    coeff_count, 
+                    key_ntt_tables.const_slice(0, decomp_modulus_size)
+                );
+                ConstPointer<Modulus> plain_modulus = parms.plain_modulus();
+
+                ski_util5(
+                    t_last.as_const(), poly_prod.slice(i * coeff_count * rns_modulus_size, poly_prod.size()),
+                    coeff_count, plain_modulus, key_modulus,
+                    decomp_modulus_size, rns_modulus_size, qk_inv_qp, qk,
+                    modswitch_factors, encrypted.poly(i)
+                );
+            } else {
+                // Lazy reduction; this needs to be then reduced mod qi
+                size_t t_last_offset = coeff_count * rns_modulus_size * i + decomp_modulus_size * coeff_count;
+                Slice<uint64_t> t_last = poly_prod.slice(t_last_offset, t_last_offset + coeff_count);
+                temp_ntt.set_zero();
+                utils::inverse_ntt_negacyclic_harvey(t_last, coeff_count, key_ntt_tables.at(key_modulus_size - 1));
+
+                ski_util6(
+                    t_last, coeff_count, key_modulus.at(key_modulus_size - 1),
+                    key_modulus,
+                    decomp_modulus_size,
+                    temp_ntt.reference()
+                );
+            
+                if (scheme == SchemeType::CKKS) {
+                    utils::ntt_negacyclic_harvey_lazy_p(temp_ntt.reference(), coeff_count, key_ntt_tables.const_slice(0, decomp_modulus_size));
+                } else if (scheme == SchemeType::BFV) {
+                    utils::inverse_ntt_negacyclic_harvey_p(
+                        poly_prod.slice(
+                            i * coeff_count * rns_modulus_size, 
+                            i * coeff_count * rns_modulus_size + decomp_modulus_size * coeff_count
+                        ), 
+                        coeff_count, 
+                        key_ntt_tables.const_slice(0, decomp_modulus_size)
+                    );
+                }
+
+                ski_util7(
+                    poly_prod.slice(i * coeff_count * rns_modulus_size, poly_prod.size()),
+                    temp_ntt.const_reference(),
+                    coeff_count, encrypted.poly(i),
+                    scheme==SchemeType::CKKS, decomp_modulus_size, key_modulus,
+                    modswitch_factors
+                );
+            }
+            // printf("enc %ld: ", i); printDeviceArray(encrypted.data(i).get(), key_component_count * coeff_count);
+        }
+    }
+
+    void Evaluator::apply_keyswitching_inplace(Ciphertext& encrypted, const KSwitchKeys& kswitch_keys) const {
+        if (kswitch_keys.data().size() != 1) {
+            throw std::invalid_argument("[Evaluator::apply_keyswitching_inplace] Key switch keys size must be 1.");
+        }
+        if (encrypted.polynomial_count() != 2) {
+            throw std::invalid_argument("[Evaluator::apply_keyswitching_inplace] Ciphertext polynomial count must be 2.");
+        }
+        // due to the semantics of `switch_key_inplace_internal`, we should first get the c0 out
+        // and then clear the original c0 in the encrypted.
+        Array<uint64_t> target = Array<uint64_t>::create_and_copy_from_slice(encrypted.const_poly(1));
+        encrypted.poly(1).set_zero();
+        this->switch_key_inplace_internal(encrypted, target.const_reference(), kswitch_keys, 0);
+    }
 
 }

@@ -2,6 +2,7 @@
 #include "he_context.cuh"
 #include "plaintext.cuh"
 #include "ciphertext.cuh"
+#include "kswitch_keys.cuh"
 #include <string>
 
 namespace troy {
@@ -20,6 +21,12 @@ namespace troy {
         void bfv_square_inplace(Ciphertext& encrypted) const;
         void ckks_square_inplace(Ciphertext& encrypted) const;
         void bgv_square_inplace(Ciphertext& encrypted) const;
+
+        /// Suppose kswitch_keys[kswitch_kes_index] is generated with s' on a KeyGenerator of secret key s.
+        /// Then the semantic of this function is as follows: `target` is supposed to multiply with s' to contribute to the
+        /// decrypted result, now we apply this function, to decompose (target * s') into (c0, c1) such that c0 + c1 * s = target * s.
+        /// And then we add c0, c1 to the original c0, c1 in the `encrypted`.
+        void switch_key_inplace_internal(Ciphertext& encrypted, utils::ConstSlice<uint64_t> target, const KSwitchKeys& kswitch_keys, size_t kswitch_keys_index) const;
 
     public:
         inline Evaluator(HeContextPointer context): context_(context) {}
@@ -82,6 +89,17 @@ namespace troy {
         inline Ciphertext square_new(const Ciphertext& encrypted) const {
             Ciphertext destination;
             square(encrypted, destination);
+            return destination;
+        }
+
+        void apply_keyswitching_inplace(Ciphertext& encrypted, const KSwitchKeys& kswitch_keys) const;
+        inline void apply_keyswitching(const Ciphertext& encrypted, const KSwitchKeys& kswitch_keys, Ciphertext& destination) const {
+            destination = encrypted;
+            apply_keyswitching_inplace(destination, kswitch_keys);
+        }
+        inline Ciphertext apply_keyswitching_new(const Ciphertext& encrypted, const KSwitchKeys& kswitch_keys) const {
+            Ciphertext destination;
+            apply_keyswitching(encrypted, kswitch_keys, destination);
             return destination;
         }
 

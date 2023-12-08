@@ -196,5 +196,54 @@ namespace evaluator {
         test_square(ghe);
     }
 
+    void test_keyswitching(const GeneralHeContext& context) {
+        uint64_t t = context.t();
+        double scale = context.scale();
+        double tolerance = context.tolerance();
+
+        // create another keygenerator
+        KeyGenerator keygen_other = KeyGenerator(context.context());
+        SecretKey secret_key_other = keygen_other.secret_key();
+        Encryptor encryptor_other = Encryptor(context.context());
+        encryptor_other.set_secret_key(secret_key_other);
+
+        KSwitchKeys kswitch_key = context.key_generator().create_keyswitching_key(secret_key_other, false);
+
+        GeneralVector message = context.random_simd_full();
+        Plaintext encoded = context.encoder().encode_simd(message, std::nullopt, scale);
+        Ciphertext encrypted = encryptor_other.encrypt_symmetric_new(encoded, false);
+        Ciphertext switched = context.evaluator().apply_keyswitching_new(encrypted, kswitch_key);
+        Plaintext decrypted = context.decryptor().decrypt_new(switched);
+        GeneralVector result = context.encoder().decode_simd(decrypted);
+        GeneralVector truth = message;
+        ASSERT_TRUE(truth.near_equal(result, tolerance));
+    }
+
+    TEST(EvaluatorTest, HostBFVKeySwitching) {
+        GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_keyswitching(ghe);
+    }
+    TEST(EvaluatorTest, HostBGVKeySwitching) {
+        GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_keyswitching(ghe);
+    }
+    TEST(EvaluatorTest, HostCKKSKeySwitching) {
+        GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
+        test_keyswitching(ghe);
+    }
+    TEST(EvaluatorTest, DeviceBFVKeySwitching) {
+        GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_keyswitching(ghe);
+    }
+    TEST(EvaluatorTest, DeviceBGVKeySwitching) {
+        GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_keyswitching(ghe);
+    }
+    TEST(EvaluatorTest, DeviceCKKSKeySwitching) {
+        GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
+        test_keyswitching(ghe);
+    }
+
+
 
 }

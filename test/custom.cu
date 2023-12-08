@@ -7,6 +7,7 @@ using namespace troy;
 using troy::utils::Array;
 using troy::utils::ConstSlice;
 using troy::utils::Slice;
+using troy::utils::DynamicArray;
 using std::vector;
 using std::complex;
 using tool::GeneralEncoder;
@@ -20,40 +21,54 @@ void ASSERT_TRUE(bool condition) {
 }
 
 
-void test_multiply() {
-
-    GeneralHeContext context     ( true, SchemeType::BFV, 8, 20, { 40, 40, 40 }, false, 0x123, 0);
-    GeneralHeContext context_host(false, SchemeType::BFV, 8, 20, { 40, 40, 40 }, false, 0x123, 0);
-
+void test_keyswitching(const GeneralHeContext& context) {
     uint64_t t = context.t();
     double scale = context.scale();
     double tolerance = context.tolerance();
 
-    GeneralVector message1 = context.random_simd_full();
-    GeneralVector message2 = context.random_simd_full();
-    Plaintext encoded1 = context.encoder().encode_simd(message1, std::nullopt, scale);
-    Plaintext encoded2 = context.encoder().encode_simd(message2, std::nullopt, scale);
-    Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1);
-    Ciphertext encrypted2 = context.encryptor().encrypt_asymmetric_new(encoded2);
+    // std::cerr << "t = " << t << "\n";
+    // std::cerr << "qs = " << context.context()->key_context_data().value()->parms().coeff_modulus() << "\n";
+    // std::cerr << "secret_key = " << context.key_generator().secret_key().data() << "\n";
 
-    Ciphertext multiplied = context.evaluator().multiply_new(encrypted1, encrypted2);
-    
-    Ciphertext multiplied_host = context_host.evaluator()
-        .multiply_new(encrypted1.to_host(), encrypted2.to_host());
-    Ciphertext multiplied_redevice = multiplied_host.to_device();
+    // create another keygenerator
+    KeyGenerator keygen_other = KeyGenerator(context.context());
+    SecretKey secret_key_other = keygen_other.secret_key();
 
-    std::cerr << "multipled = " << multiplied.data() << std::endl;
-    std::cerr << "multipled_redevice = " << multiplied_redevice.data() << std::endl;
+    // std::cerr << "secret_key_other = " << secret_key_other.data() << "\n";
 
-    Plaintext decrypted = context.decryptor().decrypt_new(multiplied_redevice);
-    GeneralVector result = context.encoder().decode_simd(decrypted);
-    GeneralVector truth = message1.mul(message2, t);
+    Encryptor encryptor_other = Encryptor(context.context());
+    encryptor_other.set_secret_key(secret_key_other);
+
+    KSwitchKeys kswitch_key = context.key_generator().create_keyswitching_key(secret_key_other, false);
+    size_t kn = kswitch_key.data()[0].size();
+    for (size_t i = 0; i < kn; i++) {
+        // std::cerr << "ks[" << i << "].data() = " << kswitch_key.data()[0][i].data() << "\n";
+    }
+
+
+    GeneralVector message = GeneralVector(vector<uint64_t>{ 1, 2, 3, 4 });
+    Plaintext encoded = context.encoder().encode_polynomial(message, std::nullopt, scale);
+
+    // std::cerr << "encoded.data() = " << encoded.data() << "\n";
+
+
+    Ciphertext encrypted = encryptor_other.encrypt_symmetric_new(encoded, false);
+
+    // std::cerr << "encrypted.data() = " << encrypted.data() << "\n";
+
+    Ciphertext switched = context.evaluator().apply_keyswitching_new(encrypted, kswitch_key);
+    Plaintext decrypted = context.decryptor().decrypt_new(switched);
+    GeneralVector result = context.encoder().decode_polynomial(decrypted);
+    GeneralVector truth = message;
+    // std::cout << "message: " << message << "\n";
+    // std::cout << "result:  " << result << "\n"; 
     ASSERT_TRUE(truth.near_equal(result, tolerance));
 }
     
 
 int main() {
-    test_multiply();
+    GeneralHeContext ghe(true, SchemeType::BFV, 8, 20, { 60, 60, 60 }, true, 0x123, 0);
+    test_keyswitching(ghe);
     return 0;
 }
 

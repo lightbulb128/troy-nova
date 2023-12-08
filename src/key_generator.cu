@@ -105,5 +105,65 @@ namespace troy {
             utils::dyadic_product_p(last, first, coeff_count, coeff_modulus, next);
         }
     }
+    
+    void KeyGenerator::compute_secret_key_array(size_t max_power) {
+        ContextDataPointer context_data = this->context()->key_context_data().value();
+        const EncryptionParameters& parms = context_data->parms();
+        ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
+        size_t coeff_modulus_size = coeff_modulus.size();
+        size_t coeff_count = parms.poly_modulus_degree();
+
+        // acquire read lock
+        std::shared_lock<std::shared_mutex> lock(this->secret_key_array_mutex);
+        // check if we need to compute more powers
+        size_t old_size = this->secret_key_array_.size() / (coeff_count * coeff_modulus_size);
+        // release read lock
+        lock.unlock();
+        size_t new_size = std::max(old_size, max_power);
+        if (old_size == new_size) return;
+
+        // Need to extend the array
+        // acquire write lock
+        std::unique_lock<std::shared_mutex> lock2(this->secret_key_array_mutex);
+        KeyGenerator::compute_secret_key_powers(this->context(), max_power, this->secret_key_array_);
+        // release write lock
+        lock2.unlock();
+    }
+    
+    void KeyGenerator::generate_one_kswitch_key(utils::ConstSlice<uint64_t> new_key, std::vector<PublicKey>& destination, bool save_seed) const {
+        if (!this->context()->using_keyswitching()) {
+            throw std::logic_error("[KeyGenerator::generate_one_kswitch_key] Keyswitching is not enabled.");
+        }
+        ContextDataPointer key_context_data = this->context()->key_context_data().value();
+        const EncryptionParameters& key_parms = key_context_data->parms();
+        size_t coeff_count = key_parms.poly_modulus_degree();
+        ConstSlice<Modulus> key_modulus = key_parms.coeff_modulus();
+        Array<Modulus> key_modulus_host = Array<Modulus>::create_and_copy_from_slice(key_modulus);
+        key_modulus_host.to_host_inplace();
+        size_t decomp_mod_count = this->context()->first_context_data().value()->parms().coeff_modulus().size();
+        ParmsID key_parms_id = key_context_data->parms_id();
+
+        Array<uint64_t> temp(coeff_count, this->on_device());
+        destination.resize(decomp_mod_count);
+        for (size_t i = 0; i < decomp_mod_count; i++) {
+            rlwe::symmetric(this->secret_key(), this->context(), key_parms_id, true, save_seed, destination[i].as_ciphertext());
+            uint64_t factor = utils::barrett_reduce_uint64(key_modulus_host[key_modulus_host.size() - 1].value(), key_modulus_host[i]);
+            utils::multiply_scalar(new_key.const_slice(i * coeff_count, (i + 1) * coeff_count), factor, key_modulus.at(i), temp.reference());
+            Slice<uint64_t> destination_component = destination[i].as_ciphertext().poly_component(0, i);
+            utils::add_inplace(destination_component, temp.const_reference(), key_modulus.at(i));
+        }
+    }
+    
+    KSwitchKeys KeyGenerator::create_keyswitching_key(const SecretKey& new_key, bool save_seed) const {
+        KSwitchKeys ret;
+        ret.data().resize(1);
+        this->generate_one_kswitch_key(
+            new_key.as_plaintext().poly(),
+            ret.data()[0],
+            save_seed
+        );
+        ret.parms_id() = this->context()->key_parms_id();
+        return ret;
+    }
 
 }

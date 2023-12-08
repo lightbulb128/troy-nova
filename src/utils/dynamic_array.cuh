@@ -115,9 +115,9 @@ namespace troy {namespace utils {
             return result;
         }
 
-        static DynamicArray<T> from_vector(const std::vector<T>& vec) {
+        static DynamicArray<T> from_vector(std::vector<T>&& vec) {
             DynamicArray<T> result;
-            result.inner = Array<T>::from_vector(vec);
+            result.inner = Array<T>::from_vector(std::move(vec));
             return result;
         }
 

@@ -10,6 +10,7 @@ namespace troy {
         std::vector<std::vector<PublicKey>> keys;
 
     public: 
+        inline KSwitchKeys(): parms_id_(parms_id_zero) {}
         inline KSwitchKeys(ParmsID parms_id, std::vector<std::vector<PublicKey>> keys): parms_id_(parms_id), keys(keys) {}
 
         inline const ParmsID& parms_id() const {
