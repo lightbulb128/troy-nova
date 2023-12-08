@@ -398,7 +398,7 @@ namespace troy { namespace utils {
         } else {
             os << "[";
             for (size_t i = 0; i < slice.size(); i++) {
-                std::cout << slice[i];
+                os << slice[i];
                 if (i != slice.size() - 1) os << ", ";
             }
             os << "]";

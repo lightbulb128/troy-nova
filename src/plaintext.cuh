@@ -105,6 +105,9 @@ namespace troy {
             return data_.reference();
         }
 
+        inline utils::ConstSlice<uint64_t> reference() const noexcept {return this->poly();}
+        inline utils::Slice<uint64_t> reference() noexcept {return this->poly();}
+
         inline void resize(size_t coeff_count) {
             if (this->is_ntt_form()) {
                 throw std::invalid_argument("[Plaintext::resize] Cannot resize ntt form plaintext");
@@ -116,22 +119,6 @@ namespace troy {
         inline bool is_ntt_form() const {
             return this->parms_id_ != parms_id_zero;
         }
-
-        /*
-        inline utils::ConstSlice<uint64_t> component(size_t index) const {
-            return this->data_.const_slice(
-                index * this->coeff_count_,
-                (index + 1) * this->coeff_count_
-            );
-        }
-
-        inline utils::Slice<uint64_t> component(size_t index) {
-            return this->data_.slice(
-                index * this->coeff_count_,
-                (index + 1) * this->coeff_count_
-            );
-        }
-        */
         
     };
 

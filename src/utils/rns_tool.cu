@@ -336,6 +336,9 @@ namespace troy {namespace utils {
         optional_to_device_inplace(this->neg_inv_q_mod_t_gamma_);
         optional_to_device_inplace(this->prod_t_gamma_mod_q_);
         this->inv_q_last_mod_q_.to_device_inplace();
+        for (size_t i = 0; i < base_Bsk_ntt_tables_.size(); i++) {
+            this->base_Bsk_ntt_tables_[i].to_device_inplace();
+        }
         this->base_Bsk_ntt_tables_.to_device_inplace();
 
         this->m_tilde_.to_device_inplace();
@@ -805,6 +808,7 @@ namespace troy {namespace utils {
         ConstSlice<Modulus> base_Bsk,
         ConstSlice<MultiplyUint64Operand> inv_prod_q_mod_Bsk,
         size_t coeff_count,
+        size_t base_q_size,
         ConstSlice<uint64_t> input,
         Slice<uint64_t> destination
     ) {
@@ -814,7 +818,7 @@ namespace troy {namespace utils {
         size_t i = global_index / coeff_count;
         uint64_t& dest = destination[global_index];
         dest = utils::multiply_uint64operand_mod(
-            input[global_index] + base_Bsk[i].value() - dest,
+            input[global_index + base_q_size * coeff_count] + base_Bsk[i].value() - dest,
             inv_prod_q_mod_Bsk[i],
             base_Bsk[i]
         );
@@ -836,6 +840,7 @@ namespace troy {namespace utils {
                 this->base_Bsk().base(),
                 this->inv_prod_q_mod_Bsk(),
                 coeff_count,
+                base_q_size,
                 input,
                 destination
             );

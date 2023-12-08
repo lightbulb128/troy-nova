@@ -150,6 +150,18 @@ namespace troy {
 
         void resize(HeContextPointer context, const ParmsID& parms_id, size_t polynomial_count);
 
+        inline utils::ConstSlice<uint64_t> reference() const noexcept {
+            return data_.const_reference();
+        }
+
+        inline utils::Slice<uint64_t> reference() noexcept {
+            return data_.reference();
+        }
+
+        inline utils::ConstSlice<uint64_t> const_reference() const noexcept {
+            return this->reference();
+        }
+
         inline utils::ConstSlice<uint64_t> poly(size_t poly_id) const {
             size_t d = coeff_modulus_size_ * poly_modulus_degree_;
             return data_.const_slice(poly_id * d, (poly_id + 1) * d);
@@ -158,6 +170,10 @@ namespace troy {
         inline utils::Slice<uint64_t> poly(size_t poly_id) {
             size_t d = coeff_modulus_size_ * poly_modulus_degree_;
             return data_.slice(poly_id * d, (poly_id + 1) * d);
+        }
+
+        inline utils::ConstSlice<uint64_t> const_poly(size_t poly_id) const {
+            return this->poly(poly_id);
         }
 
         inline utils::ConstSlice<uint64_t> polys(size_t lower_poly_id, size_t upper_poly_id) const {
@@ -170,6 +186,10 @@ namespace troy {
             return data_.slice(lower_poly_id * d, upper_poly_id * d);
         }
 
+        inline utils::ConstSlice<uint64_t> const_polys(size_t lower_poly_id, size_t upper_poly_id) const {
+            return this->polys(lower_poly_id, upper_poly_id);
+        }
+
         inline utils::ConstSlice<uint64_t> poly_component(size_t poly_id, size_t component_id) const {
             size_t offset = poly_modulus_degree_ * (poly_id * coeff_modulus_size_ + component_id);
             return data_.const_slice(offset, offset + poly_modulus_degree_);
@@ -178,6 +198,10 @@ namespace troy {
         inline utils::Slice<uint64_t> poly_component(size_t poly_id, size_t component_id) {
             size_t offset = poly_modulus_degree_ * (poly_id * coeff_modulus_size_ + component_id);
             return data_.slice(offset, offset + poly_modulus_degree_);
+        }
+
+        inline utils::ConstSlice<uint64_t> const_poly_component(size_t poly_id, size_t component_id) const {
+            return this->poly_component(poly_id, component_id);
         }
 
         bool is_transparent() const;

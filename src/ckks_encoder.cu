@@ -706,7 +706,6 @@ namespace troy {
 
         size_t n = slots * 2;
         Array<complex<double>> conj_values(n, device);
-        // std::cerr << "conj_values before set " << conj_values << std::endl;
         if (!device) {
             set_conjugate_values(
                 ConstSlice<complex<double>>(values.data(), values.size(), false),
@@ -722,7 +721,6 @@ namespace troy {
                 conj_values.reference()
             );
         }
-        // std::cerr << "conj_values " << conj_values << std::endl;
 
         size_t logn = utils::get_power_of_two(n);
         double fix = scale / static_cast<double>(n);

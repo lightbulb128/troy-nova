@@ -27,6 +27,8 @@ namespace troy {
         inline bool on_device() const {return secret_key_array_.on_device();}
         inline void to_device_inplace() {secret_key_array_.to_device_inplace();}
 
+        inline utils::DynamicArray<uint64_t>& debug_secret_key_array() const {return secret_key_array_;}
+
         HeContextPointer context() const {return context_;}
 
         void decrypt(const Ciphertext& encrypted, Plaintext& destination) const;

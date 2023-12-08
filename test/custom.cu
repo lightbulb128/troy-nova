@@ -1,6 +1,7 @@
 #include <vector>
 #include "test.cuh"
 #include "../src/ckks_encoder.cuh"
+#include "test_adv.cuh"
 
 using namespace troy;
 using troy::utils::Array;
@@ -8,6 +9,9 @@ using troy::utils::ConstSlice;
 using troy::utils::Slice;
 using std::vector;
 using std::complex;
+using tool::GeneralEncoder;
+using tool::GeneralVector;
+using tool::GeneralHeContext;
 
 void ASSERT_TRUE(bool condition) {
     if (!condition) {
@@ -15,62 +19,42 @@ void ASSERT_TRUE(bool condition) {
     }
 }
 
-bool near_vector(vector<complex<double>> &a, vector<complex<double>> &b) {
-    if (a.size() != b.size()) {
-        return false;
-    }
-    for (size_t i = 0; i < a.size(); i++) {
-        if (std::abs(a[i].real() - b[i].real()) > 0.5) {
-            return false;
-        }
-        if (std::abs(a[i].imag() - b[i].imag()) > 0.5) {
-            return false;
-        }
-    }
-    return true;
-}
 
-void test_vector(bool device) {
+void test_multiply() {
 
-    size_t slots;
-    EncryptionParameters parms(SchemeType::CKKS);
-    HeContextPointer context;
-    vector<complex<double>> values;
+    GeneralHeContext context     ( true, SchemeType::BFV, 8, 20, { 40, 40, 40 }, false, 0x123, 0);
+    GeneralHeContext context_host(false, SchemeType::BFV, 8, 20, { 40, 40, 40 }, false, 0x123, 0);
+
+    uint64_t t = context.t();
+    double scale = context.scale();
+    double tolerance = context.tolerance();
+
+    GeneralVector message1 = context.random_simd_full();
+    GeneralVector message2 = context.random_simd_full();
+    Plaintext encoded1 = context.encoder().encode_simd(message1, std::nullopt, scale);
+    Plaintext encoded2 = context.encoder().encode_simd(message2, std::nullopt, scale);
+    Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1);
+    Ciphertext encrypted2 = context.encryptor().encrypt_asymmetric_new(encoded2);
+
+    Ciphertext multiplied = context.evaluator().multiply_new(encrypted1, encrypted2);
     
-    slots = 32;
-    parms.set_poly_modulus_degree(slots << 1);
-    parms.set_coeff_modulus(CoeffModulus::create(slots << 1, {40, 40, 40, 40}).const_reference());
-    context = HeContext::create(parms, false, SecurityLevel::None);
-    CKKSEncoder encoder = CKKSEncoder(context);
-    if (device) {
-        context->to_device_inplace();
-        encoder.to_device_inplace();
-    }
-    double delta = std::pow(2.0, 16.0);
+    Ciphertext multiplied_host = context_host.evaluator()
+        .multiply_new(encrypted1.to_host(), encrypted2.to_host());
+    Ciphertext multiplied_redevice = multiplied_host.to_device();
 
-    values.resize(slots);
-    for (size_t i = 0; i < slots; i++) {
-        values[i] = complex<double>(0, 0);
-    }
-    // Plaintext plain; // = encoder.encode_complex64_simd_new(values, std::nullopt, delta);
-    // vector<complex<double>> result; // = encoder.decode_complex64_simd_new(plain);
-    // ASSERT_TRUE(near_vector(values, result));
+    std::cerr << "multipled = " << multiplied.data() << std::endl;
+    std::cerr << "multipled_redevice = " << multiplied_redevice.data() << std::endl;
 
-    int bound = 16;
-    for (size_t i = 0; i < slots; i++) {
-        values[i] = complex<double>(rand() % bound, rand() % bound);
-    }
-    Plaintext plain = encoder.encode_complex64_simd_new(values, std::nullopt, delta);
-    
-    Array<complex<double>> empty(32, true);
-    empty.to_host_inplace();
-
-    auto result = encoder.decode_complex64_simd_new(plain);
-    ASSERT_TRUE(near_vector(values, result));
-
+    Plaintext decrypted = context.decryptor().decrypt_new(multiplied_redevice);
+    GeneralVector result = context.encoder().decode_simd(decrypted);
+    GeneralVector truth = message1.mul(message2, t);
+    ASSERT_TRUE(truth.near_equal(result, tolerance));
 }
+    
 
 int main() {
-    test_vector(true);
+    test_multiply();
     return 0;
 }
+
+// make custom && ./test/custom > a.log 2>&1

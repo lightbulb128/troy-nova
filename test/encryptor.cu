@@ -57,6 +57,10 @@ namespace encryptor {
         bool ckks = scheme == SchemeType::CKKS;
         auto context = HeContext::create(parms, expand_mod_chain, SecurityLevel::None, seed);
         auto encoder = ckks ? GeneralEncoder(CKKSEncoder(context)) : GeneralEncoder(BatchEncoder(context));
+        if (device) {
+            context->to_device_inplace();
+            encoder.to_device_inplace();
+        }
         auto key_generator = KeyGenerator(context);
         auto public_key = key_generator.create_public_key(false);
         auto encryptor = Encryptor(context);
@@ -64,14 +68,6 @@ namespace encryptor {
         encryptor.set_secret_key(key_generator.secret_key());
         auto decryptor = Decryptor(context, key_generator.secret_key());
         uint64_t t = ckks ? 0 : parms.plain_modulus()->value();
-        
-        if (device) {
-            context->to_device_inplace();
-            encoder.to_device_inplace();
-            key_generator.to_device_inplace();
-            encryptor.to_device_inplace();
-            decryptor.to_device_inplace();
-        }
 
         vector<uint64_t> message_uint64;
         vector<complex<double>> message_complex64;

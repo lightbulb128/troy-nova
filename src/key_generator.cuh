@@ -30,6 +30,7 @@ namespace troy {
             std::unique_lock<std::shared_mutex> lock(secret_key_array_mutex);
             secret_key_array_.to_device_inplace();
             lock.unlock();
+            secret_key_.to_device_inplace();
         }
 
         inline HeContextPointer context() const {
