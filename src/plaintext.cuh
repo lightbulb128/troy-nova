@@ -97,6 +97,10 @@ namespace troy {
             return data_;
         }
 
+        inline const utils::DynamicArray<uint64_t>& const_data() const noexcept {
+            return data_;
+        }
+
         inline utils::ConstSlice<uint64_t> poly() const noexcept {
             return data_.const_reference();
         }
@@ -105,8 +109,13 @@ namespace troy {
             return data_.reference();
         }
 
+        inline utils::ConstSlice<uint64_t> const_poly() const noexcept {
+            return data_.const_reference();
+        }
+
         inline utils::ConstSlice<uint64_t> reference() const noexcept {return this->poly();}
         inline utils::Slice<uint64_t> reference() noexcept {return this->poly();}
+        inline utils::ConstSlice<uint64_t> const_reference() const noexcept {return this->const_poly();}
 
         inline void resize(size_t coeff_count) {
             if (this->is_ntt_form()) {

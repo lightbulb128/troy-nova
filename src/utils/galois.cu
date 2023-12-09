@@ -122,9 +122,10 @@ namespace troy {namespace utils {
                     size_t index = index_raw & mask;
                     size_t input_index = (k * moduli.size() + j) * self.coeff_count() + i;
                     size_t result_index = (k * moduli.size() + j) * self.coeff_count() + index;
+                    uint64_t input = input_index >= polys.size() ? 0 : polys[input_index];
                     result[result_index] = (((index_raw >> self.coeff_count_power()) & 1) > 0)
-                        ? utils::negate_uint64_mod(polys[input_index], moduli[j])
-                        : polys[input_index];
+                        ? utils::negate_uint64_mod(input, moduli[j])
+                        : input;
                 }
             }
         }
@@ -141,9 +142,10 @@ namespace troy {namespace utils {
         size_t index_raw = i * galois_element;
         size_t index = index_raw & (coeff_count - 1);
         size_t result_index = (k * moduli_count + j) * coeff_count + index;
+        uint64_t input = global_index >= polys.size() ? 0 : polys[global_index];
         result[result_index] = (((index_raw >> coeff_count_power) & 1) > 0)
-            ? utils::negate_uint64_mod(polys[global_index], moduli[j])
-            : polys[global_index];
+            ? utils::negate_uint64_mod(input, moduli[j])
+            : input;
     }
     
     void GaloisTool::apply_ps(ConstSlice<uint64_t> polys, size_t pcount, size_t galois_element, ConstSlice<Modulus> moduli, Slice<uint64_t> result) const {

@@ -189,6 +189,48 @@ namespace tool {
             }
         }
 
+        inline GeneralVector rotate(int step) {
+            if (complexes_) {
+                vector<complex<double>> vec(size());
+                for (size_t i = 0; i < size(); i++) {
+                    vec[i] = complexes_->at((i + step) % size());
+                }
+                return GeneralVector(std::move(vec));
+            } else if (integers_) {
+                vector<uint64_t> vec(size());
+                size_t half = size() / 2;
+                // rotate by halves
+                for (size_t i = 0; i < half; i++) {
+                    vec[i] = integers_->at((i + step) % half);
+                    vec[i + half] = integers_->at((i + half + step) % half + half);
+                }
+                return GeneralVector(std::move(vec));
+            } else {
+                throw std::invalid_argument("[GeneralVector::rotate] Cannot rotate double");
+            }
+        }
+
+        inline GeneralVector conjugate() {
+            if (complexes_) {
+                vector<complex<double>> vec(size());
+                for (size_t i = 0; i < size(); i++) {
+                    vec[i] = std::conj(complexes_->at(i));
+                }
+                return GeneralVector(std::move(vec));
+            } else if (integers_) {
+                // swap halves
+                vector<uint64_t> vec(size());
+                size_t half = size() / 2;
+                for (size_t i = 0; i < half; i++) {
+                    vec[i] = integers_->at(i + half);
+                    vec[i + half] = integers_->at(i);
+                }
+                return GeneralVector(std::move(vec));
+            } else {
+                throw std::invalid_argument("[GeneralVector::conjugate] Cannot conjugate double");
+            }
+        }
+
     };
 
     inline std::ostream& operator << (std::ostream& os, const GeneralVector& vec) {

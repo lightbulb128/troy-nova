@@ -12,6 +12,7 @@ namespace troy {
     using utils::RNSTool;
     using utils::Buffer;
     using utils::MultiplyUint64Operand;
+    using utils::GaloisTool;
 
     template <typename C>
     inline static void check_no_seed(const char* prompt, const C& c) {
@@ -1167,6 +1168,7 @@ namespace troy {
         Array<uint64_t> poly_prod(key_component_count * coeff_count * rns_modulus_size, device);
         Array<uint64_t> poly_lazy(key_component_count * coeff_count * 2, device);
         Array<uint64_t> temp_ntt(coeff_count, device);
+
         for (size_t i = 0; i < rns_modulus_size; i++) {
             size_t key_index = (i == decomp_modulus_size ? key_modulus_size - 1 : i);
 
@@ -1609,4 +1611,427 @@ namespace troy {
         }
     }
 
+    __global__ static void kernel_multiply_plain_normal_no_fast_plain_lift(
+        size_t plain_coeff_count, size_t coeff_modulus_size,
+        ConstSlice<uint64_t> plain, 
+        Slice<uint64_t> temp, 
+        uint64_t plain_upper_half_threshold,
+        ConstSlice<uint64_t> plain_upper_half_increment
+    ) {
+        size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+        if (i >= plain_coeff_count) return;
+        size_t plain_value = plain[i];
+        if (plain_value >= plain_upper_half_threshold) {
+            utils::add_uint_uint64(plain_upper_half_increment, plain_value, temp.slice(i * coeff_modulus_size, (i + 1) * coeff_modulus_size));
+        } else {
+            temp[coeff_modulus_size * i] = plain_value;
+        }
+    }
+
+    static void multiply_plain_normal_no_fast_plain_lift(
+        size_t plain_coeff_count, size_t coeff_modulus_size,
+        ConstSlice<uint64_t> plain, 
+        Slice<uint64_t> temp, 
+        uint64_t plain_upper_half_threshold,
+        ConstSlice<uint64_t> plain_upper_half_increment
+    ) {
+        bool device = temp.on_device();
+        if (!device) {
+            for (size_t i = 0; i < plain_coeff_count; i++) {
+                size_t plain_value = plain[i];
+                if (plain_value >= plain_upper_half_threshold) {
+                    utils::add_uint_uint64(plain_upper_half_increment, plain_value, temp.slice(i * coeff_modulus_size, (i + 1) * coeff_modulus_size));
+                } else {
+                    temp[coeff_modulus_size * i] = plain_value;
+                }
+            } 
+        } else {
+            size_t block_count = utils::ceil_div(plain_coeff_count, utils::KERNEL_THREAD_COUNT);
+            kernel_multiply_plain_normal_no_fast_plain_lift<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                plain_coeff_count, coeff_modulus_size,
+                plain, temp, plain_upper_half_threshold, plain_upper_half_increment
+            );
+        }
+    }
+
+    __global__ static void kernel_multiply_plain_normal_fast_plain_lift(
+        size_t plain_coeff_count, size_t coeff_count, size_t coeff_modulus_size,
+        ConstSlice<uint64_t> plain, 
+        Slice<uint64_t> temp, 
+        uint64_t plain_upper_half_threshold,
+        ConstSlice<uint64_t> plain_upper_half_increment
+    ) {
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        if (global_index >= plain_coeff_count * coeff_modulus_size) return;
+        size_t i = global_index / plain_coeff_count;
+        size_t j = global_index % plain_coeff_count;
+        temp[i * coeff_count + j] = (plain[j] >= plain_upper_half_threshold)
+            ? plain[j] + plain_upper_half_increment[i]
+            : plain[j];
+    }
+
+    static void multiply_plain_normal_fast_plain_lift(
+        size_t plain_coeff_count, size_t coeff_count, size_t coeff_modulus_size,
+        ConstSlice<uint64_t> plain, 
+        Slice<uint64_t> temp, 
+        uint64_t plain_upper_half_threshold,
+        ConstSlice<uint64_t> plain_upper_half_increment
+    ) {
+        bool device = temp.on_device();
+        if (!device) {
+            for (size_t i = 0; i < coeff_modulus_size; i++) {
+                for (size_t j = 0; j < plain_coeff_count; j++) {
+                    temp[i * coeff_count + j] = (plain[j] >= plain_upper_half_threshold)
+                        ? plain[j] + plain_upper_half_increment[i]
+                        : plain[j];
+                }
+            }
+        } else {
+            size_t total = plain_coeff_count * coeff_modulus_size;
+            size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+            kernel_multiply_plain_normal_fast_plain_lift<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                plain_coeff_count, coeff_count, coeff_modulus_size,
+                plain, temp, plain_upper_half_threshold, plain_upper_half_increment
+            );
+        }
+    }
+
+    void Evaluator::multiply_plain_normal_inplace(Ciphertext& encrypted, const Plaintext& plain) const {
+        check_no_seed("[Evaluator::multiply_plain_normal_inplace]", encrypted);
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::multiply_plain_normal_inplace]", encrypted.parms_id());
+        const EncryptionParameters& parms = context_data->parms();
+        ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
+        size_t coeff_count = parms.poly_modulus_degree();
+        size_t coeff_modulus_size = coeff_modulus.size();
+
+        size_t plain_upper_half_threshold = context_data->plain_upper_half_threshold();
+        ConstSlice<uint64_t> plain_upper_half_increment = context_data->plain_upper_half_increment();
+        ConstSlice<NTTTables> ntt_tables = context_data->small_ntt_tables();
+
+        size_t encrypted_size = encrypted.polynomial_count();
+        size_t plain_coeff_count = plain.coeff_count();
+
+        // Note: the original implementation has an optimization
+        // for plaintexts with only one term.
+        // But we are reluctant to detect the number of non-zero terms
+        // in the plaintext, so we just use the general implementation.
+        
+        // Generic case: any plaintext polynomial
+        // Allocate temporary space for an entire RNS polynomial
+        bool device = encrypted.on_device();
+        Buffer<uint64_t> temp(coeff_modulus_size, coeff_count, device);
+        if (!context_data->qualifiers().using_fast_plain_lift) {
+            multiply_plain_normal_no_fast_plain_lift(
+                plain_coeff_count, coeff_modulus_size,
+                plain.poly(), temp.reference(), plain_upper_half_threshold, plain_upper_half_increment
+            );
+            context_data->rns_tool().base_q().decompose_array(temp.reference());
+        } else {
+            // Note that in this case plain_upper_half_increment holds its value in RNS form modulo the coeff_modulus
+            // primes.
+            multiply_plain_normal_fast_plain_lift(
+                plain_coeff_count, coeff_count, coeff_modulus_size,
+                plain.poly(), temp.reference(), plain_upper_half_threshold, plain_upper_half_increment
+            );
+        }
+
+        // Need to multiply each component in encrypted with temp; first step is to transform to NTT form
+        // RNSIter temp_iter(temp.get(), coeff_count);
+        utils::ntt_negacyclic_harvey_p(temp.reference(), coeff_count, ntt_tables);
+        utils::ntt_negacyclic_harvey_lazy_ps(encrypted.polys(0, encrypted_size), encrypted_size, coeff_count, ntt_tables);
+        for (size_t i = 0; i < encrypted_size; i++) {
+            utils::dyadic_product_inplace_p(encrypted.poly(i), temp.const_reference(), coeff_count, coeff_modulus);
+        }
+        utils::inverse_ntt_negacyclic_harvey_ps(encrypted.polys(0, encrypted_size), encrypted_size, coeff_count, ntt_tables);
+
+        if (parms.scheme() == SchemeType::CKKS) {
+            encrypted.scale() = encrypted.scale() * plain.scale();
+            if (!is_scale_within_bounds(encrypted.scale(), context_data)) {
+                throw std::invalid_argument("[Evaluator::multiply_plain_normal_inplace] Scale out of bounds.");
+            }
+        }
+    }
+
+    void Evaluator::multiply_plain_ntt_inplace(Ciphertext& encrypted, const Plaintext& plain) const {
+        check_no_seed("[Evaluator::multiply_plain_ntt_inplace]", encrypted);
+        if (encrypted.parms_id() != plain.parms_id()) {
+            throw std::invalid_argument("[Evaluator::multiply_plain_ntt_inplace] Plaintext and ciphertext parameters do not match.");
+        }
+
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::multiply_plain_ntt_inplace]", encrypted.parms_id());
+        const EncryptionParameters& parms = context_data->parms();
+        ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
+        size_t coeff_count = parms.poly_modulus_degree();
+        size_t encrypted_size = encrypted.polynomial_count();
+
+        for (size_t i = 0; i < encrypted_size; i++) {
+            utils::dyadic_product_inplace_p(encrypted.poly(i), plain.poly(), coeff_count, coeff_modulus);
+        }
+
+        if (parms.scheme() == SchemeType::CKKS) {
+            encrypted.scale() = encrypted.scale() * plain.scale();
+            if (!is_scale_within_bounds(encrypted.scale(), context_data)) {
+                throw std::invalid_argument("[Evaluator::multiply_plain_normal_inplace] Scale out of bounds.");
+            }
+        }
+    }
+
+    void Evaluator::multiply_plain_inplace(Ciphertext& encrypted, const Plaintext& plain) const {
+        if (encrypted.is_ntt_form() != plain.is_ntt_form()) {
+            throw std::invalid_argument("[Evaluator::multiply_plain_inplace] Plaintext and ciphertext are not in the same NTT form.");
+        }
+        if (encrypted.is_ntt_form()) {
+            this->multiply_plain_ntt_inplace(encrypted, plain);
+        } else {
+            this->multiply_plain_normal_inplace(encrypted, plain);
+        }
+    }
+
+    static void transform_plain_to_ntt_no_fast_plain_lift(
+        size_t plain_coeff_count, size_t coeff_modulus_size,
+        ConstSlice<uint64_t> plain, 
+        Slice<uint64_t> temp, 
+        uint64_t plain_upper_half_threshold,
+        ConstSlice<uint64_t> plain_upper_half_increment
+    ) {
+        multiply_plain_normal_no_fast_plain_lift(
+            plain_coeff_count, coeff_modulus_size,
+            plain, temp, plain_upper_half_threshold, plain_upper_half_increment
+        );
+    }
+
+    __global__ static void kernel_transform_plain_to_ntt_fast_plain_lift(
+        size_t plain_coeff_count, size_t coeff_count, size_t coeff_modulus_size,
+        Slice<uint64_t> plain, 
+        uint64_t plain_upper_half_threshold,
+        ConstSlice<uint64_t> plain_upper_half_increment
+    ) {
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        if (global_index >= plain_coeff_count * (coeff_modulus_size - 1)) return;
+        size_t i = (global_index / plain_coeff_count) + 1;
+        size_t j = global_index % plain_coeff_count;
+        size_t plain_index = i * coeff_count + j;
+        plain[plain_index] = (plain[j] >= plain_upper_half_threshold)
+            ? plain[j] + plain_upper_half_increment[i]
+            : plain[j];
+        // sync
+        __syncthreads();
+        if (i == 1) {
+            plain[j] = (plain[j] >= plain_upper_half_threshold)
+                ? plain[j] + plain_upper_half_increment[0]
+                : plain[j];
+        }
+    }
+
+    static void transform_plain_to_ntt_fast_plain_lift(
+        size_t plain_coeff_count, size_t coeff_count, size_t coeff_modulus_size,
+        Slice<uint64_t> plain, 
+        uint64_t plain_upper_half_threshold,
+        ConstSlice<uint64_t> plain_upper_half_increment
+    ) {
+        bool device = plain.on_device();
+        if (!device) {
+            for (size_t i = 0; i < coeff_modulus_size; i++) {
+                for (size_t j = 0; j < plain_coeff_count; j++) {
+                    size_t plain_index = (coeff_modulus_size - 1 - i) * coeff_count + j;
+                    size_t increment_index = coeff_modulus_size - 1 - i;
+                    plain[plain_index] = (plain[j] >= plain_upper_half_threshold)
+                        ? plain[j] + plain_upper_half_increment[increment_index]
+                        : plain[j];
+                }
+            }
+        } else {
+            size_t total = plain_coeff_count * coeff_modulus_size;
+            size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+            kernel_transform_plain_to_ntt_fast_plain_lift<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                plain_coeff_count, coeff_count, coeff_modulus_size,
+                plain, plain_upper_half_threshold, plain_upper_half_increment
+            );
+        }
+    }
+
+    void Evaluator::transform_plain_to_ntt_inplace(Plaintext& plain, const ParmsID& parms_id) const {
+        if (plain.is_ntt_form()) {
+            throw std::invalid_argument("[Evaluator::transform_plain_to_ntt_inplace] Plaintext is already in NTT form.");
+        }
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::transform_plain_to_ntt_inplace]", parms_id);
+        const EncryptionParameters& parms = context_data->parms();
+        size_t coeff_count = parms.poly_modulus_degree();
+        ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
+        size_t coeff_modulus_size = coeff_modulus.size();
+        size_t plain_coeff_count = plain.coeff_count();
+
+        plain.resize(coeff_count * coeff_modulus_size);
+
+        size_t plain_upper_half_threshold = context_data->plain_upper_half_threshold();
+        ConstSlice<uint64_t> plain_upper_half_increment = context_data->plain_upper_half_increment();
+        ConstSlice<NTTTables> ntt_tables = context_data->small_ntt_tables();
+
+        if (!context_data->qualifiers().using_fast_plain_lift) {
+            bool device = plain.on_device();
+            Buffer<uint64_t> temp(coeff_modulus_size, coeff_count, device);
+            transform_plain_to_ntt_no_fast_plain_lift(
+                plain_coeff_count, coeff_modulus_size,
+                plain.const_poly(), temp.reference(), plain_upper_half_threshold, plain_upper_half_increment
+            );
+            context_data->rns_tool().base_q().decompose_array(temp.reference());
+            plain.poly().copy_from_slice(temp.const_reference());
+        } else {
+            // Note that in this case plain_upper_half_increment holds its value in RNS form modulo the coeff_modulus
+            // primes.
+            transform_plain_to_ntt_fast_plain_lift(
+                plain_coeff_count, coeff_count, coeff_modulus_size,
+                plain.poly(), plain_upper_half_threshold, plain_upper_half_increment
+            );
+        }
+
+        utils::ntt_negacyclic_harvey_p(plain.poly(), coeff_count, ntt_tables);
+        plain.parms_id() = parms_id;
+    }
+
+    void Evaluator::transform_to_ntt_inplace(Ciphertext& encrypted) const {
+        check_no_seed("[Evaluator::transform_to_ntt_inplace]", encrypted);
+        check_is_not_ntt_form("[Evaluator::transform_to_ntt_inplace]", encrypted);
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::transform_to_ntt_inplace]", encrypted.parms_id());
+        const EncryptionParameters& parms = context_data->parms();
+        size_t coeff_count = parms.poly_modulus_degree();
+        ConstSlice<NTTTables> ntt_tables = context_data->small_ntt_tables();
+        utils::ntt_negacyclic_harvey_ps(
+            encrypted.polys(0, encrypted.polynomial_count()), 
+            encrypted.polynomial_count(), 
+            coeff_count, ntt_tables
+        );
+        encrypted.is_ntt_form() = true;
+    }
+
+    void Evaluator::transform_from_ntt_inplace(Ciphertext& encrypted) const {
+        check_no_seed("[Evaluator::transform_to_ntt_inplace]", encrypted);
+        check_is_ntt_form("[Evaluator::transform_to_ntt_inplace]", encrypted);
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::transform_to_ntt_inplace]", encrypted.parms_id());
+        const EncryptionParameters& parms = context_data->parms();
+        size_t coeff_count = parms.poly_modulus_degree();
+        ConstSlice<NTTTables> ntt_tables = context_data->small_ntt_tables();
+        utils::inverse_ntt_negacyclic_harvey_ps(
+            encrypted.polys(0, encrypted.polynomial_count()), 
+            encrypted.polynomial_count(), 
+            coeff_count, ntt_tables
+        );
+        encrypted.is_ntt_form() = false;
+    }
+    
+    void Evaluator::apply_galois_inplace(Ciphertext& encrypted, size_t galois_element, const GaloisKeys& galois_keys) const {
+        check_no_seed("[Evaluator::apply_galois_inplace]", encrypted);
+        if (galois_keys.parms_id() != this->context()->key_parms_id()) {
+            throw std::invalid_argument("[Evaluator::apply_galois_inplace] Galois keys has incorrect parms id.");
+        }
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::apply_galois_inplace]", encrypted.parms_id());
+        const EncryptionParameters& parms = context_data->parms();
+        size_t coeff_count = parms.poly_modulus_degree();
+        ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
+        size_t coeff_modulus_size = coeff_modulus.size();
+        size_t encrypted_size = encrypted.polynomial_count();
+        ContextDataPointer key_context_data = this->context()->key_context_data().value();
+        const GaloisTool& galois_tool = key_context_data->galois_tool();
+
+        if (!galois_keys.has_key(galois_element)) {
+            throw std::invalid_argument("[Evaluator::apply_galois_inplace] Galois key not present.");
+        }
+        size_t m = coeff_count * 2;
+        if (galois_element & 1 == 0 || galois_element > m) {
+            throw std::invalid_argument("[Evaluator::apply_galois_inplace] Galois element is not valid.");
+        }
+        if (encrypted_size > 2) {
+            throw std::invalid_argument("[Evaluator::apply_galois_inplace] Ciphertext size must be 2.");
+        }
+
+        Array<uint64_t> temp(coeff_count * coeff_modulus_size, encrypted.on_device());
+        // DO NOT CHANGE EXECUTION ORDER OF FOLLOWING SECTION
+        // BEGIN: Apply Galois for each ciphertext
+        // Execution order is sensitive, since apply_galois is not inplace!
+        if (!encrypted.is_ntt_form()) {
+            galois_tool.apply_p(encrypted.const_poly(0), galois_element, coeff_modulus, temp.reference());
+            encrypted.poly(0).copy_from_slice(temp.const_reference());
+            galois_tool.apply_p(encrypted.const_poly(1), galois_element, coeff_modulus, temp.reference());
+        } else {
+            galois_tool.apply_ntt_p(encrypted.const_poly(0), coeff_modulus_size, galois_element, temp.reference());
+            encrypted.poly(0).copy_from_slice(temp.const_reference());
+            galois_tool.apply_ntt_p(encrypted.const_poly(1), coeff_modulus_size, galois_element, temp.reference());
+        }
+        encrypted.poly(1).set_zero();
+
+        this->switch_key_inplace_internal(encrypted, temp.const_reference(), galois_keys.as_kswitch_keys(), GaloisKeys::get_index(galois_element));
+    }
+    
+    void Evaluator::apply_galois_plain_inplace(Plaintext& plain, size_t galois_element) const {
+        ContextDataPointer context_data = plain.is_ntt_form()
+            ? this->get_context_data("[Evaluator::apply_galois_plain_inplace]", plain.parms_id())
+            : this->context()->key_context_data().value();
+        const EncryptionParameters& parms = context_data->parms();
+        size_t coeff_count = parms.poly_modulus_degree();
+        ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
+        size_t coeff_modulus_size = coeff_modulus.size();
+        ContextDataPointer key_context_data = this->context()->key_context_data().value();
+        const GaloisTool& galois_tool = key_context_data->galois_tool();
+        
+        size_t m = coeff_count * 2;
+        if (galois_element & 1 == 0 || galois_element > m) {
+            throw std::invalid_argument("[Evaluator::apply_galois_inplace] Galois element is not valid.");
+        }
+
+        Array<uint64_t> temp(coeff_count * (plain.is_ntt_form() ? coeff_modulus_size : 1), plain.on_device());
+        if (!plain.is_ntt_form()) {
+            if (context_data->is_ckks()) {
+                galois_tool.apply_p(plain.const_poly(), galois_element, coeff_modulus, temp.reference());
+            } else {
+                galois_tool.apply(plain.const_poly(), galois_element, context_data->parms().plain_modulus(), temp.reference());
+            }
+        } else {
+            galois_tool.apply_ntt_p(plain.const_poly(), coeff_modulus_size, galois_element, temp.reference());
+        }
+
+        ParmsID parms_id = plain.parms_id();
+        plain.parms_id() = parms_id_zero;
+        plain.resize(temp.size());
+        plain.data().copy_from_slice(temp.const_reference());
+        plain.parms_id() = parms_id;
+    }
+
+    void Evaluator::rotate_inplace_internal(Ciphertext& encrypted, int steps, const GaloisKeys& galois_keys) const {
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::rotate_inplace_internal]", encrypted.parms_id());
+        if (!context_data->qualifiers().using_batching) {
+            throw std::invalid_argument("[Evaluator::rotate_inplace_internal] Batching must be enabled to use rotate.");
+        }
+        if (galois_keys.parms_id() != this->context()->key_parms_id()) {
+            throw std::invalid_argument("[Evaluator::rotate_inplace_internal] Galois keys has incorrect parms id.");
+        }
+        if (steps == 0) return;
+        const EncryptionParameters& parms = context_data->parms();
+        size_t coeff_count = parms.poly_modulus_degree();
+        const GaloisTool& galois_tool = context_data->galois_tool();
+        if (galois_keys.has_key(galois_tool.get_element_from_step(steps))) {
+            size_t element = galois_tool.get_element_from_step(steps);
+            std::cerr << "rotating element = " << element << "\n";
+            this->apply_galois_inplace(encrypted, element, galois_keys);
+            std::cerr << "rotating element = " << element << " finish" << "\n";
+        } else {
+            // Convert the steps to NAF: guarantees using smallest HW
+            std::vector<int> naf_steps = utils::naf(steps);
+            if (naf_steps.size() == 1) {
+                throw std::invalid_argument("[Evaluator::rotate_inplace_internal] Galois key not present.");
+            }
+            for (int naf_step : naf_steps) {
+                std::cerr << "rotating naf = " << naf_step << "\n";
+                this->rotate_inplace_internal(encrypted, naf_step, galois_keys);
+            }
+        }
+    }
+    
+    void Evaluator::conjugate_inplace_internal(Ciphertext& encrypted, const GaloisKeys& galois_keys) const {
+        ContextDataPointer context_data = this->get_context_data("Evaluator::conjugate_inplace_internal", encrypted.parms_id());
+        if (!context_data->qualifiers().using_batching) {
+            throw std::logic_error("[Evaluator::conjugate_inplace_internal] Batching is not enabled.");
+        }
+        const GaloisTool& galois_tool = context_data->galois_tool();
+        this->apply_galois_inplace(encrypted, galois_tool.get_element_from_step(0), galois_keys);
+    }
 }

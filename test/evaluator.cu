@@ -440,4 +440,173 @@ namespace evaluator {
         test_add_subtract_plain(ghe);
     }
 
+    void test_multiply_plain(const GeneralHeContext& context) {
+        uint64_t t = context.t();
+        double scale = context.scale();
+        double tolerance = context.tolerance();
+
+        // native multiply
+        GeneralVector message1 = context.random_simd_full();
+        GeneralVector message2 = context.random_simd_full();
+        Plaintext encoded1 = context.encoder().encode_simd(message1, std::nullopt, scale);
+        Plaintext encoded2 = context.encoder().encode_simd(message2, std::nullopt, scale);
+        Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1);
+        Ciphertext multiplied = context.evaluator().multiply_plain_new(encrypted1, encoded2);
+        Plaintext decrypted = context.decryptor().decrypt_new(multiplied);
+        GeneralVector result = context.encoder().decode_simd(decrypted);
+        GeneralVector truth = message1.mul(message2, t);
+        ASSERT_TRUE(truth.near_equal(result, tolerance));
+
+        // if encrypted is not ntt
+        if (!encrypted1.is_ntt_form()) {
+            context.evaluator().transform_to_ntt_inplace(encrypted1);
+            context.evaluator().transform_plain_to_ntt_inplace(encoded2, encrypted1.parms_id());
+            multiplied = context.evaluator().multiply_plain_new(encrypted1, encoded2);
+            context.evaluator().transform_from_ntt_inplace(multiplied);
+            decrypted = context.decryptor().decrypt_new(multiplied);
+            result = context.encoder().decode_simd(decrypted);
+            ASSERT_TRUE(truth.near_equal(result, tolerance));
+        } else {
+            context.evaluator().transform_from_ntt_inplace(encrypted1);
+            context.evaluator().transform_to_ntt_inplace(encrypted1);
+            multiplied = context.evaluator().multiply_plain_new(encrypted1, encoded2);
+            decrypted = context.decryptor().decrypt_new(multiplied);
+            result = context.encoder().decode_simd(decrypted);
+            ASSERT_TRUE(truth.near_equal(result, tolerance));
+        }
+    }
+
+    TEST(EvaluatorTest, HostBFVMultiplyPlain) {
+        GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_multiply_plain(ghe);
+    }
+    TEST(EvaluatorTest, HostBGVMultiplyPlain) {
+        GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_multiply_plain(ghe);
+    }
+    TEST(EvaluatorTest, HostCKKSMultiplyPlain) {
+        GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1ull<<20, 1e-2);
+        test_multiply_plain(ghe);
+    }
+    TEST(EvaluatorTest, DeviceBFVMultiplyPlain) {
+        GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_multiply_plain(ghe);
+    }
+    TEST(EvaluatorTest, DeviceBGVMultiplyPlain) {
+        GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_multiply_plain(ghe);
+    }
+    TEST(EvaluatorTest, DeviceCKKSMultiplyPlain) {
+        GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1ull<<20, 1e-2);
+        test_multiply_plain(ghe);
+    }
+
+    void test_rotate(const GeneralHeContext& context) {
+        uint64_t t = context.t();
+        double scale = context.scale();
+        double tolerance = context.tolerance();
+
+        GeneralVector message = context.random_simd_full();
+        Plaintext encoded = context.encoder().encode_simd(message, std::nullopt, scale);
+        Ciphertext encrypted = context.encryptor().encrypt_asymmetric_new(encoded);
+        GaloisKeys glk = context.key_generator().create_galois_keys(false);
+        Ciphertext rotated;
+        // {
+        //     if (context.params_host().scheme() == SchemeType::CKKS) {
+        //         rotated = context.evaluator().rotate_vector_new(encrypted, 1, glk);
+        //     } else {
+        //         rotated = context.evaluator().rotate_rows_new(encrypted, 1, glk);
+        //     }
+        //     Plaintext decrypted = context.decryptor().decrypt_new(rotated);
+        //     GeneralVector result = context.encoder().decode_simd(decrypted);
+        //     GeneralVector truth = message.rotate(1);
+        //     ASSERT_TRUE(truth.near_equal(result, tolerance));
+        // }
+        
+        // rotate more steps
+        {
+            int step = 7;
+            if (context.params_host().scheme() == SchemeType::CKKS) {
+                rotated = context.evaluator().rotate_vector_new(encrypted, step, glk);
+            } else {
+                rotated = context.evaluator().rotate_rows_new(encrypted, step, glk);
+            }
+            Plaintext decrypted = context.decryptor().decrypt_new(rotated);
+            GeneralVector result = context.encoder().decode_simd(decrypted);
+            GeneralVector truth = message.rotate(step);
+            ASSERT_TRUE(truth.near_equal(result, tolerance));
+        }
+    }
+
+    TEST(EvaluatorTest, HostBFVRotateRows) {
+        GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_rotate(ghe);
+    }
+    TEST(EvaluatorTest, HostBGVRotateRows) {
+        GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_rotate(ghe);
+    }
+    TEST(EvaluatorTest, HostCKKSRotateVector) {
+        GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
+        test_rotate(ghe);
+    }
+    TEST(EvaluatorTest, DeviceBFVRotateRows) {
+        GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_rotate(ghe);
+    }
+    TEST(EvaluatorTest, DeviceBGVRotateRows) {
+        GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_rotate(ghe);
+    }
+    TEST(EvaluatorTest, DeviceCKKSRotateVector) {
+        GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
+        test_rotate(ghe);
+    }
+
+    void test_conjugate(const GeneralHeContext& context) {
+        uint64_t t = context.t();
+        double scale = context.scale();
+        double tolerance = context.tolerance();
+
+        GeneralVector message = context.random_simd_full();
+        Plaintext encoded = context.encoder().encode_simd(message, std::nullopt, scale);
+        Ciphertext encrypted = context.encryptor().encrypt_asymmetric_new(encoded);
+        GaloisKeys glk = context.key_generator().create_galois_keys(false);
+        Ciphertext rotated;
+        if (context.params_host().scheme() == SchemeType::CKKS) {
+            rotated = context.evaluator().complex_conjugate_new(encrypted, glk);
+        } else {
+            rotated = context.evaluator().rotate_columns_new(encrypted, glk);
+        }
+        Plaintext decrypted = context.decryptor().decrypt_new(rotated);
+        GeneralVector result = context.encoder().decode_simd(decrypted);
+        GeneralVector truth = message.conjugate();
+        ASSERT_TRUE(truth.near_equal(result, tolerance));
+    }
+
+    TEST(EvaluatorTest, HostBFVRotateColumns) {
+        GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_conjugate(ghe);
+    }
+    TEST(EvaluatorTest, HostBGVRotateColumns) {
+        GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_conjugate(ghe);
+    }
+    TEST(EvaluatorTest, HostCKKSComplexConjugate) {
+        GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
+        test_conjugate(ghe);
+    }
+    TEST(EvaluatorTest, DeviceBFVRotateColumns) {
+        GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_conjugate(ghe);
+    }
+    TEST(EvaluatorTest, DeviceBGVRotateColumns) {
+        GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_conjugate(ghe);
+    }
+    TEST(EvaluatorTest, DeviceCKKSComplexConjugate) {
+        GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
+        test_conjugate(ghe);
+    }
+
 }

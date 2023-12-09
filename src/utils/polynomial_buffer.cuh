@@ -29,6 +29,10 @@ namespace troy {namespace utils {
             resize(1, 1, coeff_count);
         }
 
+        bool on_device() const {return data_.on_device();}
+        void to_device_inplace() {data_.to_device_inplace();}
+        void to_host_inplace() {data_.to_host_inplace();}
+
         size_t size() const {return data_.size();}
         size_t poly_count() const {return poly_count_;}
         size_t coeff_modulus_size() const {return coeff_modulus_size_;}
@@ -38,6 +42,17 @@ namespace troy {namespace utils {
             Buffer clone(poly_count_, coeff_modulus_size_, coeff_count_, data_.on_device());
             clone.data_.copy_from_slice(data_);
             return clone;
+        }
+        
+        Buffer<T> to_device() const {
+            Buffer<T> cloned = this->clone();
+            cloned.to_device_inplace();
+            return cloned;
+        }
+        Buffer<T> to_host() const {
+            Buffer<T> cloned = this->clone();
+            cloned.to_host_inplace();
+            return cloned;
         }
 
         void copy_from_slice(ConstSlice<T> slice) {
@@ -110,6 +125,9 @@ namespace troy {namespace utils {
         Slice<T> slice(size_t start, size_t end) {
             return data_.slice(start, end);
         }
+
+        const uint64_t& operator[](size_t idx) const {return data_[idx];}
+        uint64_t& operator[](size_t idx) {return data_[idx];}
         
     };
 

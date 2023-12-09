@@ -7,6 +7,7 @@ namespace troy {
     using utils::ConstPointer;
     using utils::Array;
     using utils::NTTTables;
+    using utils::GaloisTool;
 
     void KeyGenerator::create_secret_key_array() {
         // lock
@@ -216,4 +217,41 @@ namespace troy {
         return relin_keys;
     }
 
+    GaloisKeys KeyGenerator::generate_galois_keys(const std::vector<size_t>& galois_elements, bool save_seed) const {
+        ContextDataPointer context_data = this->context()->key_context_data().value();
+        const EncryptionParameters& parms = context_data->parms();
+        size_t coeff_count = parms.poly_modulus_degree();
+        ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
+        size_t coeff_modulus_size = coeff_modulus.size();
+        const GaloisTool& galois_tool = context_data->galois_tool();
+
+        // Create the GaloisKeys object to return
+        GaloisKeys galois_keys;
+        galois_keys.as_kswitch_keys().data().resize(coeff_count);
+
+        Array<uint64_t> rotated_secret_key(coeff_count * coeff_modulus_size, this->on_device());
+        for (size_t galois_element: galois_elements) {
+            if (galois_element % 2 == 0 || galois_element >= (coeff_count << 1)) {
+                throw std::invalid_argument("[KeyGenerator::generate_galois_keys] Galois element is not valid.");
+            }
+            if (galois_keys.has_key(galois_element)) {
+                continue;
+            }
+            galois_tool.apply_ntt_p(
+                this->secret_key().data().const_reference(),
+                coeff_modulus_size, galois_element,
+                rotated_secret_key.reference()
+            );
+            size_t index = GaloisKeys::get_index(galois_element);
+            this->generate_one_kswitch_key(
+                rotated_secret_key.const_reference(),
+                galois_keys.as_kswitch_keys().data()[index],
+                save_seed
+            );
+        }
+
+        // Set the parms_id
+        galois_keys.parms_id() = context_data->parms_id();
+        return galois_keys;
+    }
 }

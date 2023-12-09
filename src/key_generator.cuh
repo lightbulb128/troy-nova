@@ -24,6 +24,7 @@ namespace troy {
         void generate_one_kswitch_key(utils::ConstSlice<uint64_t> new_key, std::vector<PublicKey>& destination, bool save_seed) const;
         void generate_kswitch_keys(utils::ConstSlice<uint64_t> new_keys, size_t num_keys, KSwitchKeys& destination, bool save_seed) const;
         RelinKeys generate_rlk(size_t count, bool save_seed) const;
+        GaloisKeys generate_galois_keys(const std::vector<size_t>& galois_elements, bool save_seed) const;
 
     public:
 
@@ -66,7 +67,29 @@ namespace troy {
             }
             return this->generate_rlk(max_power - 1, save_seed);
         }
-    
+
+        inline GaloisKeys create_galois_keys_from_elements(const std::vector<size_t>& galois_elements, bool save_seed) const {
+            return generate_galois_keys(galois_elements, save_seed);
+        }
+
+        inline GaloisKeys create_galois_keys_from_steps(const std::vector<int>& steps, bool save_seed) const {
+            if (!this->context()->key_context_data().value()->qualifiers().using_batching) {
+                throw std::invalid_argument("[KeyGenerator::create_galois_keys_from_steps] batching must be enabled");
+            }
+            const utils::GaloisTool& galois_tool = this->context()->key_context_data().value()->galois_tool();
+            std::vector<size_t> galois_elements = galois_tool.get_elements_from_steps(steps);
+            return generate_galois_keys(galois_elements, save_seed);
+        }
+
+        inline GaloisKeys create_galois_keys(bool save_seed) const {
+            if (!this->context()->key_context_data().value()->qualifiers().using_batching) {
+                throw std::invalid_argument("[KeyGenerator::create_galois_keys] batching must be enabled");
+            }
+            const utils::GaloisTool& galois_tool = this->context()->key_context_data().value()->galois_tool();
+            std::vector<size_t> galois_elements = galois_tool.get_elements_all();
+            return generate_galois_keys(galois_elements, save_seed);
+        }
+        
     };
 
 }
