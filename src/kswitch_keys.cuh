@@ -60,4 +60,92 @@ namespace troy {
 
     };
 
+    class RelinKeys {
+    private:
+        KSwitchKeys keys;
+    
+    public:
+        inline RelinKeys() {}
+        inline RelinKeys(KSwitchKeys&& keys): keys(std::move(keys)) {}
+        
+        static inline size_t get_index(size_t key_power) {
+            if (key_power < 2) {
+                throw std::invalid_argument("[RelinKeys::get_index] key_power must be at least 2.");
+            }
+            return key_power - 2;
+        }
+
+        inline bool has_key(size_t key_power) const {
+            size_t index = get_index(key_power);
+            return index < keys.data().size() && keys.data()[index].size() > 0;
+        }
+
+        inline const std::vector<PublicKey>& key(size_t key_power) const {
+            size_t index = get_index(key_power);
+            if (!has_key(key_power)) {
+                throw std::invalid_argument("[RelinKeys::key] key_power is not valid.");
+            }
+            return keys.data()[index];
+        }
+
+        inline const ParmsID& parms_id() const {
+            return keys.parms_id();
+        }
+
+        inline ParmsID& parms_id() {
+            return keys.parms_id();
+        }
+
+        inline const KSwitchKeys& as_kswitch_keys() const {
+            return keys;
+        }
+
+        inline KSwitchKeys& as_kswitch_keys() {
+            return keys;
+        }
+
+    };
+
+    class GaloisKeys {
+    private:
+        KSwitchKeys keys;
+    
+    public:
+        inline GaloisKeys() {}
+        inline GaloisKeys(KSwitchKeys&& keys): keys(std::move(keys)) {}
+        
+        static inline size_t get_index(size_t galois_element) {
+            return utils::GaloisTool::get_index_from_element(galois_element);
+        }
+
+        inline bool has_key(size_t galois_element) const {
+            size_t index = get_index(galois_element);
+            return index < keys.data().size() && keys.data()[index].size() > 0;
+        }
+
+        inline const std::vector<PublicKey>& key(size_t galois_element) const {
+            size_t index = get_index(galois_element);
+            if (!has_key(galois_element)) {
+                throw std::invalid_argument("[RelinKeys::key] key_power is not valid.");
+            }
+            return keys.data()[index];
+        }
+
+        inline const ParmsID& parms_id() const {
+            return keys.parms_id();
+        }
+
+        inline ParmsID& parms_id() {
+            return keys.parms_id();
+        }
+
+        inline const KSwitchKeys& as_kswitch_keys() const {
+            return keys;
+        }
+
+        inline KSwitchKeys& as_kswitch_keys() {
+            return keys;
+        }
+
+    };
 }

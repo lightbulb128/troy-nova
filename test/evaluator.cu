@@ -74,7 +74,6 @@ namespace evaluator {
         result = context.encoder().decode_simd(decrypted);
         truth = message1.sub(message2, t);
         ASSERT_TRUE(truth.near_equal(result, tolerance));
-
     }
 
     TEST(EvaluatorTest, HostBFVAdd) {
@@ -244,6 +243,201 @@ namespace evaluator {
         test_keyswitching(ghe);
     }
 
+    void test_relinearize(const GeneralHeContext& context) {
+        uint64_t t = context.t();
+        double scale = context.scale();
+        double tolerance = context.tolerance();
 
+        GeneralVector message1 = context.random_simd_full();
+        GeneralVector message2 = context.random_simd_full();
+        RelinKeys relin_keys = context.key_generator().create_relin_keys(false, 3);
+        Plaintext encoded1 = context.encoder().encode_simd(message1, std::nullopt, scale);
+        Plaintext encoded2 = context.encoder().encode_simd(message2, std::nullopt, scale);
+        Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1);
+        Ciphertext encrypted2 = context.encryptor().encrypt_asymmetric_new(encoded2);
+        Ciphertext multiplied = context.evaluator().multiply_new(encrypted1, encrypted2);
+        Ciphertext relined = context.evaluator().relinearize_new(multiplied, relin_keys);
+        Plaintext decrypted = context.decryptor().decrypt_new(relined);
+        GeneralVector result = context.encoder().decode_simd(decrypted);
+        GeneralVector truth = message1.mul(message2, t);
+        ASSERT_TRUE(truth.near_equal(result, tolerance));
+
+        GeneralVector message3 = context.random_simd_full();
+        Plaintext encoded3 = context.encoder().encode_simd(message3, std::nullopt, relined.scale());
+        Ciphertext encrypted3 = context.encryptor().encrypt_asymmetric_new(encoded3);
+        multiplied = context.evaluator().multiply_new(multiplied, encrypted3);
+        relined = context.evaluator().relinearize_new(multiplied, relin_keys);
+        decrypted = context.decryptor().decrypt_new(relined);
+        result = context.encoder().decode_simd(decrypted);
+        truth = truth.mul(message3, t);
+        ASSERT_TRUE(truth.near_equal(result, tolerance));
+
+    }
+
+    TEST(EvaluatorTest, HostBFVRelinearize) {
+        GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_relinearize(ghe);
+    }
+    TEST(EvaluatorTest, HostBGVRelinearize) {
+        GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_relinearize(ghe);
+    }
+    TEST(EvaluatorTest, HostCKKSRelinearize) {
+        GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
+        test_relinearize(ghe);
+    }
+    TEST(EvaluatorTest, DeviceBFVRelinearize) {
+        GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_relinearize(ghe);
+    }
+    TEST(EvaluatorTest, DeviceBGVRelinearize) {
+        GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_relinearize(ghe);
+    }
+    TEST(EvaluatorTest, DeviceCKKSRelinearize) {
+        GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
+        test_relinearize(ghe);
+    }
+
+
+    void test_mod_switch_to_next(const GeneralHeContext& context) {
+        uint64_t t = context.t();
+        double scale = context.scale();
+        double tolerance = context.tolerance();
+
+        GeneralVector message = context.random_simd_full();
+        Plaintext encoded = context.encoder().encode_simd(message, std::nullopt, scale);
+        Ciphertext encrypted = context.encryptor().encrypt_asymmetric_new(encoded);
+        Ciphertext switched = context.evaluator().mod_switch_to_next_new(encrypted);
+        Plaintext decrypted = context.decryptor().decrypt_new(switched);
+        GeneralVector result = context.encoder().decode_simd(decrypted);
+        // result should be same with message
+        ASSERT_TRUE(message.near_equal(result, tolerance));
+    }
+    TEST(EvaluatorTest, HostBFVModSwitchToNext) {
+        GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_mod_switch_to_next(ghe);
+    }
+    TEST(EvaluatorTest, HostBGVModSwitchToNext) {
+        GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_mod_switch_to_next(ghe);
+    }
+    TEST(EvaluatorTest, HostCKKSModSwitchToNext) {
+        GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
+        test_mod_switch_to_next(ghe);
+    }
+    TEST(EvaluatorTest, DeviceBFVModSwitchToNext) {
+        GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_mod_switch_to_next(ghe);
+    }
+    TEST(EvaluatorTest, DeviceBGVModSwitchToNext) {
+        GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_mod_switch_to_next(ghe);
+    }
+    TEST(EvaluatorTest, DeviceCKKSModSwitchToNext) {
+        GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
+        test_mod_switch_to_next(ghe);
+    }
+
+    void test_mod_switch_plain_to_next(const GeneralHeContext& context) {
+        // context must be ckks
+        ASSERT_TRUE(context.params_host().scheme() == SchemeType::CKKS);
+        uint64_t t = context.t();
+        double scale = context.scale();
+        double tolerance = context.tolerance();
+
+        GeneralVector message = context.random_simd_full();
+        Plaintext encoded = context.encoder().encode_simd(message, std::nullopt, scale);
+        Plaintext switched = context.evaluator().mod_switch_plain_to_next_new(encoded);
+        GeneralVector result = context.encoder().decode_simd(switched);
+        // result should be same with message
+        ASSERT_TRUE(message.near_equal(result, tolerance));
+    }
+
+    TEST(EvaluatorTest, HostCKKSModSwitchPlainToNext) {
+        GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
+        test_mod_switch_plain_to_next(ghe);
+    }
+    TEST(EvaluatorTest, DeviceCKKSModSwitchPlainToNext) {
+        GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
+        test_mod_switch_plain_to_next(ghe);
+    }
+
+    void test_rescale_to_next(const GeneralHeContext& context) {
+        // context must be ckks
+        ASSERT_TRUE(context.params_host().scheme() == SchemeType::CKKS);
+        uint64_t t = context.t();
+        double scale = context.scale();
+        double tolerance = context.tolerance();
+
+        GeneralVector message = context.random_simd_full();
+        const EncryptionParameters& parms = context.params_host();
+        auto coeff_modulus = parms.coeff_modulus();
+        double expanded_scale = scale * coeff_modulus[coeff_modulus.size() - 2].value();
+        Plaintext encoded = context.encoder().encode_simd(message, std::nullopt, expanded_scale);
+        Ciphertext encrypted = context.encryptor().encrypt_asymmetric_new(encoded);
+        Ciphertext rescaled = context.evaluator().rescale_to_next_new(encrypted);
+        Plaintext decrypted = context.decryptor().decrypt_new(rescaled);
+        GeneralVector result = context.encoder().decode_simd(decrypted);
+        // result should be same with message
+        ASSERT_TRUE(message.near_equal(result, tolerance));
+    }
+
+    TEST(EvaluatorTest, HostCKKSRescaleToNext) {
+        GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
+        test_rescale_to_next(ghe);
+    }
+    TEST(EvaluatorTest, DeviceCKKSRescaleToNext) {
+        GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
+        test_rescale_to_next(ghe);
+    }
+
+    void test_add_subtract_plain(const GeneralHeContext& context) {
+        uint64_t t = context.t();
+        double scale = context.scale();
+        double tolerance = context.tolerance();
+
+        GeneralVector message1 = context.random_simd_full();
+        GeneralVector message2 = context.random_simd_full();
+        Plaintext encoded1 = context.encoder().encode_simd(message1, std::nullopt, scale);
+        Plaintext encoded2 = context.encoder().encode_simd(message2, std::nullopt, scale);
+        Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1);
+        Ciphertext added = context.evaluator().add_plain_new(encrypted1, encoded2);
+        Plaintext decrypted = context.decryptor().decrypt_new(added);
+        GeneralVector result = context.encoder().decode_simd(decrypted);
+        GeneralVector truth = message1.add(message2, t);
+        ASSERT_TRUE(truth.near_equal(result, tolerance));
+
+        Ciphertext subtracted = context.evaluator().sub_plain_new(encrypted1, encoded2);
+        decrypted = context.decryptor().decrypt_new(subtracted);
+        result = context.encoder().decode_simd(decrypted);
+        truth = message1.sub(message2, t);
+        ASSERT_TRUE(truth.near_equal(result, tolerance));
+    }
+
+    TEST(EvaluatorTest, HostBFVAddPlain) {
+        GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_add_subtract_plain(ghe);
+    }
+    TEST(EvaluatorTest, HostBGVAddPlain) {
+        GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_add_subtract_plain(ghe);
+    }
+    TEST(EvaluatorTest, HostCKKSAddPlain) {
+        GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 40, 40, 40 }, false, 0x123, 10, 1<<20, 1e-2);
+        test_add_subtract_plain(ghe);
+    }
+    TEST(EvaluatorTest, DeviceBFVAddPlain) {
+        GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_add_subtract_plain(ghe);
+    }
+    TEST(EvaluatorTest, DeviceBGVAddPlain) {
+        GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_add_subtract_plain(ghe);
+    }
+    TEST(EvaluatorTest, DeviceCKKSAddPlain) {
+        GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 40, 40, 40 }, false, 0x123, 10, 1<<20, 1e-2);
+        test_add_subtract_plain(ghe);
+    }
 
 }

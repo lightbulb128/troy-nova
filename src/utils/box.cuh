@@ -125,7 +125,7 @@ namespace troy { namespace utils {
         void to_host_inplace() {
             if (!device) return;
             T* cloned = reinterpret_cast<T*>(malloc(sizeof(T)));
-            kernel_provider::copy_device_to_host(&cloned, pointer, 1);
+            kernel_provider::copy_device_to_host(cloned, pointer, 1);
             release();
             pointer = cloned;
             device = false;

@@ -314,6 +314,7 @@ namespace tool {
         Decryptor* decryptor_;
         KeyGenerator* key_generator_;
         GeneralEncoder* encoder_;
+        EncryptionParameters params_host_;
         uint64_t t_;
         double input_max_;
         double scale_;
@@ -326,6 +327,9 @@ namespace tool {
 
         inline HeContextPointer context() const {
             return he_context_;
+        }
+        inline const EncryptionParameters& params_host() const {
+            return params_host_;
         }
         inline const Evaluator& evaluator() const {
             return *evaluator_;

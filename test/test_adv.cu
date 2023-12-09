@@ -15,6 +15,7 @@ namespace tool {
             parms.set_plain_modulus(PlainModulus::batching(n, log_t));
         }
         parms.set_coeff_modulus(CoeffModulus::create(n, log_qi));
+        this->params_host_ = parms;
         // create gadgets
         bool ckks = scheme == SchemeType::CKKS;
         auto context = HeContext::create(parms, expand_mod_chain, SecurityLevel::None, seed);

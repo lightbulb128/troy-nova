@@ -33,6 +33,8 @@ namespace troy {
             plain_modulus_host_(0)
         {}
 
+        inline EncryptionParameters() : EncryptionParameters(SchemeType::None) {}
+
         inline EncryptionParameters(const EncryptionParameters& parms):
             scheme_(parms.scheme_),
             parms_id_(parms.parms_id_),
@@ -156,6 +158,21 @@ namespace troy {
         inline EncryptionParameters to_device() const {
             EncryptionParameters cloned = this->clone();
             cloned.to_device_inplace();
+            return cloned;
+        }
+        
+        inline void to_host_inplace() {
+            if (!this->on_device()) {
+                return;
+            }
+            this->coeff_modulus_.to_host_inplace();
+            this->plain_modulus_.to_host_inplace();
+            this->device = false;
+        }
+
+        inline EncryptionParameters to_host() const {
+            EncryptionParameters cloned = this->clone();
+            cloned.to_host_inplace();
             return cloned;
         }
 

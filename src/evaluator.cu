@@ -1316,4 +1316,297 @@ namespace troy {
         this->switch_key_inplace_internal(encrypted, target.const_reference(), kswitch_keys, 0);
     }
 
+    void Evaluator::relinearize_inplace_internal(Ciphertext& encrypted, const RelinKeys& relin_keys, size_t destination_size) const {
+        check_no_seed("[Evaluator::relinearize_inplace_internal]", encrypted);
+        if (relin_keys.parms_id() != this->context()->key_parms_id()) {
+            throw std::invalid_argument("[Evaluator::relinearize_inplace_internal] Relin keys has incorrect parms id.");
+        }
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::relinearize_inplace_internal]", encrypted.parms_id());
+        size_t encrypted_size = encrypted.polynomial_count();
+        if (encrypted_size < 2 || destination_size > encrypted_size) {
+            throw std::invalid_argument("[Evaluator::relinearize_inplace_internal] Destination size must be at least 2 and less/equal to the size of the encrypted polynomial.");
+        }
+        if (destination_size == encrypted_size) {
+            return;
+        }
+        size_t relins_needed = encrypted_size - destination_size;
+        for (size_t i = 0; i < relins_needed; i++) {
+            this->switch_key_inplace_internal(
+                encrypted, encrypted.const_poly(encrypted_size - 1),
+                relin_keys.as_kswitch_keys(), RelinKeys::get_index(encrypted_size - 1));
+            encrypted_size -= 1;
+        }
+        encrypted.resize(this->context(), context_data->parms_id(), destination_size);
+    }
+
+    void Evaluator::mod_switch_scale_to_next_internal(const Ciphertext& encrypted, Ciphertext& destination) const {
+        ParmsID parms_id = encrypted.parms_id();
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::mod_switch_scale_to_next_internal]", parms_id);
+        const EncryptionParameters& parms = context_data->parms();
+        SchemeType scheme = parms.scheme();
+        switch (scheme) {
+            case SchemeType::BFV: case SchemeType::BGV: {
+                check_is_not_ntt_form("[Evaluator::mod_switch_scale_to_next_internal]", encrypted);
+                break;
+            }
+            case SchemeType::CKKS: {
+                check_is_ntt_form("[Evaluator::mod_switch_scale_to_next_internal]", encrypted);
+                break;
+            }
+            default: {
+                throw std::logic_error("[Evaluator::mod_switch_scale_to_next_internal] Scheme not implemented.");
+            }
+        }
+        if (!context_data->next_context_data().has_value()) {
+            throw std::invalid_argument("[Evaluator::mod_switch_scale_to_next_internal] Next context data is not set.");
+        }
+        ContextDataPointer next_context_data = context_data->next_context_data().value();
+        const EncryptionParameters& next_parms = next_context_data->parms();
+        const RNSTool& rns_tool = context_data->rns_tool();
+        
+        size_t encrypted_size = encrypted.polynomial_count();
+        size_t coeff_count = next_parms.poly_modulus_degree();
+        size_t next_coeff_modulus_size = next_parms.coeff_modulus().size();
+
+        Ciphertext encrypted_copy = encrypted.clone();
+        switch (scheme) {
+            case SchemeType::BFV: {
+                for (size_t i = 0; i < encrypted_size; i++) {
+                    rns_tool.divide_and_round_q_last_inplace(encrypted_copy.poly(i));
+                }
+                break;
+            }
+            case SchemeType::CKKS: {
+                for (size_t i = 0; i < encrypted_size; i++) {
+                    rns_tool.divide_and_round_q_last_ntt_inplace(encrypted_copy.poly(i), context_data->small_ntt_tables());
+                }
+                break;
+            }
+            case SchemeType::BGV: {
+                for (size_t i = 0; i < encrypted_size; i++) {
+                    rns_tool.mod_t_and_divide_q_last_inplace(encrypted_copy.poly(i));
+                }
+                break;
+            }
+            default: {
+                throw std::logic_error("[Evaluator::mod_switch_scale_to_next_internal] Scheme not implemented.");
+            }
+        }
+
+        bool device = encrypted.on_device();
+        if (device) destination.to_device_inplace();
+        else destination.to_host_inplace();
+
+        destination.resize(this->context(), next_context_data->parms_id(), encrypted_size);
+        for (size_t i = 0; i < encrypted_size; i++) {
+            destination.poly(i).copy_from_slice(encrypted_copy.poly(i).const_slice(0, coeff_count * next_coeff_modulus_size));
+        }
+
+        destination.is_ntt_form() = encrypted.is_ntt_form();
+        if (scheme == SchemeType::CKKS) {
+            // take the last modulus
+            size_t id = parms.coeff_modulus().size() - 1;
+            Array<Modulus> modulus = Array<Modulus>::create_and_copy_from_slice(parms.coeff_modulus().const_slice(id, id+1));
+            modulus.to_host_inplace();
+            destination.scale() = encrypted.scale() / modulus[0].value();
+        } else if (scheme == SchemeType::BGV) {
+            destination.correction_factor() = utils::multiply_uint64_mod(
+                encrypted.correction_factor(), rns_tool.inv_q_last_mod_t(), next_parms.plain_modulus_host()
+            );
+        }
+    }
+
+    void Evaluator::mod_switch_drop_to_next_internal(const Ciphertext& encrypted, Ciphertext& destination) const {
+        ParmsID parms_id = encrypted.parms_id();
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::mod_switch_scale_to_next_internal]", parms_id);
+        const EncryptionParameters& parms = context_data->parms();
+        SchemeType scheme = parms.scheme();
+        if (scheme == SchemeType::CKKS) {
+            check_is_ntt_form("[Evaluator::mod_switch_drop_to_next_internal]", encrypted);
+        }
+        if (!context_data->next_context_data().has_value()) {
+            throw std::invalid_argument("[Evaluator::mod_switch_drop_to_next_internal] Next context data is not set.");
+        }
+        ContextDataPointer next_context_data = context_data->next_context_data().value();
+        const EncryptionParameters& next_parms = next_context_data->parms();
+        if (!is_scale_within_bounds(encrypted.scale(), next_context_data)) {
+            throw std::invalid_argument("[Evaluator::mod_switch_drop_to_next_internal] Scale out of bounds.");
+        }
+        
+        size_t encrypted_size = encrypted.polynomial_count();
+        size_t coeff_count = next_parms.poly_modulus_degree();
+        size_t next_coeff_modulus_size = next_parms.coeff_modulus().size();
+
+        bool device = encrypted.on_device();
+        if (device) destination.to_device_inplace();
+        else destination.to_host_inplace();
+
+        destination.resize(this->context(), next_context_data->parms_id(), encrypted_size);
+        for (size_t i = 0; i < encrypted_size; i++) {
+            destination.poly(i).copy_from_slice(encrypted.poly(i).const_slice(0, coeff_count * next_coeff_modulus_size));
+        }
+
+        destination.is_ntt_form() = encrypted.is_ntt_form();
+        destination.scale() = encrypted.scale();
+        destination.correction_factor() = encrypted.correction_factor();
+    }
+
+    void Evaluator::mod_switch_drop_to_next_plain_inplace_internal(Plaintext& plain) const {
+        if (!plain.is_ntt_form()) {
+            throw std::invalid_argument("[Evaluator::mod_switch_drop_to_next_plain_inplace_internal] Plaintext is not in NTT form.");
+        }
+        ParmsID parms_id = plain.parms_id();
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::mod_switch_drop_to_next_plain_inplace_internal]", parms_id);
+        
+        if (!context_data->next_context_data().has_value()) {
+            throw std::invalid_argument("[Evaluator::mod_switch_drop_to_next_internal] Next context data is not set.");
+        }
+        ContextDataPointer next_context_data = context_data->next_context_data().value();
+
+        const EncryptionParameters& next_parms = next_context_data->parms();
+        if (!is_scale_within_bounds(plain.scale(), next_context_data)) {
+            throw std::invalid_argument("[Evaluator::mod_switch_drop_to_next_internal] Scale out of bounds.");
+        }
+
+        size_t coeff_count = next_parms.poly_modulus_degree();
+        size_t next_coeff_modulus_size = next_parms.coeff_modulus().size();
+        size_t dest_size = coeff_count * next_coeff_modulus_size;
+        plain.parms_id() = parms_id_zero;
+        plain.resize(dest_size);
+        plain.parms_id() = next_context_data->parms_id();
+    }
+
+    void Evaluator::mod_switch_to_next(const Ciphertext& encrypted, Ciphertext& destination) const {
+        check_no_seed("[Evaluator::mod_switch_to_next]", encrypted);
+        if (this->context()->last_parms_id() == encrypted.parms_id()) {
+            throw std::invalid_argument("[Evaluator::mod_switch_to_next] End of modulus switching chain reached.");
+        }
+        SchemeType scheme = this->context()->first_context_data().value()->parms().scheme();
+        switch (scheme) {
+            case SchemeType::BFV: 
+                this->mod_switch_scale_to_next_internal(encrypted, destination);
+                break;
+            case SchemeType::CKKS:
+                this->mod_switch_drop_to_next_internal(encrypted, destination);
+                break;
+            case SchemeType::BGV:
+                this->mod_switch_scale_to_next_internal(encrypted, destination);
+                break;
+            default:
+                throw std::logic_error("[Evaluator::mod_switch_to_next] Scheme not implemented.");
+        }
+    }
+
+    void Evaluator::mod_switch_to_inplace(Ciphertext& encrypted, const ParmsID& parms_id) const {
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::mod_switch_to_inplace]", encrypted.parms_id());
+        ContextDataPointer target_context_data = this->get_context_data("[Evaluator::mod_switch_to_inplace]", parms_id);
+        if (context_data->chain_index() < target_context_data->chain_index()) {
+            throw std::invalid_argument("[Evaluator::mod_switch_to_inplace] Cannot switch to a higher level.");
+        }
+        while (encrypted.parms_id() != parms_id) {
+            this->mod_switch_to_next_inplace(encrypted);
+        }
+    }
+
+    void Evaluator::mod_switch_plain_to_inplace(Plaintext& plain, const ParmsID& parms_id) const {
+        if (!plain.is_ntt_form()) {
+            throw std::invalid_argument("[Evaluator::mod_switch_plain_to_inplace] Plaintext is not in NTT form.");
+        }
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::mod_switch_plain_to_inplace]", plain.parms_id());
+        ContextDataPointer target_context_data = this->get_context_data("[Evaluator::mod_switch_plain_to_inplace]", parms_id);
+        if (context_data->chain_index() < target_context_data->chain_index()) {
+            throw std::invalid_argument("[Evaluator::mod_switch_plain_to_inplace] Cannot switch to a higher level.");
+        }
+        while (plain.parms_id() != parms_id) {
+            this->mod_switch_plain_to_next_inplace(plain);
+        }
+    }
+
+    void Evaluator::rescale_to_next(const Ciphertext& encrypted, Ciphertext& destination) const {
+        check_no_seed("[Evaluator::rescale_to_next]", encrypted);
+        if (this->context()->last_parms_id() == encrypted.parms_id()) {
+            throw std::invalid_argument("[Evaluator::rescale_to_next] End of modulus switching chain reached.");
+        }
+        SchemeType scheme = this->context()->first_context_data().value()->parms().scheme();
+        switch (scheme) {
+            case SchemeType::BFV: case SchemeType::BGV:
+                throw std::invalid_argument("[Evaluator::rescale_to_next] Cannot rescale BFV/BGV ciphertext.");
+                break;
+            case SchemeType::CKKS:
+                this->mod_switch_scale_to_next_internal(encrypted, destination);
+                break;
+            default:
+                throw std::logic_error("[Evaluator::rescale_to_next] Scheme not implemented.");
+        }
+    }
+    
+    void Evaluator::rescale_to(const Ciphertext& encrypted, const ParmsID& parms_id, Ciphertext& destination) const {
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::rescale_to]", encrypted.parms_id());
+        ContextDataPointer target_context_data = this->get_context_data("[Evaluator::rescale_to]", parms_id);
+        if (context_data->chain_index() < target_context_data->chain_index()) {
+            throw std::invalid_argument("[Evaluator::rescale_to] Cannot rescale to a higher level.");
+        }
+        while (encrypted.parms_id() != parms_id) {
+            this->rescale_to_next(encrypted, destination);
+        }
+    }
+
+    void Evaluator::translate_plain_inplace(Ciphertext& encrypted, const Plaintext& plain, bool subtract) const {
+        check_no_seed("[Evaluator::translate_plain_inplace]", encrypted);
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::translate_plain_inplace]", encrypted.parms_id());
+        const EncryptionParameters& parms = context_data->parms();
+        SchemeType scheme = parms.scheme();
+        switch (scheme) {
+            case SchemeType::BFV: case SchemeType::BGV: {
+                check_is_not_ntt_form("[Evaluator::translate_plain_inplace]", encrypted);
+                break;
+            }
+            case SchemeType::CKKS: {
+                check_is_ntt_form("[Evaluator::translate_plain_inplace]", encrypted);
+                if (!utils::are_close_double(plain.scale(), encrypted.scale())) {
+                    throw std::invalid_argument("[Evaluator::translate_plain_inplace] Plaintext scale is not equal to the scale of the ciphertext.");
+                }
+                break;
+            }
+            default: {
+                throw std::logic_error("[Evaluator::translate_plain_inplace] Scheme not implemented.");
+            }
+        }
+        if (encrypted.is_ntt_form() != plain.is_ntt_form()) {
+            throw std::invalid_argument("[Evaluator::translate_plain_inplace] Plaintext and ciphertext are not in the same NTT form.");
+        }
+        size_t coeff_count = parms.poly_modulus_degree();
+        ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
+        switch (scheme) {
+            case SchemeType::BFV: {
+                if (!subtract) {
+                    scaling_variant::multiply_add_plain(plain, context_data, encrypted.poly(0));
+                } else {
+                    scaling_variant::multiply_sub_plain(plain, context_data, encrypted.poly(0));
+                }
+                break;
+            }
+            case SchemeType::CKKS: {
+                if (!subtract) {
+                    utils::add_inplace_p(encrypted.poly(0), plain.poly(), coeff_count, coeff_modulus);
+                } else {
+                    utils::sub_inplace_p(encrypted.poly(0), plain.poly(), coeff_count, coeff_modulus);
+                }
+                break;
+            }
+            case SchemeType::BGV: {
+                Plaintext plain_copy = plain;
+                utils::multiply_scalar(plain.poly(), encrypted.correction_factor(), parms.plain_modulus(), plain_copy.poly());
+                if (!subtract) {
+                    scaling_variant::add_plain(plain_copy, context_data, encrypted.poly(0));
+                } else {
+                    scaling_variant::sub_plain(plain_copy, context_data, encrypted.poly(0));
+                }
+                break;
+            }
+            default: 
+                throw std::logic_error("[Evaluator::translate_plain_inplace] Scheme not implemented.");
+        }
+    }
+
 }

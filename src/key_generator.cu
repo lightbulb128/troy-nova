@@ -106,7 +106,7 @@ namespace troy {
         }
     }
     
-    void KeyGenerator::compute_secret_key_array(size_t max_power) {
+    void KeyGenerator::compute_secret_key_array(size_t max_power) const {
         ContextDataPointer context_data = this->context()->key_context_data().value();
         const EncryptionParameters& parms = context_data->parms();
         ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
@@ -164,6 +164,56 @@ namespace troy {
         );
         ret.parms_id() = this->context()->key_parms_id();
         return ret;
+    }
+    
+    void KeyGenerator::generate_kswitch_keys(utils::ConstSlice<uint64_t> new_keys, size_t num_keys, KSwitchKeys& destination, bool save_seed) const {
+        ContextDataPointer key_context_data = this->context()->key_context_data().value();
+        const EncryptionParameters& key_parms = key_context_data->parms();
+        size_t coeff_count = key_parms.poly_modulus_degree();
+        ConstSlice<Modulus> key_modulus = key_parms.coeff_modulus();
+        size_t key_modulus_size = key_modulus.size();
+        destination.data().resize(num_keys);
+        size_t d = coeff_count * key_modulus_size;
+        for (size_t i = 0; i < num_keys; i++) {
+            this->generate_one_kswitch_key(
+                new_keys.const_slice(i * d, (i + 1) * d),
+                destination.data()[i],
+                save_seed
+            );
+        }
+    }
+
+    RelinKeys KeyGenerator::generate_rlk(size_t count, bool save_seed) const {
+        ContextDataPointer context_data = this->context()->key_context_data().value();
+        const EncryptionParameters& parms = context_data->parms();
+        size_t coeff_count = parms.poly_modulus_degree();
+        ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
+        size_t modulus_size = coeff_modulus.size();
+
+        // Make sure we have enough secret keys computed
+        this->compute_secret_key_array(count + 1);
+        
+        // Create the RelinKeys object to return
+        RelinKeys relin_keys;
+        
+        // Assume the secret key is already transformed into NTT form.
+        size_t d = coeff_count * modulus_size;
+
+        // Acquire read lock
+        std::shared_lock<std::shared_mutex> lock(this->secret_key_array_mutex);
+        this->generate_kswitch_keys(
+            this->secret_key_array_.const_slice(d, (count + 1) * d),
+            count,
+            relin_keys.as_kswitch_keys(),
+            save_seed
+        );
+
+        // Release read lock
+        lock.unlock();
+
+        // Set the parms_id
+        relin_keys.parms_id() = context_data->parms_id();
+        return relin_keys;
     }
 
 }

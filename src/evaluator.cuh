@@ -3,6 +3,7 @@
 #include "plaintext.cuh"
 #include "ciphertext.cuh"
 #include "kswitch_keys.cuh"
+#include "utils/scaling_variant.cuh"
 #include <string>
 
 namespace troy {
@@ -27,6 +28,14 @@ namespace troy {
         /// decrypted result, now we apply this function, to decompose (target * s') into (c0, c1) such that c0 + c1 * s = target * s.
         /// And then we add c0, c1 to the original c0, c1 in the `encrypted`.
         void switch_key_inplace_internal(Ciphertext& encrypted, utils::ConstSlice<uint64_t> target, const KSwitchKeys& kswitch_keys, size_t kswitch_keys_index) const;
+
+        void relinearize_inplace_internal(Ciphertext& encrypted, const RelinKeys& relin_keys, size_t destination_size) const;
+
+        void mod_switch_scale_to_next_internal(const Ciphertext& encrypted, Ciphertext& destination) const;
+        void mod_switch_drop_to_next_internal(const Ciphertext& encrypted, Ciphertext& destination) const;
+        void mod_switch_drop_to_next_plain_inplace_internal(Plaintext& plain) const;
+
+        void translate_plain_inplace(Ciphertext& encrypted, const Plaintext& plain, bool subtract) const;
 
     public:
         inline Evaluator(HeContextPointer context): context_(context) {}
@@ -102,6 +111,114 @@ namespace troy {
             apply_keyswitching(encrypted, kswitch_keys, destination);
             return destination;
         }
+
+        inline void relinearize_inplace(Ciphertext& encrypted, const RelinKeys& relin_keys) const {
+            relinearize_inplace_internal(encrypted, relin_keys, 2);
+        }
+        inline void relinearize(const Ciphertext& encrypted, const RelinKeys& relin_keys, Ciphertext& destination) const {
+            destination = encrypted;
+            relinearize_inplace(destination, relin_keys);
+        }
+        inline Ciphertext relinearize_new(const Ciphertext& encrypted, const RelinKeys& relin_keys) const {
+            Ciphertext destination;
+            relinearize(encrypted, relin_keys, destination);
+            return destination;
+        }
+
+        void mod_switch_to_next(const Ciphertext& encrypted, Ciphertext& destination) const;
+        inline void mod_switch_to_next_inplace(Ciphertext& encrypted) const {
+            Ciphertext cloned = encrypted;
+            mod_switch_to_next(cloned, encrypted);
+        }
+        inline Ciphertext mod_switch_to_next_new(const Ciphertext& encrypted) const {
+            Ciphertext destination;
+            mod_switch_to_next(encrypted, destination);
+            return destination;
+        }
+
+        inline void mod_switch_plain_to_next_inplace(Plaintext& plain) const {
+            this->mod_switch_drop_to_next_plain_inplace_internal(plain);
+        }
+        inline void mod_switch_plain_to_next(const Plaintext& plain, Plaintext& destination) const {
+            destination = plain.clone();
+            this->mod_switch_drop_to_next_plain_inplace_internal(destination);
+        }
+        inline Plaintext mod_switch_plain_to_next_new(const Plaintext& plain) const {
+            Plaintext destination = plain.clone();
+            this->mod_switch_drop_to_next_plain_inplace_internal(destination);
+            return destination;
+        }
+
+        void mod_switch_to_inplace(Ciphertext& encrypted, const ParmsID& parms_id) const;
+        inline void mod_switch_to(const Ciphertext& encrypted, const ParmsID& parms_id, Ciphertext& destination) const {
+            destination = encrypted;
+            mod_switch_to_inplace(destination, parms_id);
+        }
+        inline Ciphertext mod_switch_to_new(const Ciphertext& encrypted, const ParmsID& parms_id) const {
+            Ciphertext destination;
+            mod_switch_to(encrypted, parms_id, destination);
+            return destination;
+        }
+
+        void mod_switch_plain_to_inplace(Plaintext& plain, const ParmsID& parms_id) const;
+        inline void mod_switch_plain_to(const Plaintext& plain, const ParmsID& parms_id, Plaintext& destination) const {
+            destination = plain.clone();
+            mod_switch_plain_to_inplace(destination, parms_id);
+        }
+        inline Plaintext mod_switch_plain_to_new(const Plaintext& plain, const ParmsID& parms_id) const {
+            Plaintext destination = plain.clone();
+            mod_switch_plain_to_inplace(destination, parms_id);
+            return destination;
+        }
+
+        void rescale_to_next(const Ciphertext& encrypted, Ciphertext& destination) const;
+        inline void rescale_to_next_inplace(Ciphertext& encrypted) const {
+            Ciphertext cloned = encrypted;
+            rescale_to_next(cloned, encrypted);
+        }
+        inline Ciphertext rescale_to_next_new(const Ciphertext& encrypted) const {
+            Ciphertext destination;
+            rescale_to_next(encrypted, destination);
+            return destination;
+        }
+
+        void rescale_to(const Ciphertext& encrypted, const ParmsID& parms_id, Ciphertext& destination) const;
+        inline void rescale_to_inplace(Ciphertext& encrypted, const ParmsID& parms_id) const {
+            Ciphertext cloned = encrypted;
+            rescale_to(cloned, parms_id, encrypted);
+        }
+        inline Ciphertext rescale_to_new(const Ciphertext& encrypted, const ParmsID& parms_id) const {
+            Ciphertext destination;
+            rescale_to(encrypted, parms_id, destination);
+            return destination;
+        }
+
+        inline void add_plain_inplace(Ciphertext& encrypted, const Plaintext& plain) const {
+            translate_plain_inplace(encrypted, plain, false);
+        }
+        inline void add_plain(const Ciphertext& encrypted, const Plaintext& plain, Ciphertext& destination) const {
+            destination = encrypted;
+            add_plain_inplace(destination, plain);
+        }
+        inline Ciphertext add_plain_new(const Ciphertext& encrypted, const Plaintext& plain) const {
+            Ciphertext destination;
+            add_plain(encrypted, plain, destination);
+            return destination;
+        }
+
+        inline void sub_plain_inplace(Ciphertext& encrypted, const Plaintext& plain) const {
+            translate_plain_inplace(encrypted, plain, true);
+        }
+        inline void sub_plain(const Ciphertext& encrypted, const Plaintext& plain, Ciphertext& destination) const {
+            destination = encrypted;
+            sub_plain_inplace(destination, plain);
+        }
+        inline Ciphertext sub_plain_new(const Ciphertext& encrypted, const Plaintext& plain) const {
+            Ciphertext destination;
+            sub_plain(encrypted, plain, destination);
+            return destination;
+        }
+
 
     };
 

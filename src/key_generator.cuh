@@ -14,14 +14,16 @@ namespace troy {
         HeContextPointer context_;
         SecretKey secret_key_;
         
-        utils::DynamicArray<uint64_t> secret_key_array_;
-        std::shared_mutex secret_key_array_mutex;
+        mutable utils::DynamicArray<uint64_t> secret_key_array_;
+        mutable std::shared_mutex secret_key_array_mutex;
 
         void create_secret_key_array();
         PublicKey generate_pk(bool save_seed, utils::RandomGenerator* u_prng) const;
         
-        void compute_secret_key_array(size_t max_power);
+        void compute_secret_key_array(size_t max_power) const;
         void generate_one_kswitch_key(utils::ConstSlice<uint64_t> new_key, std::vector<PublicKey>& destination, bool save_seed) const;
+        void generate_kswitch_keys(utils::ConstSlice<uint64_t> new_keys, size_t num_keys, KSwitchKeys& destination, bool save_seed) const;
+        RelinKeys generate_rlk(size_t count, bool save_seed) const;
 
     public:
 
@@ -43,10 +45,6 @@ namespace troy {
         inline const SecretKey& secret_key() const {
             return secret_key_;
         }
-
-        inline SecretKey& secret_key() {
-            return secret_key_;
-        }
         
         KeyGenerator(HeContextPointer context);
         KeyGenerator(HeContextPointer context, const SecretKey& secret_key);
@@ -62,6 +60,12 @@ namespace troy {
         static void compute_secret_key_powers(HeContextPointer context, size_t max_power, utils::DynamicArray<uint64_t>& secret_key_array);
     
         KSwitchKeys create_keyswitching_key(const SecretKey& new_key, bool save_seed) const;
+        inline RelinKeys create_relin_keys(bool save_seed, size_t max_power = 2) const {
+            if (max_power < 2) {
+                throw std::invalid_argument("[KeyGenerator::create_relin_keys] max_power must be at least 2");
+            }
+            return this->generate_rlk(max_power - 1, save_seed);
+        }
     
     };
 
