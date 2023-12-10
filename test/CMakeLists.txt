@@ -1,35 +1,59 @@
-enable_testing()
 
-add_executable(troytest)
-target_sources(troytest PRIVATE 
+if(TROY_TEST)
 
-    utils/box.cu
-    utils/basics.cu
-    utils/uint_small_mod.cu
-    utils/ntt.cu
-    utils/rns_base.cu
-    utils/rns_tool.cu
-    utils/galois.cu
-    utils/random_generator.cu
+    message(STATUS "Tests enabled")
 
-    modulus.cu
-    he_context.cu
-    batch_encoder.cu
-    ckks_encoder.cu
-    encryptor.cu
+    enable_testing()
+    add_subdirectory("${PROJECT_SOURCE_DIR}/extern/googletest" "extern/googletest")
 
-    test_adv.cu
-    evaluator.cu
+    add_executable(troytest)
+    target_sources(troytest PRIVATE 
 
-    lwe.cu
+        utils/box.cu
+        utils/basics.cu
+        utils/uint_small_mod.cu
+        utils/ntt.cu
+        utils/rns_base.cu
+        utils/rns_tool.cu
+        utils/galois.cu
+        utils/random_generator.cu
+
+        modulus.cu
+        he_context.cu
+        batch_encoder.cu
+        ckks_encoder.cu
+        encryptor.cu
+
+        test_adv.cu
+        evaluator.cu
+
+        lwe.cu
+        
+    )
+
+    target_link_libraries(troytest gtest gtest_main troy)
+
+    include(GoogleTest)
+    gtest_discover_tests(troytest)
+
+    add_executable(custom)
+    target_sources(custom PRIVATE custom.cu test_adv.cu)
+    target_link_libraries(custom troy)
     
-)
+endif()
 
-target_link_libraries(troytest gtest gtest_main troy)
+if(TROY_BENCH)
 
-include(GoogleTest)
-gtest_discover_tests(troytest)
+    message(STATUS "Benchmarks enabled")
 
-add_executable(custom)
-target_sources(custom PRIVATE custom.cu test_adv.cu)
-target_link_libraries(custom troy)
+    add_executable(troybench)
+    target_sources(troybench PRIVATE 
+
+        bench/he_operations.cu
+        test_adv.cu
+        
+    )
+
+    target_link_libraries(troybench troy)
+
+endif()

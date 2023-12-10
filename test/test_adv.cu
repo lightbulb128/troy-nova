@@ -12,10 +12,16 @@ namespace tool {
         // create enc params
         EncryptionParameters parms(scheme);
         parms.set_poly_modulus_degree(n);
+        // create modulus
         if (scheme != SchemeType::CKKS) {
-            parms.set_plain_modulus(PlainModulus::batching(n, log_t));
+            log_qi.push_back(log_t);
+            auto moduli = CoeffModulus::create(n, log_qi);
+            parms.set_plain_modulus(moduli[moduli.size() - 1]);
+            parms.set_coeff_modulus(moduli.const_slice(0, moduli.size() - 1));
+        } else {
+            auto moduli = CoeffModulus::create(n, log_qi);
+            parms.set_coeff_modulus(moduli);
         }
-        parms.set_coeff_modulus(CoeffModulus::create(n, log_qi));
         this->params_host_ = parms;
         // create gadgets
         bool ckks = scheme == SchemeType::CKKS;

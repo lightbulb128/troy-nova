@@ -193,10 +193,8 @@ namespace troy {
                 plain_modulus, destination.poly().slice(0, value_size)
             );
         } else {
-            Array<uint64_t> values_device(value_size, false);
-            for (size_t i = 0; i < value_size; i++) {
-                values_device[i] = values[i];
-            }
+            Array<uint64_t> values_device(value_size, true);
+            values_device.copy_from_slice(ConstSlice(values.data(), values.size(), false));
             values_device.to_device_inplace();
             utils::modulo(
                 values_device.const_reference(),

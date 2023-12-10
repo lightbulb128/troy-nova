@@ -16,10 +16,6 @@ add_subdirectory(src)
 
 # add TROY_TEST variable
 option(TROY_TEST "Build tests" OFF)
+option(TROY_BENCH "Build benchmarks" OFF)
 
-if(TROY_TEST)
-  message(STATUS "Tests enabled")
-  enable_testing()
-  add_subdirectory("${PROJECT_SOURCE_DIR}/extern/googletest" "extern/googletest")
-  add_subdirectory(test)
-endif()
+add_subdirectory(test)

@@ -2010,9 +2010,7 @@ namespace troy {
         const GaloisTool& galois_tool = context_data->galois_tool();
         if (galois_keys.has_key(galois_tool.get_element_from_step(steps))) {
             size_t element = galois_tool.get_element_from_step(steps);
-            std::cerr << "rotating element = " << element << "\n";
             this->apply_galois_inplace(encrypted, element, galois_keys);
-            std::cerr << "rotating element = " << element << " finish" << "\n";
         } else {
             // Convert the steps to NAF: guarantees using smallest HW
             std::vector<int> naf_steps = utils::naf(steps);
@@ -2020,7 +2018,6 @@ namespace troy {
                 throw std::invalid_argument("[Evaluator::rotate_inplace_internal] Galois key not present.");
             }
             for (int naf_step : naf_steps) {
-                std::cerr << "rotating naf = " << naf_step << "\n";
                 this->rotate_inplace_internal(encrypted, naf_step, galois_keys);
             }
         }
@@ -2197,6 +2194,7 @@ namespace troy {
         while ((1 << l) < lwes_count) l += 1;
         std::vector<Ciphertext> rlwes(1 << l);
         Ciphertext zero_rlwe = this->assemble_lwe_new(lwes[0]);
+        zero_rlwe.data().reference().set_zero();
         for (size_t i = 0; i < (1<<l); i++) {
             size_t index = static_cast<size_t>(utils::reverse_bits_uint64(static_cast<uint64_t>(i), l));
             if (index < lwes_count) {
