@@ -4,6 +4,7 @@
 #include "ciphertext.cuh"
 #include "kswitch_keys.cuh"
 #include "utils/scaling_variant.cuh"
+#include "lwe_ciphertext.cuh"
 #include <string>
 
 namespace troy {
@@ -363,6 +364,29 @@ namespace troy {
             return destination;
         }
 
+        // Pack LWE utilities
+
+        LWECiphertext extract_lwe_new(const Ciphertext& encrypted, size_t term) const;
+        inline Ciphertext assemble_lwe_new(const LWECiphertext& lwe_encrypted) const {
+            return lwe_encrypted.assemble_lwe();
+        }
+        
+        void field_trace_inplace(Ciphertext& encrypted, const GaloisKeys& automorphism_keys, size_t logn) const;
+        
+        void divide_by_poly_modulus_degree_inplace(Ciphertext& encrypted, uint64_t mul = 1) const;
+        
+        Ciphertext pack_lwe_ciphertexts_new(const std::vector<LWECiphertext>& lwe_encrypted, const GaloisKeys& automorphism_keys) const;
+
+        void negacyclic_shift(const Ciphertext& encrypted, size_t shift, Ciphertext& destination) const;
+        inline Ciphertext negacyclic_shift_new(const Ciphertext& encrypted, size_t shift) const {
+            Ciphertext destination;
+            negacyclic_shift(encrypted, shift, destination);
+            return destination;
+        }
+        inline void negacyclic_shift_inplace(Ciphertext& encrypted, size_t shift) const {
+            Ciphertext cloned = encrypted;
+            negacyclic_shift(cloned, shift, encrypted);
+        }
     };
 
 }

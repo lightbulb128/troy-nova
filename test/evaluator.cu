@@ -511,17 +511,17 @@ namespace evaluator {
         Ciphertext encrypted = context.encryptor().encrypt_asymmetric_new(encoded);
         GaloisKeys glk = context.key_generator().create_galois_keys(false);
         Ciphertext rotated;
-        // {
-        //     if (context.params_host().scheme() == SchemeType::CKKS) {
-        //         rotated = context.evaluator().rotate_vector_new(encrypted, 1, glk);
-        //     } else {
-        //         rotated = context.evaluator().rotate_rows_new(encrypted, 1, glk);
-        //     }
-        //     Plaintext decrypted = context.decryptor().decrypt_new(rotated);
-        //     GeneralVector result = context.encoder().decode_simd(decrypted);
-        //     GeneralVector truth = message.rotate(1);
-        //     ASSERT_TRUE(truth.near_equal(result, tolerance));
-        // }
+        {
+            if (context.params_host().scheme() == SchemeType::CKKS) {
+                rotated = context.evaluator().rotate_vector_new(encrypted, 1, glk);
+            } else {
+                rotated = context.evaluator().rotate_rows_new(encrypted, 1, glk);
+            }
+            Plaintext decrypted = context.decryptor().decrypt_new(rotated);
+            GeneralVector result = context.encoder().decode_simd(decrypted);
+            GeneralVector truth = message.rotate(1);
+            ASSERT_TRUE(truth.near_equal(result, tolerance));
+        }
         
         // rotate more steps
         {

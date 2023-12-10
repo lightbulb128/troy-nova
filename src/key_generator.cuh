@@ -89,6 +89,16 @@ namespace troy {
             std::vector<size_t> galois_elements = galois_tool.get_elements_all();
             return generate_galois_keys(galois_elements, save_seed);
         }
+
+        inline GaloisKeys create_automorphism_keys(bool save_seed) const {
+            size_t poly_degree = this->context()->key_context_data().value()->parms().poly_modulus_degree();
+            std::vector<size_t> galois_elements;
+            while (poly_degree >= 2) {
+                galois_elements.push_back(poly_degree + 1);
+                poly_degree >>= 1;
+            }
+            return this->create_galois_keys_from_elements(galois_elements, save_seed);
+        }
         
     };
 

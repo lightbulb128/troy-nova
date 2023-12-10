@@ -20,6 +20,8 @@ target_sources(troytest PRIVATE
 
     test_adv.cu
     evaluator.cu
+
+    lwe.cu
     
 )
 

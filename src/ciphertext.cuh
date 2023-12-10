@@ -22,6 +22,24 @@ namespace troy {
         void resize_internal(size_t polynomial_count, size_t coeff_modulus_size, size_t poly_modulus_degree);
 
     public:
+    
+        inline static Ciphertext from_members(
+            size_t polynomial_count, size_t coeff_modulus_size, size_t poly_modulus_degree, 
+            const ParmsID& parms_id, double scale, bool is_ntt_form, uint64_t correction_factor, uint64_t seed, 
+            utils::DynamicArray<uint64_t>&& data
+        ) {
+            Ciphertext result;
+            result.polynomial_count_ = polynomial_count;
+            result.coeff_modulus_size_ = coeff_modulus_size;
+            result.poly_modulus_degree_ = poly_modulus_degree;
+            result.data_ = std::move(data);
+            result.parms_id_ = parms_id;
+            result.scale_ = scale;
+            result.is_ntt_form_ = is_ntt_form;
+            result.correction_factor_ = correction_factor;
+            result.seed_ = seed;
+            return result;
+        }
 
         inline Ciphertext():
             polynomial_count_(0),

@@ -3,7 +3,8 @@
 namespace tool {
 
     GeneralHeContext::GeneralHeContext(bool device, SchemeType scheme, size_t n, size_t log_t, vector<size_t> log_qi, 
-        bool expand_mod_chain, uint64_t seed, double input_max, double scale, double tolerance)
+        bool expand_mod_chain, uint64_t seed, double input_max, double scale, double tolerance,
+        bool to_device_after_keygeneration)
     {
         if (scheme == SchemeType::CKKS && (input_max == 0 || scale == 0)) {
             throw std::invalid_argument("input_max and scale must be set for CKKS");
@@ -20,19 +21,13 @@ namespace tool {
         bool ckks = scheme == SchemeType::CKKS;
         auto context = HeContext::create(parms, expand_mod_chain, SecurityLevel::None, seed);
         auto encoder = ckks ? new GeneralEncoder(CKKSEncoder(context)) : new GeneralEncoder(BatchEncoder(context));
-        if (device) { 
+        if (device && !to_device_after_keygeneration) { 
             context->to_device_inplace();
             encoder->to_device_inplace();
         }
 
         auto key_generator = new KeyGenerator(context);
         auto public_key = key_generator->create_public_key(false);
-        if (device) {
-            context->to_device_inplace();
-            encoder->to_device_inplace();
-            key_generator->to_device_inplace();
-            public_key.to_device_inplace();
-        }
         auto encryptor = new Encryptor(context);
         encryptor->set_public_key(public_key);
         encryptor->set_secret_key(key_generator->secret_key());
@@ -40,13 +35,13 @@ namespace tool {
         auto evaluator = new Evaluator(context);
         uint64_t t = ckks ? 0 : parms.plain_modulus()->value();
         
-        // if (device) { // good
-        //     context->to_device_inplace();
-        //     encoder->to_device_inplace();
-        //     key_generator->to_device_inplace();
-        //     encryptor->to_device_inplace();
-        //     decryptor->to_device_inplace();
-        // }
+        if (device && to_device_after_keygeneration) { 
+            context->to_device_inplace();
+            encoder->to_device_inplace();
+            key_generator->to_device_inplace();
+            encryptor->to_device_inplace();
+            decryptor->to_device_inplace();
+        }
 
         this->he_context_ = context;
         this->encoder_ = encoder;

@@ -57,6 +57,20 @@ namespace tool {
             return GeneralVector(std::move(vec));
         }
 
+        inline GeneralVector subvector(size_t low, size_t high) {
+            if (complexes_) {
+                return GeneralVector(vector<complex<double>>(complexes_->begin() + low, complexes_->begin() + high));
+            } else if (integers_) {
+                return GeneralVector(vector<uint64_t>(integers_->begin() + low, integers_->begin() + high));
+            } else {
+                return GeneralVector(vector<double>(doubles_->begin() + low, doubles_->begin() + high));
+            }
+        }
+
+        inline GeneralVector element(size_t index) {
+            return subvector(index, index + 1);
+        }
+
         inline bool is_complexes() const {
             return complexes_.has_value();
         }
@@ -364,7 +378,9 @@ namespace tool {
 
     public:
         GeneralHeContext(bool device, SchemeType scheme, size_t n, size_t log_t, vector<size_t> log_qi, 
-            bool expand_mod_chain, uint64_t seed, double input_max = 0, double scale = 0, double tolerance = 1e-4);
+            bool expand_mod_chain, uint64_t seed, double input_max = 0, double scale = 0, double tolerance = 1e-4,
+            bool to_device_after_keygeneration = false
+        );
         ~GeneralHeContext();
 
         inline HeContextPointer context() const {

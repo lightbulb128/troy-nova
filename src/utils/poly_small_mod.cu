@@ -392,7 +392,7 @@ namespace troy {namespace utils {
 
             size_t index = (shift + k) & mask;
             size_t result_index = i * moduli.size() * degree + j * degree + index;
-            if (polys[idx] == 0 || (shift & degree) == 0) {
+            if (polys[idx] == 0 || ((shift + k) & degree) == 0) {
                 result[result_index] = polys[idx];
             } else {
                 result[result_index] = modulus_value - polys[idx];

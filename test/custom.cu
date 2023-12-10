@@ -19,56 +19,36 @@ void ASSERT_TRUE(bool condition) {
         printf("ASSERTION FAILED\n");
     }
 }
-
-
-void test_keyswitching(const GeneralHeContext& context) {
-    uint64_t t = context.t();
-    double scale = context.scale();
-    double tolerance = context.tolerance();
-
-    // std::cerr << "t = " << t << "\n";
-    // std::cerr << "qs = " << context.context()->key_context_data().value()->parms().coeff_modulus() << "\n";
-    // std::cerr << "secret_key = " << context.key_generator().secret_key().data() << "\n";
-
-    // create another keygenerator
-    KeyGenerator keygen_other = KeyGenerator(context.context());
-    SecretKey secret_key_other = keygen_other.secret_key();
-
-    // std::cerr << "secret_key_other = " << secret_key_other.data() << "\n";
-
-    Encryptor encryptor_other = Encryptor(context.context());
-    encryptor_other.set_secret_key(secret_key_other);
-
-    KSwitchKeys kswitch_key = context.key_generator().create_keyswitching_key(secret_key_other, false);
-    size_t kn = kswitch_key.data()[0].size();
-    for (size_t i = 0; i < kn; i++) {
-        // std::cerr << "ks[" << i << "].data() = " << kswitch_key.data()[0][i].data() << "\n";
-    }
-
-
-    GeneralVector message = GeneralVector(vector<uint64_t>{ 1, 2, 3, 4 });
-    Plaintext encoded = context.encoder().encode_polynomial(message, std::nullopt, scale);
-
-    // std::cerr << "encoded.data() = " << encoded.data() << "\n";
-
-
-    Ciphertext encrypted = encryptor_other.encrypt_symmetric_new(encoded, false);
-
-    // std::cerr << "encrypted.data() = " << encrypted.data() << "\n";
-
-    Ciphertext switched = context.evaluator().apply_keyswitching_new(encrypted, kswitch_key);
-    Plaintext decrypted = context.decryptor().decrypt_new(switched);
-    GeneralVector result = context.encoder().decode_polynomial(decrypted);
-    GeneralVector truth = message;
-    // std::cout << "message: " << message << "\n";
-    // std::cout << "result:  " << result << "\n"; 
-    ASSERT_TRUE(truth.near_equal(result, tolerance));
-}
     
 
 int main() {
-    GeneralHeContext ghe(true, SchemeType::BFV, 8, 20, { 60, 60, 60 }, true, 0x123, 0);
-    test_keyswitching(ghe);
+    GeneralHeContext gheh(false, SchemeType::BFV, 8, 20, { 60, 60, 60 }, true, 0x123, 0);
+    GeneralHeContext ghed( true, SchemeType::BFV, 8, 20, { 60, 60, 60 }, true, 0x123, 0);
+    
+    uint64_t t = gheh.t();
+    double scale = gheh.scale();
+    double tolerance = gheh.tolerance();
+
+    GeneralVector message = gheh.random_polynomial_full();
+    Plaintext encoded = gheh.encoder().encode_polynomial(message, std::nullopt, scale);
+    Ciphertext encrypted = gheh.encryptor().encrypt_asymmetric_new(encoded);
+    Ciphertext encrypted_device = encrypted.to_device();
+
+    vector<size_t> terms = {1};
+    for (size_t term : terms) {
+        auto extracted_device = ghed.evaluator().extract_lwe_new(encrypted_device, term);
+        auto extracted = extracted_device.to_host();
+        // auto extracted = extracted_device.to_host();
+        // auto assembled_device = ghed.evaluator().assemble_lwe_new(extracted_device);
+        auto assembled = gheh.evaluator().assemble_lwe_new(extracted);
+        if (gheh.params_host().scheme() == SchemeType::CKKS) {
+            gheh.evaluator().transform_to_ntt_inplace(assembled);
+        }
+        auto decrypted = gheh.decryptor().decrypt_new(assembled);
+        auto decoded = gheh.encoder().decode_polynomial(decrypted);
+        ASSERT_TRUE(message.element(term).near_equal(decoded.element(0), tolerance));
+    }
+
     return 0;
 }
 
