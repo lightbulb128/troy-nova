@@ -30,6 +30,7 @@ if(TROY_TEST)
 
         lwe.cu
         
+        app/matmul.cu
         
     )
 

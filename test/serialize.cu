@@ -318,4 +318,85 @@ namespace serialize {
         test_kswitch_keys(ghe);
         utils::MemoryPool::Destroy();
     }
+    
+    void reserialize_terms(Ciphertext& t, HeContextPointer context, const std::vector<size_t>& terms) {
+        stringstream ss;
+        t.save_terms(ss, context, terms);
+        ASSERT_TRUE(t.serialized_terms_size(context, terms) == ss.str().size());
+        t = Ciphertext::load_terms_new(ss, context, terms);
+    }
+
+    void test_ciphertext_terms(const GeneralHeContext& context) {
+        double scale = context.scale();
+        double tolerance = context.tolerance();
+
+        std::vector<size_t> terms = { 1, 3, 5, 7 };
+
+        // without seed
+        GeneralVector message = context.random_polynomial_full();
+        Plaintext encoded = context.encoder().encode_polynomial(message, std::nullopt, scale);
+        Ciphertext encrypted = context.encryptor().encrypt_symmetric_new(encoded, false);
+        reserialize_terms(encrypted, context.context(), terms);
+        Plaintext decrypted = context.decryptor().decrypt_new(encrypted);
+        GeneralVector decoded = context.encoder().decode_polynomial(decrypted);
+        for (size_t term: terms) {
+            ASSERT_TRUE(message.element(term).near_equal(decoded.element(term), tolerance));
+        }
+
+        // with seed
+        message = context.random_polynomial_full();
+        encoded = context.encoder().encode_polynomial(message, std::nullopt, scale);
+        encrypted = context.encryptor().encrypt_symmetric_new(encoded, true);
+        reserialize_terms(encrypted, context.context(), terms);
+        decrypted = context.decryptor().decrypt_new(encrypted);
+        decoded = context.encoder().decode_polynomial(decrypted);
+        for (size_t term: terms) {
+            ASSERT_TRUE(message.element(term).near_equal(decoded.element(term), tolerance));
+        }
+
+        // one multiplication
+        message = context.random_polynomial_full();
+        encoded = context.encoder().encode_polynomial(message, std::nullopt, scale);
+        encrypted = context.encryptor().encrypt_asymmetric_new(encoded);
+        Ciphertext multiplied = context.evaluator().multiply_new(encrypted, encrypted);
+        reserialize_terms(multiplied, context.context(), terms);
+        decrypted = context.decryptor().decrypt_new(multiplied);
+        decoded = context.encoder().decode_polynomial(decrypted);
+        
+        Ciphertext multiplied_truth = context.evaluator().multiply_new(encrypted, encrypted);
+        decrypted = context.decryptor().decrypt_new(multiplied_truth);
+        GeneralVector truth = context.encoder().decode_polynomial(decrypted);
+        for (size_t term: terms) {
+            ASSERT_TRUE(truth.element(term).near_equal(decoded.element(term), tolerance));
+        }
+        
+    }
+
+    TEST(Serialize, HostBFVCiphertextTerms) {
+        GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_ciphertext_terms(ghe);
+    }
+    TEST(Serialize, HostBGVCiphertextTerms) {
+        GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_ciphertext_terms(ghe);
+    }
+    TEST(Serialize, HostCKKSCiphertextTerms) {
+        GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1<<16, 1e-2);
+        test_ciphertext_terms(ghe);
+    }
+    TEST(Serialize, DeviceBFVCiphertextTerms) {
+        GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_ciphertext_terms(ghe);
+        utils::MemoryPool::Destroy();
+    }
+    TEST(Serialize, DeviceBGVCiphertextTerms) {
+        GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_ciphertext_terms(ghe);
+        utils::MemoryPool::Destroy();
+    }
+    TEST(Serialize, DeviceCKKSCiphertextTerms) {
+        GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1<<16, 1e-2);
+        test_ciphertext_terms(ghe);
+        utils::MemoryPool::Destroy();
+    }
 }

@@ -19,6 +19,8 @@ namespace troy {namespace rlwe {
         Ciphertext& destination
     ) {
 
+        destination.seed() = 0;
+
         bool device = pk.on_device();
         
         std::optional<ContextDataPointer> context_data_optional = context->get_context_data(parms_id);
@@ -119,6 +121,7 @@ namespace troy {namespace rlwe {
         Ciphertext& destination
     ) {
         
+        destination.seed() = 0;
         bool device = sk.on_device();
         
         std::optional<ContextDataPointer> context_data_optional = context->get_context_data(parms_id);

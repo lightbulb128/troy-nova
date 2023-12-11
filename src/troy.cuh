@@ -17,3 +17,5 @@
 #include "lwe_ciphertext.cuh"
 #include "modulus.cuh"
 #include "plaintext.cuh"
+
+#include "app/matmul.cuh"

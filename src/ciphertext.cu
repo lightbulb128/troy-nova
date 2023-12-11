@@ -108,6 +108,10 @@ namespace troy {
         this->is_ntt_form_ = flags & 1;
         bool contains_seed = flags & 2;
         bool device = flags & 4;
+        bool terms = flags & 8;
+        if (terms) {
+            throw std::logic_error("[Ciphertext::load] Trying to call load with ciphertext with only terms saved.");
+        }
         this->data().resize(0);
         this->data().to_host_inplace();
 
@@ -162,6 +166,154 @@ namespace troy {
         } else {
             size += this->poly_modulus_degree() * this->coeff_modulus_size() * this->polynomial_count() * sizeof(uint64_t); // data
         }
+        return size;
+    }
+
+    void Ciphertext::save_terms(std::ostream& stream, HeContextPointer context, const std::vector<size_t>& terms) const {
+        serialize::save_object(stream, this->parms_id());
+        serialize::save_object(stream, this->polynomial_count());
+        serialize::save_object(stream, this->coeff_modulus_size());
+        serialize::save_object(stream, this->poly_modulus_degree());
+        unsigned char flags = 0;
+        flags |= static_cast<unsigned char>(this->is_ntt_form());
+        flags |= static_cast<unsigned char>(this->contains_seed()) << 1;
+        flags |= static_cast<unsigned char>(this->on_device()) << 2;
+        flags |= 1 << 3; // terms
+        serialize::save_object(stream, flags);
+
+        SchemeType scheme = context->key_context_data().value()->parms().scheme();
+        if (scheme == SchemeType::CKKS) {
+            serialize::save_object(stream, this->scale());
+        }
+        if (scheme == SchemeType::BGV) {
+            serialize::save_object(stream, this->correction_factor());
+        }
+
+        // save data
+        size_t poly_size = this->poly_modulus_degree() * this->coeff_modulus_size();
+        if (this->contains_seed()) {
+            if (this->polynomial_count() != 2) {
+                throw std::logic_error("[Ciphertext::save] Ciphertext contains seed but polynomial count is not 2.");
+            }
+            // save seed
+            serialize::save_object(stream, this->seed());
+        }
+
+        utils::ConstSlice<uint64_t> c0(nullptr, 0, false);
+        utils::Array<uint64_t> temp_buffer(0, false);
+        bool device = this->on_device();
+        if (is_ntt_form_) {
+            utils::ConstSlice<utils::NTTTables> ntt_tables = context->get_context_data(this->parms_id()).value()->small_ntt_tables();
+            temp_buffer = utils::Array<uint64_t>::create_and_copy_from_slice(this->poly(0));
+            utils::inverse_ntt_negacyclic_harvey_p(temp_buffer.reference(), this->poly_modulus_degree(), ntt_tables);
+            temp_buffer.to_host_inplace();
+            c0 = temp_buffer.const_reference();
+        } else {
+            if (device) {
+                temp_buffer = utils::Array<uint64_t>::create_and_copy_from_slice(this->poly(0));
+                temp_buffer.to_host_inplace();
+                c0 = temp_buffer.const_reference();
+            } else {
+                c0 = this->poly(0);
+            }
+        }
+        // save c0
+        for (size_t j = 0; j < this->coeff_modulus_size(); j++) {
+            for (size_t i = 0; i < terms.size(); i++) {
+                serialize::save_object(stream, c0[j * this->poly_modulus_degree() + terms[i]]);
+            }
+        }
+        // save remaining polys
+        size_t start_polynomial = contains_seed() ? 2 : 1;
+        if (this->on_device()) {
+            utils::Array<uint64_t> data(this->data().size() - poly_size * start_polynomial, false);
+            data.copy_from_slice(this->polys(start_polynomial, this->polynomial_count_));
+            serialize::save_array(stream, data.raw_pointer(), data.size());
+        } else {
+            utils::ConstSlice<uint64_t> data = this->polys(start_polynomial, this->polynomial_count_);
+            serialize::save_array(stream, data.raw_pointer(), data.size());
+        }
+    }
+
+    
+    void Ciphertext::load_terms(std::istream& stream, HeContextPointer context, const std::vector<size_t>& terms) {
+        serialize::load_object(stream, this->parms_id());
+        serialize::load_object(stream, this->polynomial_count_);
+        serialize::load_object(stream, this->coeff_modulus_size_);
+        serialize::load_object(stream, this->poly_modulus_degree_);
+
+        unsigned char flags;
+        serialize::load_object(stream, flags);
+        this->is_ntt_form_ = flags & 1;
+        bool contains_seed = flags & 2;
+        bool device = flags & 4;
+        bool terms_flag = flags & 8;
+        if (!terms_flag) {
+            throw std::logic_error("[Ciphertext::load_terms] Trying to call load_terms with ciphertext with all terms saved.");
+        }
+        this->data().resize(0);
+        this->data().to_host_inplace();
+
+        SchemeType scheme = context->key_context_data().value()->parms().scheme();
+        if (scheme == SchemeType::CKKS) {
+            serialize::load_object(stream, this->scale_);
+        } else {
+            this->scale() = 1.0;
+        }
+        if (scheme == SchemeType::BGV) {
+            serialize::load_object(stream, this->correction_factor_);
+        } else {
+            this->correction_factor() = 1.0;
+        }
+
+        size_t poly_size = this->poly_modulus_degree_ * this->coeff_modulus_size_;
+        if (contains_seed) {
+            this->data().resize(poly_size * 2);
+            serialize::load_object(stream, this->seed_);
+        } else {
+            this->data().resize(poly_size * polynomial_count_);
+            this->seed() = 0;
+        }
+
+        utils::Slice<uint64_t> c0 = this->poly(0);
+        for (size_t j = 0; j < this->coeff_modulus_size(); j++) {
+            for (size_t i = 0; i < terms.size(); i++) {
+                serialize::load_object(stream, c0[j * this->poly_modulus_degree() + terms[i]]);
+            }
+        }
+        // load remaining polys
+        size_t start_polynomial = contains_seed ? 2 : 1;
+        utils::Slice<uint64_t> polys = this->polys(start_polynomial, this->polynomial_count_);
+        serialize::load_array(stream, polys.raw_pointer(), polys.size());
+        if (device) this->data().to_device_inplace();
+        if (is_ntt_form_) {
+            utils::ConstSlice<utils::NTTTables> ntt_tables = context->get_context_data(this->parms_id()).value()->small_ntt_tables();
+            utils::ntt_negacyclic_harvey_p(this->poly(0), this->poly_modulus_degree(), ntt_tables);
+        }
+        // expand seed
+        if (contains_seed) this->expand_seed(context);
+    }
+
+    size_t Ciphertext::serialized_terms_size(HeContextPointer context, const std::vector<size_t>& terms) const {
+        size_t size = 0;
+        size += sizeof(ParmsID); // parms_id
+        size += sizeof(size_t); // polynomial_count
+        size += sizeof(size_t); // coeff_modulus_size
+        size += sizeof(size_t); // poly_modulus_degree
+        size += sizeof(unsigned char); // flags
+        SchemeType scheme = context->key_context_data().value()->parms().scheme();
+        if (scheme == SchemeType::CKKS) {
+            size += sizeof(double); // scale
+        }
+        if (scheme == SchemeType::BGV) {
+            size += sizeof(double); // correction_factor
+        }
+        if (this->contains_seed()) {
+            size += sizeof(uint64_t); // seed
+        }
+        size += terms.size() * sizeof(uint64_t) * this->coeff_modulus_size(); // c0
+        size_t start_polynomial = this->contains_seed() ? 2 : 1;
+        size += this->poly_modulus_degree() * this->coeff_modulus_size() * (this->polynomial_count() - start_polynomial) * sizeof(uint64_t); // all polynomials after c0
         return size;
     }
 }

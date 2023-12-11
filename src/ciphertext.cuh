@@ -243,6 +243,15 @@ namespace troy {
         }
         size_t serialized_size(HeContextPointer context) const;
 
+        void save_terms(std::ostream& stream, HeContextPointer context, const std::vector<size_t>& terms) const;
+        void load_terms(std::istream& stream, HeContextPointer context, const std::vector<size_t>& terms);
+        inline static Ciphertext load_terms_new(std::istream& stream, HeContextPointer context, const std::vector<size_t>& terms) {
+            Ciphertext result;
+            result.load_terms(stream, context, terms);
+            return result;
+        }
+        size_t serialized_terms_size(HeContextPointer context, const std::vector<size_t>& terms) const;
+
     };
 
 }

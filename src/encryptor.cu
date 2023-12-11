@@ -38,6 +38,7 @@ namespace troy {
         }
         
         // Resize destination and save results
+        destination.seed() = 0;
         bool device = (is_asymmetric) ? this->public_key_->on_device() : this->secret_key_->on_device();
         if (device) destination.to_device_inplace();
         else destination.to_host_inplace();
