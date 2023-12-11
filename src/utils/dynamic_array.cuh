@@ -135,6 +135,14 @@ namespace troy {namespace utils {
             this->inner = std::move(new_inner);
         }
 
+        inline T* raw_pointer() {
+            return inner.raw_pointer();
+        }
+
+        inline const T* raw_pointer() const {
+            return inner.raw_pointer();
+        }
+
     };
 
     template <typename T>

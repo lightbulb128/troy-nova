@@ -3,6 +3,8 @@
 #include "encryption_parameters.cuh"
 #include "utils/dynamic_array.cuh"
 #include "utils/reduction.cuh"
+#include "he_context.cuh"
+#include "utils/serialize.h"
 
 namespace troy {
 
@@ -139,10 +141,16 @@ namespace troy {
         }
 
         inline void to_device_inplace() {
+            if (this->contains_seed()) {
+                throw std::logic_error("[Ciphertext::to_device_inplace] Cannot copy ciphertext with seed to device");
+            }
             data_.to_device_inplace();
         }
 
         inline void to_host_inplace() {
+            if (this->contains_seed()) {
+                throw std::logic_error("[Ciphertext::to_host_inplace] Cannot copy ciphertext with seed to host");
+            }
             data_.to_host_inplace();
         }
 
@@ -223,6 +231,17 @@ namespace troy {
         }
 
         bool is_transparent() const;
+
+        void expand_seed(HeContextPointer context);
+
+        void save(std::ostream& stream, HeContextPointer context) const;
+        void load(std::istream& stream, HeContextPointer context);
+        inline static Ciphertext load_new(std::istream& stream, HeContextPointer context) {
+            Ciphertext result;
+            result.load(stream, context);
+            return result;
+        }
+        size_t serialized_size(HeContextPointer context) const;
 
     };
 

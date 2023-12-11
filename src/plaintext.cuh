@@ -1,6 +1,7 @@
 #pragma once
 #include "encryption_parameters.cuh"
 #include "utils/dynamic_array.cuh"
+#include "utils/serialize.h"
 
 namespace troy {
 
@@ -128,6 +129,15 @@ namespace troy {
         inline bool is_ntt_form() const {
             return this->parms_id_ != parms_id_zero;
         }
+
+        void save(std::ostream& stream) const;
+        void load(std::istream& stream);
+        inline static Plaintext load_new(std::istream& stream) {
+            Plaintext result;
+            result.load(stream);
+            return result;
+        }
+        size_t serialized_size() const;
         
     };
 

@@ -13,6 +13,47 @@ namespace troy {
         inline KSwitchKeys(): parms_id_(parms_id_zero) {}
         inline KSwitchKeys(ParmsID parms_id, std::vector<std::vector<PublicKey>> keys): parms_id_(parms_id), keys(keys) {}
 
+        inline KSwitchKeys clone() const {
+            KSwitchKeys result;
+            result.parms_id_ = parms_id_;
+            result.keys.resize(keys.size());
+            for (size_t i = 0; i < keys.size(); i++) {
+                result.keys[i].resize(keys[i].size());
+                for (size_t j = 0; j < keys[i].size(); j++) {
+                    result.keys[i][j] = keys[i][j].clone();
+                }
+            }
+            return result;
+        }
+
+        inline void to_device_inplace() {
+            for (auto& v : keys) {
+                for (auto& key : v) {
+                    key.to_device_inplace();
+                }
+            }
+        }
+
+        inline void to_host_inplace() {
+            for (auto& v : keys) {
+                for (auto& key : v) {
+                    key.to_host_inplace();
+                }
+            }
+        }
+
+        inline KSwitchKeys to_device() const {
+            KSwitchKeys result = clone();
+            result.to_device_inplace();
+            return result;
+        }
+
+        inline KSwitchKeys to_host() const {
+            KSwitchKeys result = clone();
+            result.to_host_inplace();
+            return result;
+        }
+
         inline const ParmsID& parms_id() const {
             return parms_id_;
         }
@@ -57,6 +98,45 @@ namespace troy {
         inline std::vector<PublicKey>& operator[](size_t index) {
             return keys[index];
         }
+        
+        inline bool contains_seed() const {
+            // iterate over all keys
+            bool flag = false;
+            for (auto& v : keys) {
+                for (auto& key : v) {
+                    if (key.contains_seed()) {
+                        flag = true;
+                        break;
+                    }
+                }
+                if (flag) break;
+            }
+            return flag;
+        }
+        inline void expand_seed(HeContextPointer context) {
+            // iterate over all keys
+            bool flag = false;
+            for (auto& v : keys) {
+                for (auto& key : v) {
+                    if (key.contains_seed()) {
+                        key.expand_seed(context);
+                        flag = true;
+                    }
+                }
+            }
+            if (!flag) {
+                throw std::runtime_error("[KSwitchKeys::expand_seed] KSwitchKeys does not contain seed.");
+            }
+        }
+
+        void save(std::ostream& stream, HeContextPointer context) const;
+        void load(std::istream& stream, HeContextPointer context);
+        inline static KSwitchKeys load_new(std::istream& stream, HeContextPointer context) {
+            KSwitchKeys result;
+            result.load(stream, context);
+            return result;
+        }
+        size_t serialized_size(HeContextPointer context) const;
 
     };
 
@@ -67,14 +147,36 @@ namespace troy {
     public:
         inline RelinKeys() {}
         inline RelinKeys(KSwitchKeys&& keys): keys(std::move(keys)) {}
-        
+
+        inline RelinKeys clone() const {
+            RelinKeys result;
+            result.keys = keys.clone();
+            return result;
+        }
+        inline void to_device_inplace() {
+            keys.to_device_inplace();
+        }
+        inline void to_host_inplace() {
+            keys.to_host_inplace();
+        }
+        inline RelinKeys to_device() const {
+            RelinKeys result = clone();
+            result.to_device_inplace();
+            return result;
+        }
+        inline RelinKeys to_host() const {
+            RelinKeys result = clone();
+            result.to_host_inplace();
+            return result;
+        }
+
         static inline size_t get_index(size_t key_power) {
             if (key_power < 2) {
                 throw std::invalid_argument("[RelinKeys::get_index] key_power must be at least 2.");
             }
             return key_power - 2;
         }
-
+        
         inline bool has_key(size_t key_power) const {
             size_t index = get_index(key_power);
             return index < keys.data().size() && keys.data()[index].size() > 0;
@@ -104,6 +206,27 @@ namespace troy {
             return keys;
         }
 
+        inline bool contains_seed() const {
+            return keys.contains_seed();
+        }
+        inline void expand_seed(HeContextPointer context) {
+            keys.expand_seed(context);
+        }
+        
+        inline void save(std::ostream& stream, HeContextPointer context) const {
+            keys.save(stream, context);
+        }
+        inline void load(std::istream& stream, HeContextPointer context) {
+            keys.load(stream, context);
+        }
+        inline static RelinKeys load_new(std::istream& stream, HeContextPointer context) {
+            RelinKeys result;
+            result.load(stream, context);
+            return result;
+        }
+        size_t serialized_size(HeContextPointer context) const {
+            return keys.serialized_size(context);
+        }
     };
 
     class GaloisKeys {
@@ -113,6 +236,28 @@ namespace troy {
     public:
         inline GaloisKeys() {}
         inline GaloisKeys(KSwitchKeys&& keys): keys(std::move(keys)) {}
+
+        inline GaloisKeys clone() const {
+            GaloisKeys result;
+            result.keys = keys.clone();
+            return result;
+        }
+        inline void to_device_inplace() {
+            keys.to_device_inplace();
+        }
+        inline void to_host_inplace() {
+            keys.to_host_inplace();
+        }
+        inline GaloisKeys to_device() const {
+            GaloisKeys result = clone();
+            result.to_device_inplace();
+            return result;
+        }
+        inline GaloisKeys to_host() const {
+            GaloisKeys result = clone();
+            result.to_host_inplace();
+            return result;
+        }
         
         static inline size_t get_index(size_t galois_element) {
             return utils::GaloisTool::get_index_from_element(galois_element);
@@ -147,5 +292,26 @@ namespace troy {
             return keys;
         }
 
+        inline bool contains_seed() const {
+            return keys.contains_seed();
+        }
+        inline void expand_seed(HeContextPointer context) {
+            keys.expand_seed(context);
+        }
+
+        inline void save(std::ostream& stream, HeContextPointer context) const {
+            keys.save(stream, context);
+        }
+        inline void load(std::istream& stream, HeContextPointer context) {
+            keys.load(stream, context);
+        }
+        inline static GaloisKeys load_new(std::istream& stream, HeContextPointer context) {
+            GaloisKeys result;
+            result.load(stream, context);
+            return result;
+        }
+        size_t serialized_size(HeContextPointer context) const {
+            return keys.serialized_size(context);
+        }
     };
 }

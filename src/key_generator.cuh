@@ -50,11 +50,11 @@ namespace troy {
         KeyGenerator(HeContextPointer context);
         KeyGenerator(HeContextPointer context, const SecretKey& secret_key);
 
-        inline PublicKey create_public_key(bool save_seed) {
+        inline PublicKey create_public_key(bool save_seed) const {
             return generate_pk(save_seed, nullptr);
         }
 
-        inline PublicKey create_public_key_with_u_prng(bool save_seed, utils::RandomGenerator& u_prng) {
+        inline PublicKey create_public_key_with_u_prng(bool save_seed, utils::RandomGenerator& u_prng) const {
             return generate_pk(save_seed, &u_prng);
         }
 

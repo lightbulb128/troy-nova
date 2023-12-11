@@ -67,6 +67,21 @@ namespace troy {
             return sk.data();
         }
 
+        inline void save(std::ostream& stream) const {
+            sk.save(stream);
+        }
+        inline void load(std::istream& stream) {
+            sk.load(stream);
+        }
+        inline static SecretKey load_new(std::istream& stream) {
+            SecretKey sk;
+            sk.load(stream);
+            return sk;
+        }
+        inline size_t serialized_size() const {
+            return sk.serialized_size();
+        }
+
     };
 
     class PublicKey {
@@ -130,6 +145,27 @@ namespace troy {
             return pk.data();
         }
 
+        inline bool contains_seed() const {
+            return pk.contains_seed();
+        }
+        inline void expand_seed(HeContextPointer context) {
+            pk.expand_seed(context);
+        }
+
+        inline void save(std::ostream& stream, HeContextPointer context) const {
+            pk.save(stream, context);
+        }
+        inline void load(std::istream& stream, HeContextPointer context) {
+            pk.load(stream, context);
+        }
+        inline static PublicKey load_new(std::istream& stream, HeContextPointer context) {
+            Ciphertext result;
+            result.load(stream, context);
+            return result;
+        }
+        inline size_t serialized_size(HeContextPointer context) const {
+            return pk.serialized_size(context);
+        }
     };
 
 }

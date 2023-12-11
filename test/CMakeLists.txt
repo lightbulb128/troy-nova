@@ -26,8 +26,10 @@ if(TROY_TEST)
 
         test_adv.cu
         evaluator.cu
+        serialize.cu
 
         lwe.cu
+        
         
     )
 

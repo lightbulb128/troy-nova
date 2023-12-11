@@ -173,6 +173,8 @@ namespace troy {namespace rlwe {
             c1_new_prng.sample_poly_uniform(destination.poly(1), coeff_count, coeff_modulus);
             // Transform the c1 into NTT representation
             utils::ntt_negacyclic_harvey_p(destination.poly(1), coeff_count, ntt_tables);
+        }
+        if (save_seed) {
             destination.seed() = seed;
         }
 

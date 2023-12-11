@@ -273,6 +273,7 @@ namespace troy { namespace utils {
         
         __host__ __device__ bool on_device() const { return device; }
         __host__ __device__ T* raw_pointer() { return pointer; }
+        __host__ __device__ const T* raw_pointer() const { return pointer; }
 
         Array(Array&& other) : pointer(other.pointer), len(other.len), device(other.device) { 
             other.pointer = nullptr;
