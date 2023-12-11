@@ -237,6 +237,7 @@ namespace encryptor {
 
     TEST(EncryptorTest, DeviceBFV) {
         test_bfv(true);
+        utils::MemoryPool::Destroy();
     }
 
     void test_bgv(bool device) {
@@ -251,6 +252,7 @@ namespace encryptor {
 
     TEST(EncryptorTest, DeviceBGV) {
         test_bgv(true);
+        utils::MemoryPool::Destroy();
     }
 
     void test_ckks(bool device) {
@@ -265,5 +267,6 @@ namespace encryptor {
 
     TEST(EncryptorTest, DeviceCKKS) {
         test_ckks(true);
+        utils::MemoryPool::Destroy();
     }
 }

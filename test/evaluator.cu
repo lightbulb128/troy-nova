@@ -42,14 +42,17 @@ namespace evaluator {
     TEST(EvaluatorTest, DeviceBFVNegate) {
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_negate(ghe);
+        utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceBGVNegate) {
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_negate(ghe);
+        utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceCKKSNegate) {
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1<<16, 1e-2);
         test_negate(ghe);
+        utils::MemoryPool::Destroy();
     }
 
     void test_add_subtract(const GeneralHeContext& context) {
@@ -91,20 +94,25 @@ namespace evaluator {
     TEST(EvaluatorTest, DeviceBFVAdd) {
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_add_subtract(ghe);
+        utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceBGVAdd) {
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_add_subtract(ghe);
+        utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceCKKSAdd) {
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 40, 40, 40 }, false, 0x123, 10, 1<<20, 1e-2);
         test_add_subtract(ghe);
+        utils::MemoryPool::Destroy();
     }
 
     void test_multiply(const GeneralHeContext& context) {
         uint64_t t = context.t();
         double scale = context.scale();
         double tolerance = context.tolerance();
+
+        std::cerr << context.params_host() << std::endl;
 
         GeneralVector message1 = context.random_simd_full();
         GeneralVector message2 = context.random_simd_full();
@@ -145,14 +153,17 @@ namespace evaluator {
     TEST(EvaluatorTest, DeviceBFVMultiply) {
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_multiply(ghe);
+        utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceBGVMultiply) {
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_multiply(ghe);
+        utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceCKKSMultiply) {
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1ull<<20, 1e-2);
         test_multiply(ghe);
+        utils::MemoryPool::Destroy();
     }
 
     void test_square(const GeneralHeContext& context) {
@@ -185,14 +196,17 @@ namespace evaluator {
     TEST(EvaluatorTest, DeviceBFVSquare) {
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_square(ghe);
+        utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceBGVSquare) {
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_square(ghe);
+        utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceCKKSSquare) {
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1ull<<20, 1e-2);
         test_square(ghe);
+        utils::MemoryPool::Destroy();
     }
 
     void test_keyswitching(const GeneralHeContext& context) {
@@ -233,14 +247,17 @@ namespace evaluator {
     TEST(EvaluatorTest, DeviceBFVKeySwitching) {
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_keyswitching(ghe);
+        utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceBGVKeySwitching) {
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_keyswitching(ghe);
+        utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceCKKSKeySwitching) {
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
         test_keyswitching(ghe);
+        utils::MemoryPool::Destroy();
     }
 
     void test_relinearize(const GeneralHeContext& context) {
@@ -289,14 +306,17 @@ namespace evaluator {
     TEST(EvaluatorTest, DeviceBFVRelinearize) {
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_relinearize(ghe);
+        utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceBGVRelinearize) {
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_relinearize(ghe);
+        utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceCKKSRelinearize) {
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
         test_relinearize(ghe);
+        utils::MemoryPool::Destroy();
     }
 
 
@@ -329,14 +349,17 @@ namespace evaluator {
     TEST(EvaluatorTest, DeviceBFVModSwitchToNext) {
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_mod_switch_to_next(ghe);
+        utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceBGVModSwitchToNext) {
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_mod_switch_to_next(ghe);
+        utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceCKKSModSwitchToNext) {
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
         test_mod_switch_to_next(ghe);
+        utils::MemoryPool::Destroy();
     }
 
     void test_mod_switch_plain_to_next(const GeneralHeContext& context) {
@@ -361,6 +384,7 @@ namespace evaluator {
     TEST(EvaluatorTest, DeviceCKKSModSwitchPlainToNext) {
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
         test_mod_switch_plain_to_next(ghe);
+        utils::MemoryPool::Destroy();
     }
 
     void test_rescale_to_next(const GeneralHeContext& context) {
@@ -390,6 +414,7 @@ namespace evaluator {
     TEST(EvaluatorTest, DeviceCKKSRescaleToNext) {
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
         test_rescale_to_next(ghe);
+        utils::MemoryPool::Destroy();
     }
 
     void test_add_subtract_plain(const GeneralHeContext& context) {
@@ -430,14 +455,17 @@ namespace evaluator {
     TEST(EvaluatorTest, DeviceBFVAddPlain) {
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_add_subtract_plain(ghe);
+        utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceBGVAddPlain) {
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_add_subtract_plain(ghe);
+        utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceCKKSAddPlain) {
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 40, 40, 40 }, false, 0x123, 10, 1<<20, 1e-2);
         test_add_subtract_plain(ghe);
+        utils::MemoryPool::Destroy();
     }
 
     void test_multiply_plain(const GeneralHeContext& context) {
@@ -491,14 +519,17 @@ namespace evaluator {
     TEST(EvaluatorTest, DeviceBFVMultiplyPlain) {
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_multiply_plain(ghe);
+        utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceBGVMultiplyPlain) {
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_multiply_plain(ghe);
+        utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceCKKSMultiplyPlain) {
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1ull<<20, 1e-2);
         test_multiply_plain(ghe);
+        utils::MemoryPool::Destroy();
     }
 
     void test_rotate(const GeneralHeContext& context) {
@@ -553,14 +584,17 @@ namespace evaluator {
     TEST(EvaluatorTest, DeviceBFVRotateRows) {
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_rotate(ghe);
+        utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceBGVRotateRows) {
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_rotate(ghe);
+        utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceCKKSRotateVector) {
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
         test_rotate(ghe);
+        utils::MemoryPool::Destroy();
     }
 
     void test_conjugate(const GeneralHeContext& context) {
@@ -599,14 +633,17 @@ namespace evaluator {
     TEST(EvaluatorTest, DeviceBFVRotateColumns) {
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_conjugate(ghe);
+        utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceBGVRotateColumns) {
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_conjugate(ghe);
+        utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceCKKSComplexConjugate) {
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
         test_conjugate(ghe);
+        utils::MemoryPool::Destroy();
     }
 
 }

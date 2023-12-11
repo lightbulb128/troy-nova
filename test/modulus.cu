@@ -112,6 +112,7 @@ namespace modulus {
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
+        utils::MemoryPool::Destroy();
     }
 
     TEST(Modulus, HostReduce) {
@@ -162,6 +163,7 @@ namespace modulus {
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
+        utils::MemoryPool::Destroy();
     }
 
 }

@@ -11,6 +11,27 @@ namespace troy {
         BGV
     };
 
+    inline std::ostream& operator << (std::ostream& os, const SchemeType& scheme_type) {
+        switch (scheme_type) {
+        case SchemeType::None:
+            os << "None";
+            break;
+        case SchemeType::BFV:
+            os << "BFV";
+            break;
+        case SchemeType::CKKS:
+            os << "CKKS";
+            break;
+        case SchemeType::BGV:
+            os << "BGV";
+            break;
+        default:
+            os << "Unknown";
+            break;
+        }
+        return os;
+    }
+
     using ParmsID = utils::HashFunction::HashBlock;
     extern const ParmsID parms_id_zero;
 
@@ -177,6 +198,8 @@ namespace troy {
         }
 
     };
+
+    std::ostream& operator << (std::ostream& os, const EncryptionParameters& parms);
 
     enum class SecurityLevel {
         None = 0,

@@ -40,6 +40,8 @@ namespace galois_tool {
         EXPECT_EQ(tool.get_index_from_element(3), 1);
         EXPECT_EQ(tool.get_index_from_element(11), 5);
         EXPECT_EQ(tool.get_index_from_element(9), 4);
+
+        MemoryPool::Destroy();
     }
 
     bool test_body_apply(bool device) {
@@ -81,6 +83,7 @@ namespace galois_tool {
 
     TEST(GaloisToolTest, DeviceApply) {
         EXPECT_TRUE(test_body_apply(true));
+        MemoryPool::Destroy();
     }
 
 }

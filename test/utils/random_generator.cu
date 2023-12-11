@@ -78,10 +78,12 @@ namespace random_generator {
 
     TEST(RandomGeneratorTest, HostSeededRNG) {
         ASSERT_TRUE(test_body_seeded_rng(false));
+        MemoryPool::Destroy();
     }
 
     TEST(RandomGeneratorTest, DeviceSeededRNG) {
         ASSERT_TRUE(test_body_seeded_rng(true));
+        MemoryPool::Destroy();
     }
 
     bool test_body_ternary_or_centered_binomial(bool device, bool ternary) {
@@ -139,6 +141,7 @@ namespace random_generator {
 
     TEST(RandomGeneratorTest, DeviceTernary) {
         ASSERT_TRUE(test_body_ternary_or_centered_binomial(true, true));
+        MemoryPool::Destroy();
     }
 
     TEST(RandomGeneratorTest, HostCenteredBinomial) {
@@ -147,6 +150,7 @@ namespace random_generator {
 
     TEST(RandomGeneratorTest, DeviceCenteredBinomial) {
         ASSERT_TRUE(test_body_ternary_or_centered_binomial(true, false));
+        MemoryPool::Destroy();
     }
 
     
@@ -197,6 +201,7 @@ namespace random_generator {
 
     TEST(RandomGeneratorTest, DeviceUniform) {
         ASSERT_TRUE(test_body_uniform(true));
+        MemoryPool::Destroy();
     }
 
 

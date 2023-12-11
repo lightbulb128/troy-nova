@@ -55,6 +55,7 @@ namespace uint_small_mod {
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
+        MemoryPool::Destroy();
     }
 
     __host__ __device__
@@ -105,6 +106,7 @@ namespace uint_small_mod {
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
+        MemoryPool::Destroy();
     }
 
     __host__ __device__
@@ -162,6 +164,7 @@ namespace uint_small_mod {
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
+        MemoryPool::Destroy();
     }
 
     __host__ __device__
@@ -211,6 +214,7 @@ namespace uint_small_mod {
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
+        MemoryPool::Destroy();
     }
 
     __host__ __device__
@@ -271,6 +275,7 @@ namespace uint_small_mod {
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
+        MemoryPool::Destroy();
     }
 
     __host__ __device__
@@ -333,6 +338,7 @@ namespace uint_small_mod {
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
+        MemoryPool::Destroy();
     }
 
     __host__ __device__
@@ -411,6 +417,7 @@ namespace uint_small_mod {
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
+        MemoryPool::Destroy();
     }
 
     __host__ __device__
@@ -473,6 +480,7 @@ namespace uint_small_mod {
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
+        MemoryPool::Destroy();
     }
 
 
@@ -524,6 +532,7 @@ namespace uint_small_mod {
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
+        MemoryPool::Destroy();
     }
 
     __host__ __device__
@@ -627,6 +636,7 @@ namespace uint_small_mod {
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
+        MemoryPool::Destroy();
     }
 
 
@@ -677,6 +687,7 @@ namespace uint_small_mod {
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
+        MemoryPool::Destroy();
     }
 
 }

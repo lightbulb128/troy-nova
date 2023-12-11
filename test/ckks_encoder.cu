@@ -108,6 +108,7 @@ namespace ckks_encoder {
 
     TEST(CKKSEncoderTest, DeviceSimd) {
         test_simd(true);
+        utils::MemoryPool::Destroy();
     }
 
     void test_double_polynomial(bool device) {
@@ -178,6 +179,7 @@ namespace ckks_encoder {
 
     TEST(CKKSEncoderTest, DeviceDoublePolynomial) {
         test_double_polynomial(true);
+        utils::MemoryPool::Destroy();
     }
 
     void test_integer_polynomial(bool device) {
@@ -247,6 +249,7 @@ namespace ckks_encoder {
 
     TEST(CKKSEncoderTest, DeviceIntegerPolynomial) {
         test_integer_polynomial(true);
+        utils::MemoryPool::Destroy();
     }
 
 }

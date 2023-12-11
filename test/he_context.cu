@@ -353,6 +353,7 @@ namespace he_context {
         context = HeContext::create(parms, true, SecurityLevel::None);
         context->to_device_inplace();
 
+        utils::MemoryPool::Destroy();
     }
 
 }

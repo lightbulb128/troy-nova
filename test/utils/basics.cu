@@ -23,6 +23,7 @@ namespace basics {
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
+        MemoryPool::Destroy();
     }
 
     TEST(Basics, HostBits) {
@@ -60,7 +61,6 @@ namespace basics {
         EXPECT_EQ(get_power_of_two(0), -1);
         EXPECT_EQ(get_power_of_two(16), 4);
         EXPECT_EQ(get_power_of_two(0x6666), -1);
-
     }
 
     __global__ void kernel_bits(Slice<bool> test_result) {
@@ -110,6 +110,7 @@ namespace basics {
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
+        MemoryPool::Destroy();
     }
 
     __host__ __device__ 
@@ -192,7 +193,6 @@ namespace basics {
         o2[0] = 0x61f9f5c87eafc04c; o2[1] = 0xafbb16475d48fbb5;
         o3[0] = 0xb25fcf0c814ac28e; o3[1] = 0x8cd95701509c2b7d;
         EXPECT_TRUE(test_add_uint128(o1_slice, o2_slice, o3_slice, 1));
-
     }
 
     TEST(Basics, DeviceAdd) {
@@ -201,6 +201,7 @@ namespace basics {
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
+        MemoryPool::Destroy();
     }
 
     __host__ __device__ 
@@ -341,6 +342,7 @@ namespace basics {
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
+        MemoryPool::Destroy();
     }
 
     __host__

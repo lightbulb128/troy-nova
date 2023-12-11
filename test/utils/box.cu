@@ -17,6 +17,7 @@ namespace box {
 
     TEST(Box, ItCompiles) {
         EXPECT_EQ(1, 1);
+        utils::MemoryPool::Destroy();
     }
 
     TEST(Box, HostBox) {
@@ -43,6 +44,7 @@ namespace box {
         f_ptr->set_num(14);
         EXPECT_EQ(f_ptr->get_num(), 14);
         EXPECT_EQ(f_box->get_num(), 14);
+        utils::MemoryPool::Destroy();
 
     }
 

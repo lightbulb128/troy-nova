@@ -27,6 +27,7 @@ namespace ntt {
         ASSERT_EQ(tables.coeff_count(), 1024);
         ASSERT_EQ(tables.coeff_count_power(), 10);
 
+        MemoryPool::Destroy();
     }
 
     TEST(NTT, PrimitiveRoots) {
@@ -46,6 +47,7 @@ namespace ntt {
         ASSERT_EQ(tables.root_powers()[1].operand, 288794978602139552ul);
         ASSERT_EQ(tables.root_powers()[2].operand, 178930308976060547ul);
         ASSERT_EQ(tables.root_powers()[3].operand, 748001537669050592ul);
+        MemoryPool::Destroy();
     }
 
     TEST(NTT, HostNegacyclicNTT) {
@@ -103,6 +105,7 @@ namespace ntt {
         // poly.to_host_inplace();
         // EXPECT_EQ(poly[0], 288794978602139553);
         // EXPECT_EQ(poly[1], 864126526004445282);
+        MemoryPool::Destroy();
     }
 
     TEST(NTT, HostInverseNegacyclicNTT) {
@@ -166,6 +169,7 @@ namespace ntt {
             EXPECT_EQ(poly[i], original[i]);
         }
 
+        MemoryPool::Destroy();
     }
 
 }

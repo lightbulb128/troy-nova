@@ -120,6 +120,7 @@ namespace rns_tool {
 
     TEST(RNSToolTest, DeviceDivideAndRoundQLastInplace) {
         ASSERT_TRUE(test_body_divide_and_round_q_last_inplace(true));
+        MemoryPool::Destroy();
     }
 
 
@@ -189,6 +190,7 @@ namespace rns_tool {
 
     TEST(RNSToolTest, DeviceDivideAndRoundQLastNTTInplace) {
         ASSERT_TRUE(test_body_divide_and_round_q_last_ntt_inplace(true));
+        MemoryPool::Destroy();
     }
 
 
@@ -256,6 +258,7 @@ namespace rns_tool {
 
     TEST(RNSToolTest, DeviceFastBConvSK) {
         ASSERT_TRUE(test_body_fast_b_conv_sk(true));
+        MemoryPool::Destroy();
     }
 
     
@@ -380,6 +383,7 @@ namespace rns_tool {
 
     TEST(RNSToolTest, DeviceMontgomeryReduction) {
         ASSERT_TRUE(test_body_montgomery_reduction(true));
+        MemoryPool::Destroy();
     }
 
     
@@ -490,6 +494,7 @@ namespace rns_tool {
 
     TEST(RNSToolTest, DeviceFastFloor) {
         ASSERT_TRUE(test_body_fast_floor(true));
+        MemoryPool::Destroy();
     }
 
 
@@ -583,6 +588,7 @@ namespace rns_tool {
 
     TEST(RNSToolTest, DeviceFastBConvMTilde) {
         ASSERT_TRUE(test_body_fast_b_conv_m_tilde(true));
+        MemoryPool::Destroy();
     }
 
     bool test_body_exact_scale_and_round(bool device) {
@@ -616,6 +622,7 @@ namespace rns_tool {
 
     TEST(RNSToolTest, DeviceExactScaleAndRound) {
         ASSERT_TRUE(test_body_exact_scale_and_round(true));
+        MemoryPool::Destroy();
     }
     
     
@@ -696,6 +703,7 @@ namespace rns_tool {
 
     TEST(RNSToolTest, DeviceModTAndDivideQLastInplace) {
         ASSERT_TRUE(test_body_mod_t_and_divide_q_last_inplace(true));
+        MemoryPool::Destroy();
     }
 
     bool test_body_decrypt_mod_t(bool device) {
@@ -788,6 +796,7 @@ namespace rns_tool {
 
     TEST(RNSToolTest, DeviceDecryptModT) {
         ASSERT_TRUE(test_body_decrypt_mod_t(true));
+        MemoryPool::Destroy();
     }
 
 }

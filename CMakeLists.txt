@@ -12,10 +12,10 @@ endif()
 
 cmake_minimum_required(VERSION 3.16)
 
-add_subdirectory(src)
-
-# add TROY_TEST variable
 option(TROY_TEST "Build tests" OFF)
 option(TROY_BENCH "Build benchmarks" OFF)
+option(TROY_MEMORY_POOL "Use memory pool" ON)
+
+add_subdirectory(src)
 
 add_subdirectory(test)

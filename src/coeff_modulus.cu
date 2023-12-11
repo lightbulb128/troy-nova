@@ -98,11 +98,11 @@ namespace troy {
         }
         utils::Array<Modulus> result(bit_sizes.size(), false);
         size_t i = 0;
-        for (auto const& [key, value] : prime_table) {
-            for (size_t j = 0; j < value.size(); j++) {
-                result[i] = value[j];
-                i++;
-            }
+        for (size_t size : bit_sizes) {
+            // get the last one of the size and remove it from prime table
+            result[i] = prime_table[size].back();
+            prime_table[size].pop_back();
+            i++;
         }
         return std::move(result);
     }

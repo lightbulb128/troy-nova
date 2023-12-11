@@ -1,6 +1,7 @@
 #pragma once
 #include <stdexcept>
 #include <cstring>
+#include "utils/memory_pool.cuh"
 
 namespace troy {
 
@@ -22,21 +23,15 @@ namespace troy {
 
         template <typename T>
         inline T* malloc(size_t length) {
-            T* ret;
-            cudaError_t status = cudaMalloc((void**)&ret, length * sizeof(T));
-            if (status != cudaSuccess) {
-                runtime_error("[kernel_provider::malloc] cudaMalloc failed", status);
-            }
+            T* ret = reinterpret_cast<T*>(utils::MemoryPool::Allocate(length * sizeof(T)));
             return ret;
         }
 
         template <typename T>
         inline void free(T* ptr) {
-            cudaError_t status = cudaFree(ptr);
-            if (status != cudaSuccess) {
-                runtime_error("[kernel_provider::free] cudaFree failed", status);
-            }
+            utils::MemoryPool::Free(reinterpret_cast<void*>(ptr));
         }
+
 
         template <typename T>
         inline void copy_host_to_device(T* dst, const T* src, size_t length) {

@@ -57,6 +57,7 @@ namespace batch_encoder {
 
     TEST(BatchEncoderTest, DeviceUnbatchUintVector) {
         test_unbatch_uint_vector(true);
+        utils::MemoryPool::Destroy();
     }
 
     void test_polynomial(bool device) {
@@ -100,6 +101,7 @@ namespace batch_encoder {
 
     TEST(BatchEncoderTest, DevicePolynomial) {
         test_polynomial(true);
+        utils::MemoryPool::Destroy();
     }
 
 }

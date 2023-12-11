@@ -47,14 +47,17 @@ namespace lwe {
     TEST(LweTest, DeviceBFVExtractLWE) {
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_extract_lwe(ghe);
+        utils::MemoryPool::Destroy();
     }
     TEST(LweTest, DeviceBGVExtractLWE) {
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_extract_lwe(ghe);
+        utils::MemoryPool::Destroy();
     }
     TEST(LweTest, DeviceCKKSExtractLWE) {
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1<<16, 1e-2);
         test_extract_lwe(ghe);
+        utils::MemoryPool::Destroy();
     }
     
     void test_pack_lwes(const GeneralHeContext& context) {
@@ -96,14 +99,17 @@ namespace lwe {
     TEST(LweTest, DeviceBFVPackLWEs) {
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_pack_lwes(ghe);
+        utils::MemoryPool::Destroy();
     }
     TEST(LweTest, DeviceBGVPackLWEs) {
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_pack_lwes(ghe);
+        utils::MemoryPool::Destroy();
     }
     TEST(LweTest, DeviceCKKSPackLWEs) {
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
         test_pack_lwes(ghe);
+        utils::MemoryPool::Destroy();
     }
 
 }

@@ -327,6 +327,7 @@ int main(int argc, char** argv) {
     if (device) {
         cout << "======== DEVICE ========" << endl;
         bench::run_all(true);
+        troy::utils::MemoryPool::Destroy();
     }
     return 0;
 }

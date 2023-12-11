@@ -213,6 +213,7 @@ namespace rns_base {
 
     TEST(RNSBase, DeviceComposeDecomposeArray) {
         test_body_compose_decompose_array(true);
+        MemoryPool::Destroy();
     }
 
     bool test_fast_convert_array(vector<uint64_t> imod, vector<uint64_t> omod, vector<uint64_t> input, vector<uint64_t> output, bool device) {
@@ -255,6 +256,7 @@ namespace rns_base {
 
     TEST(RNSBase, DeviceFastConvertArray) {
         test_body_fast_convert_array(true);
+        MemoryPool::Destroy();
     }
 
 }

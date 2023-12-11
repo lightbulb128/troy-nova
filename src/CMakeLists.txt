@@ -15,6 +15,11 @@ target_compile_options(troy INTERFACE
   "$<${nvcc_cxx}:$<BUILD_INTERFACE:--compiler-options=-fPIC>>"
 )
 
+# if TROY_MEMORY_POOL is on, add this as a macro
+if(TROY_MEMORY_POOL)
+  target_compile_definitions(troy PUBLIC TROY_MEMORY_POOL)
+endif()
+
 install(TARGETS troy
   EXPORT troyTargets
   LIBRARY DESTINATION lib

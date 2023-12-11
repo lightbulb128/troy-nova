@@ -30,4 +30,22 @@ namespace troy {
         }
     }
 
+    std::ostream& operator << (std::ostream& os, const EncryptionParameters& parms) {
+        if (parms.on_device()) {
+            os << parms.to_host();
+            return os;
+        }
+        os << "EncryptionParameters { Scheme = " << parms.scheme() << ", "
+            << "PolyModulusDegree = " << parms.poly_modulus_degree() << ", "
+            << "CoeffModulus = {";
+        size_t count = parms.coeff_modulus().size();
+        for (size_t i = 0; i < count; i++) {
+            os << parms.coeff_modulus()[i].value();
+            if (i < count - 1) {
+                os << ", ";
+            }
+        }
+        os << "}, PlainModulus = " << parms.plain_modulus()->value() << " }";
+        return os;
+    }
 }
