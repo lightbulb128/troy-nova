@@ -734,17 +734,17 @@ namespace troy {
         size_t key_index,
         ConstPointer<Modulus> key_modulus
     ) {
-        size_t i = blockIdx.x * blockDim.x + threadIdx.x;
-        if (i >= coeff_count) return;
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        if (global_index >= coeff_count * key_component_count) return;
+        size_t i = global_index % coeff_count;
+        size_t k = global_index / coeff_count;
         uint64_t qword[2] {0, 0}; Slice<uint64_t> qword_slice(qword, 2, true);
-        for (size_t k = 0; k < key_component_count; k++) {
-            utils::multiply_uint64_uint64(t_operand[i], key_vector_j[k * key_poly_coeff_size + key_index * coeff_count + i], qword_slice);
-            size_t accumulator_l_offset = k * coeff_count * 2 + 2 * i;
-            Slice<uint64_t> accumulator_l = t_poly_lazy.slice(accumulator_l_offset, accumulator_l_offset + 2);
-            utils::add_uint128_inplace(qword_slice, accumulator_l.as_const());
-            accumulator_l[0] = key_modulus->reduce_uint128(qword_slice.as_const());
-            accumulator_l[1] = 0;
-        }
+        utils::multiply_uint64_uint64(t_operand[i], key_vector_j[k * key_poly_coeff_size + key_index * coeff_count + i], qword_slice);
+        size_t accumulator_l_offset = k * coeff_count * 2 + 2 * i;
+        Slice<uint64_t> accumulator_l = t_poly_lazy.slice(accumulator_l_offset, accumulator_l_offset + 2);
+        utils::add_uint128_inplace(qword_slice, accumulator_l.as_const());
+        accumulator_l[0] = key_modulus->reduce_uint128(qword_slice.as_const());
+        accumulator_l[1] = 0;
     }
 
     static void ski_util1(
@@ -771,7 +771,7 @@ namespace troy {
                 }
             }
         } else {
-            size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
+            size_t block_count = utils::ceil_div(coeff_count * key_component_count, utils::KERNEL_THREAD_COUNT);
             kernel_ski_util1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_poly_lazy, coeff_count, key_component_count, 
                 key_vector_j, key_poly_coeff_size, t_operand, key_index, key_modulus
@@ -789,17 +789,17 @@ namespace troy {
         size_t key_index,
         ConstPointer<Modulus> key_modulus
     ) {
-        size_t i = blockIdx.x * blockDim.x + threadIdx.x;
-        if (i >= coeff_count) return;
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        if (global_index >= coeff_count * key_component_count) return;
+        size_t i = global_index % coeff_count;
+        size_t k = global_index / coeff_count;
         uint64_t qword[2] {0, 0}; Slice<uint64_t> qword_slice(qword, 2, true);
-        for (size_t k = 0; k < key_component_count; k++) {
-            utils::multiply_uint64_uint64(t_operand[i], key_vector_j[k * key_poly_coeff_size + key_index * coeff_count + i], qword_slice);
-            size_t accumulator_l_offset = k * coeff_count * 2 + 2 * i;
-            Slice<uint64_t> accumulator_l = t_poly_lazy.slice(accumulator_l_offset, accumulator_l_offset + 2);
-            utils::add_uint128_inplace(qword_slice, accumulator_l.as_const());
-            accumulator_l[0] = qword_slice[0];
-            accumulator_l[1] = qword_slice[1];
-        }
+        utils::multiply_uint64_uint64(t_operand[i], key_vector_j[k * key_poly_coeff_size + key_index * coeff_count + i], qword_slice);
+        size_t accumulator_l_offset = k * coeff_count * 2 + 2 * i;
+        Slice<uint64_t> accumulator_l = t_poly_lazy.slice(accumulator_l_offset, accumulator_l_offset + 2);
+        utils::add_uint128_inplace(qword_slice, accumulator_l.as_const());
+        accumulator_l[0] = qword_slice[0];
+        accumulator_l[1] = qword_slice[1];
     }
 
     static void ski_util2(
@@ -826,7 +826,7 @@ namespace troy {
                 }
             }
         } else {
-            size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
+            size_t block_count = utils::ceil_div(coeff_count * key_component_count, utils::KERNEL_THREAD_COUNT);
             kernel_ski_util2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_poly_lazy, coeff_count, key_component_count, 
                 key_vector_j, key_poly_coeff_size, t_operand, key_index, key_modulus
@@ -841,12 +841,12 @@ namespace troy {
         size_t rns_modulus_size,
         Slice<uint64_t> t_poly_prod_iter
     ) {
-        size_t i = blockIdx.x * blockDim.x + threadIdx.x;
-        if (i >= coeff_count) return;
-        for (size_t k = 0; k < key_component_count; k++) {
-            size_t accumulator_l_offset = k * coeff_count * 2 + 2 * i;
-            t_poly_prod_iter[k * coeff_count * rns_modulus_size + i] = t_poly_lazy[accumulator_l_offset];
-        }
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        if (global_index >= coeff_count * key_component_count) return;
+        size_t i = global_index % coeff_count;
+        size_t k = global_index / coeff_count;
+        size_t accumulator_l_offset = k * coeff_count * 2 + 2 * i;
+        t_poly_prod_iter[k * coeff_count * rns_modulus_size + i] = t_poly_lazy[accumulator_l_offset];
     }
 
     static void ski_util3(
@@ -865,7 +865,7 @@ namespace troy {
                 }
             }
         } else {
-            size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
+            size_t block_count = utils::ceil_div(coeff_count * key_component_count, utils::KERNEL_THREAD_COUNT);
             kernel_ski_util3<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_poly_lazy, coeff_count, key_component_count, rns_modulus_size, t_poly_prod_iter
             );
@@ -881,14 +881,14 @@ namespace troy {
         Slice<uint64_t> t_poly_prod_iter,
         ConstPointer<Modulus> key_modulus
     ) {
-        size_t i = blockIdx.x * blockDim.x + threadIdx.x;
-        if (i >= coeff_count) return;
-        for (size_t k = 0; k < key_component_count; k++) {
-            size_t accumulator_l_offset = k * coeff_count * 2 + 2 * i;
-            t_poly_prod_iter[k * coeff_count * rns_modulus_size + i] = key_modulus->reduce_uint128(
-                t_poly_lazy.const_slice(accumulator_l_offset, accumulator_l_offset + 2)
-            );
-        }
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        if (global_index >= coeff_count * key_component_count) return;
+        size_t i = global_index % coeff_count;
+        size_t k = global_index / coeff_count;
+        size_t accumulator_l_offset = k * coeff_count * 2 + 2 * i;
+        t_poly_prod_iter[k * coeff_count * rns_modulus_size + i] = key_modulus->reduce_uint128(
+            t_poly_lazy.const_slice(accumulator_l_offset, accumulator_l_offset + 2)
+        );
     }
 
     static void ski_util4(
@@ -910,7 +910,7 @@ namespace troy {
                 }
             }
         } else {
-            size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
+            size_t block_count = utils::ceil_div(coeff_count * key_component_count, utils::KERNEL_THREAD_COUNT);
             kernel_ski_util4<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_poly_lazy, coeff_count, key_component_count, 
                 rns_modulus_size, t_poly_prod_iter, key_modulus
@@ -931,23 +931,23 @@ namespace troy {
         ConstSlice<MultiplyUint64Operand> modswitch_factors,
         Slice<uint64_t> encrypted_i
     ) {
-        size_t i = blockIdx.x * blockDim.x + threadIdx.x;
-        if (i >= coeff_count) return;
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        if (global_index >= coeff_count * decomp_modulus_size) return;
+        size_t i = global_index % coeff_count;
+        size_t j = global_index / coeff_count;
         uint64_t k = utils::barrett_reduce_uint64(t_last[i], *plain_modulus);
         k = utils::negate_uint64_mod(k, *plain_modulus);
         if (qk_inv_qp != 1) 
             k = utils::multiply_uint64_mod(k, qk_inv_qp, *plain_modulus);
         uint64_t delta = 0; uint64_t c_mod_qi = 0;
-        for (size_t j = 0; j < decomp_modulus_size; j++) {
-            delta = utils::barrett_reduce_uint64(k, key_modulus[j]);
-            delta = utils::multiply_uint64_mod(delta, qk, key_modulus[j]);
-            c_mod_qi = utils::barrett_reduce_uint64(t_last[i], key_modulus[j]);
-            const uint64_t Lqi = key_modulus[j].value() << 1;
-            uint64_t& target = t_poly_prod_i[j * coeff_count + i];
-            target = target + Lqi - (delta + c_mod_qi);
-            target = utils::multiply_uint64operand_mod(target, modswitch_factors[j], key_modulus[j]);
-            encrypted_i[j * coeff_count + i] = utils::add_uint64_mod(target, encrypted_i[j * coeff_count + i], key_modulus[j]);
-        }
+        delta = utils::barrett_reduce_uint64(k, key_modulus[j]);
+        delta = utils::multiply_uint64_mod(delta, qk, key_modulus[j]);
+        c_mod_qi = utils::barrett_reduce_uint64(t_last[i], key_modulus[j]);
+        const uint64_t Lqi = key_modulus[j].value() << 1;
+        uint64_t& target = t_poly_prod_i[j * coeff_count + i];
+        target = target + Lqi - (delta + c_mod_qi);
+        target = utils::multiply_uint64operand_mod(target, modswitch_factors[j], key_modulus[j]);
+        encrypted_i[j * coeff_count + i] = utils::add_uint64_mod(target, encrypted_i[j * coeff_count + i], key_modulus[j]);
     }
 
     static void ski_util5(
@@ -983,7 +983,7 @@ namespace troy {
                 }
             }
         } else {
-            size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
+            size_t block_count = utils::ceil_div(coeff_count * decomp_modulus_size, utils::KERNEL_THREAD_COUNT);
             kernel_ski_util5<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_last, t_poly_prod_i, coeff_count, plain_modulus, key_modulus, 
                 decomp_modulus_size, rns_modulus_size, qk_inv_qp, qk, modswitch_factors, encrypted_i
@@ -999,20 +999,20 @@ namespace troy {
         size_t decomp_modulus_size,
         Slice<uint64_t> t_ntt
     ) {
-        size_t i = blockIdx.x * blockDim.x + threadIdx.x;
-        if (i >= coeff_count) return;
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        if (global_index >= coeff_count * decomp_modulus_size) return;
+        size_t i = global_index % coeff_count;
+        size_t j = global_index / coeff_count;
         uint64_t qk_half = qk->value() >> 1;
         t_last[i] = utils::barrett_reduce_uint64(t_last[i] + qk_half, *qk);
-        for (size_t j = 0; j < decomp_modulus_size; j++) {
-            const Modulus& qi = key_modulus[j];
-            if (qk->value() > qi.value()) {
-                t_ntt[j * coeff_count + i] = utils::barrett_reduce_uint64(t_last[i], qi);
-            } else {
-                t_ntt[j * coeff_count + i] = t_last[i];
-            }
-            uint64_t fix = qi.value() - utils::barrett_reduce_uint64(qk_half, key_modulus[j]);
-            t_ntt[j * coeff_count + i] += fix;
+        const Modulus& qi = key_modulus[j];
+        if (qk->value() > qi.value()) {
+            t_ntt[j * coeff_count + i] = utils::barrett_reduce_uint64(t_last[i], qi);
+        } else {
+            t_ntt[j * coeff_count + i] = t_last[i];
         }
+        uint64_t fix = qi.value() - utils::barrett_reduce_uint64(qk_half, key_modulus[j]);
+        t_ntt[j * coeff_count + i] += fix;
     }
 
     static void ski_util6(
@@ -1040,7 +1040,7 @@ namespace troy {
                 }
             }
         } else {
-            size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
+            size_t block_count = utils::ceil_div(coeff_count * decomp_modulus_size, utils::KERNEL_THREAD_COUNT);
             kernel_ski_util6<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_last, coeff_count, qk, key_modulus, decomp_modulus_size, t_ntt
             );
@@ -1057,17 +1057,17 @@ namespace troy {
         ConstSlice<Modulus> key_modulus,
         ConstSlice<MultiplyUint64Operand> modswitch_factors
     ) {
-        size_t i = blockIdx.x * blockDim.x + threadIdx.x;
-        if (i >= coeff_count) return;
-        for (size_t j = 0; j < decomp_modulus_size; j++) {
-            uint64_t& dest = t_poly_prod_i[j*coeff_count + i];
-            uint64_t qi = key_modulus[j].value();
-            dest += ((is_ckks) ? (qi << 2) : (qi << 1)) - t_ntt[j * coeff_count + i];
-            dest = utils::multiply_uint64operand_mod(dest, modswitch_factors[j], key_modulus[j]);
-            encrypted_i[j * coeff_count + i] = utils::add_uint64_mod(
-                encrypted_i[j * coeff_count + i], dest, key_modulus[j]
-            );
-        }
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        if (global_index >= coeff_count * decomp_modulus_size) return;
+        size_t i = global_index % coeff_count;
+        size_t j = global_index / coeff_count;
+        uint64_t& dest = t_poly_prod_i[j*coeff_count + i];
+        uint64_t qi = key_modulus[j].value();
+        dest += ((is_ckks) ? (qi << 2) : (qi << 1)) - t_ntt[j * coeff_count + i];
+        dest = utils::multiply_uint64operand_mod(dest, modswitch_factors[j], key_modulus[j]);
+        encrypted_i[j * coeff_count + i] = utils::add_uint64_mod(
+            encrypted_i[j * coeff_count + i], dest, key_modulus[j]
+        );
     }
 
     static void ski_util7(
@@ -1094,7 +1094,7 @@ namespace troy {
                 }
             }
         } else {
-            size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
+            size_t block_count = utils::ceil_div(coeff_count * decomp_modulus_size, utils::KERNEL_THREAD_COUNT);
             kernel_ski_util7<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_poly_prod_i, t_ntt, coeff_count, encrypted_i, is_ckks, 
                 decomp_modulus_size, key_modulus, modswitch_factors
