@@ -31,7 +31,7 @@ if(TROY_TEST)
         lwe.cu
         
         app/matmul.cu
-        
+
     )
 
     target_link_libraries(troytest gtest gtest_main troy)
@@ -51,12 +51,16 @@ if(TROY_BENCH)
 
     add_executable(troybench)
     target_sources(troybench PRIVATE 
-
         bench/he_operations.cu
         test_adv.cu
-        
     )
-
     target_link_libraries(troybench troy)
+
+    add_executable(bench_matmul)
+    target_sources(bench_matmul PRIVATE 
+        bench/matmul.cu
+        test_adv.cu
+    )
+    target_link_libraries(bench_matmul troy)
 
 endif()

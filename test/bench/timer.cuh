@@ -60,6 +60,52 @@ namespace bench {
         std::cout << std::endl;
     }
 
+    void print_communication(size_t bytes) {
+        // right align with "9.3" format
+        std::cout << std::right << std::setw(9) << std::setprecision(3) << std::fixed;
+        // if less than 1000 bytes
+        if (bytes < 1024) {
+            std::cout << bytes << " B";
+        } else if (bytes < 1024ull * 1024) {
+            double kb = bytes / 1024.0;
+            std::cout << kb << " KB";
+        } else if (bytes < 1024ull * 1024 * 1024) {
+            double mb = bytes / (1024.0 * 1024);
+            std::cout << mb << " MB";
+        } else {
+            double gb = bytes / (1024.0 * 1024 * 1024);
+            std::cout << gb << " GB";
+        }
+    }
+
+    void print_communication(const string& prompt, size_t tabs, size_t bytes, size_t divide) {
+        // print tabs * 2 spaces
+        for (size_t i = 0; i < tabs; i++) {
+            std::cout << "  ";
+        }
+        // print prompt
+        std::cout << prompt;
+        // print spaces to fill PROMPT_LENGTH
+        size_t current_used = prompt.length() + tabs * 2;
+        if (current_used < PROMPT_LENGTH) {
+            for (size_t i = 0; i < PROMPT_LENGTH - current_used; i++) {
+                std::cout << " ";
+            }
+        }
+        // print colon
+        std::cout << ": ";
+        // print duration
+        if (divide == 1) {
+            print_communication(bytes);
+        } else {
+            print_communication(bytes / divide);
+            std::cout << " (total ";
+            print_communication(bytes);
+            std::cout << ", " << divide << " times)";
+        }
+        std::cout << std::endl;
+    }
+
     class TimerOnce {
     private:
         Instant start;
@@ -77,6 +123,9 @@ namespace bench {
             Instant end = std::chrono::high_resolution_clock::now();
             Duration duration = end - start;
             print_duration(prompt, tabs, duration, 1);
+        }
+        inline void restart() {
+            start = std::chrono::high_resolution_clock::now();
         }
     };
 
