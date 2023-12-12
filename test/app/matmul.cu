@@ -66,7 +66,7 @@ namespace matmul {
             y_encrypted.mod_switch_to_next_inplace(evaluator);
         }
         if (pack_lwe) {
-            y_encrypted = helper.packOutputs(evaluator, automorphism_key, y_encrypted);
+            y_encrypted = helper.pack_outputs(evaluator, automorphism_key, y_encrypted);
         }
 
         y_encrypted.add_plain_inplace(evaluator, s_encoded);

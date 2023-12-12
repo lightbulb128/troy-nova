@@ -13,11 +13,6 @@ namespace troy { namespace linear {
     };
 
     class MatmulHelper {
-        size_t batch_size, input_dims, output_dims;
-        size_t slot_count;
-        size_t batch_block, input_block, output_block;
-        MatmulObjective objective; 
-        bool pack_lwe;
         // 0: encrypt inputs; 1: encrypt weights
         // 2: for calculating weight gradient
 
@@ -30,6 +25,12 @@ namespace troy { namespace linear {
         ) const;
 
     public:
+    
+        size_t batch_size, input_dims, output_dims;
+        size_t slot_count;
+        size_t batch_block, input_block, output_block;
+        MatmulObjective objective; 
+        bool pack_lwe;
 
         inline MatmulHelper(size_t batch_size, size_t input_dims, size_t output_dims, size_t slot_count, MatmulObjective objective = MatmulObjective::EncryptLeft, bool pack_lwe = true):
             batch_size(batch_size), input_dims(input_dims), output_dims(output_dims),
@@ -71,7 +72,7 @@ namespace troy { namespace linear {
             const Cipher2d& outputs
         ) const;
 
-        Cipher2d packOutputs(const Evaluator& evaluator, const GaloisKeys& autoKey, const Cipher2d& cipher) const;
+        Cipher2d pack_outputs(const Evaluator& evaluator, const GaloisKeys& autoKey, const Cipher2d& cipher) const;
 
         void serialize_encoded_weights(const Plain2d& w, std::ostream& stream) const;
 

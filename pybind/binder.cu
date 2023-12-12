@@ -14,6 +14,7 @@ PYBIND11_MAKE_OPAQUE(std::vector<std::complex<double>>);
 
 namespace py = pybind11;
 using namespace troy;
+using namespace troy::linear;
 using std::vector;
 using std::complex;
 using std::stringstream;
@@ -218,7 +219,7 @@ PYBIND11_MODULE(pytroy, m) {
 
     py::class_<PlainModulus>(m, "PlainModulus")
         .def_static("batching", &PlainModulus::batching,
-            py::arg("poly_modulus_degree"), py::arg("sec_level") = SecurityLevel::Classical128)
+            py::arg("poly_modulus_degree"), py::arg_v("sec_level", SecurityLevel::Classical128, "SecurityLevel.Classical128"))
         .def_static("batching_multiple", [](size_t poly_modulus_degree, const std::vector<int>& bit_sizes){
             vector<size_t> bit_sizes_copy(bit_sizes.size(), 0);
             for (int i = 0; i < bit_sizes.size(); i++) {
@@ -294,7 +295,7 @@ PYBIND11_MODULE(pytroy, m) {
     py::class_<HeContext, std::shared_ptr<HeContext>>(m, "HeContext")
         .def(py::init([](const EncryptionParameters& parms, bool expand_mod_chain, SecurityLevel sec_level, uint64_t random_seed){
             return HeContext::create(parms, expand_mod_chain, sec_level, random_seed);
-        }), py::arg("parms"), py::arg("expand_mod_chain") = true, py::arg("sec_level") = SecurityLevel::Classical128, py::arg("random_seed") = 0)
+        }), py::arg("parms"), py::arg("expand_mod_chain") = true, py::arg_v("sec_level", SecurityLevel::Classical128, "SecurityLevel.Classical128"), py::arg("random_seed") = 0)
         .def("to_device_inplace", [](const HeContextPointer& self){
             return self->to_device_inplace();
         })
@@ -787,4 +788,104 @@ PYBIND11_MODULE(pytroy, m) {
         .def("negacyclic_shift_new", &Evaluator::negacyclic_shift_new)
         .def("negacyclic_shift_inplace", &Evaluator::negacyclic_shift_inplace)
     ;
+
+    // linear
+
+    py::class_<Plain2d>(m, "Plain2d")
+        .def(py::init<>())
+        .def("size", &Plain2d::size)
+        .def("rows", &Plain2d::rows)
+        .def("columns", &Plain2d::columns)
+        .def("encrypt_asymmetric", &Plain2d::encrypt_asymmetric)
+        .def("encrypt_symmetric", &Plain2d::encrypt_symmetric)
+    ;
+
+    py::class_<Cipher2d>(m, "Cipher2d")
+        .def(py::init<>())
+        .def("size", &Cipher2d::size)
+        .def("rows", &Cipher2d::rows)
+        .def("columns", &Cipher2d::columns)
+        .def("expand_seed", &Cipher2d::expand_seed)
+        .def("save", [](const Cipher2d& self, HeContextPointer context) {return save_he(self, context); })
+        .def("load", [](Cipher2d& self, const py::bytes& str, HeContextPointer context) {return load_he<Cipher2d>(self, str, context); })
+        .def_static("load_new", [](const py::bytes& str, HeContextPointer context) {return load_new_he<Cipher2d>(str, context); })
+        .def("serialized_size", [](const Cipher2d& self, HeContextPointer context) {return serialized_size_he(self, context); })
+        .def("mod_switch_to_next_inplace", &Cipher2d::mod_switch_to_next_inplace)
+        .def("mod_switch_to_next", &Cipher2d::mod_switch_to_next)
+        .def("relinearize_inplace", &Cipher2d::relinearize_inplace)
+        .def("relinearize", &Cipher2d::relinearize)
+        .def("add", &Cipher2d::add)
+        .def("add_inplace", &Cipher2d::add_inplace)
+        .def("add_plain", &Cipher2d::add_plain)
+        .def("add_plain_inplace", &Cipher2d::add_plain_inplace)
+        .def("sub", &Cipher2d::sub)
+        .def("sub_inplace", &Cipher2d::sub_inplace)
+        .def("sub_plain", &Cipher2d::sub_plain)
+        .def("sub_plain_inplace", &Cipher2d::sub_plain_inplace)
+    ;
+
+    py::enum_<MatmulObjective>(m, "MatmulObjective")
+        .value("EncryptLeft", MatmulObjective::EncryptLeft)
+        .value("EncryptRight", MatmulObjective::EncryptRight)
+        .value("Crossed", MatmulObjective::Crossed)
+    ;
+
+    py::class_<MatmulHelper>(m, "MatmulHelper")
+        .def(py::init<size_t, size_t, size_t, size_t, MatmulObjective, bool>(), 
+            py::arg("batch_size"), py::arg("input_dims"), py::arg("output_dims"),
+            py::arg("slot_count"), py::arg_v("objective", MatmulObjective::EncryptLeft, "MatmulObjective.EncryptLeft"),
+            py::arg("pack_lwe") = true
+        )
+        .def("batch_size", [](const MatmulHelper& self) { return self.batch_size; })
+        .def("input_dims", [](const MatmulHelper& self) { return self.input_dims; })
+        .def("output_dims", [](const MatmulHelper& self) { return self.output_dims; })
+        .def("slot_count", [](const MatmulHelper& self) { return self.slot_count; })
+        .def("objective", [](const MatmulHelper& self) { return self.objective; })
+        .def("pack_lwe", [](const MatmulHelper& self) { return self.pack_lwe; })
+        .def("batch_block", [](const MatmulHelper& self) { return self.batch_block; })
+        .def("input_block", [](const MatmulHelper& self) { return self.input_block; })
+        .def("output_block", [](const MatmulHelper& self) { return self.output_block; })
+        .def("encode_weights", [](const MatmulHelper& self, const BatchEncoder& encoder, const py::array_t<uint64_t>& weights) {
+            if (weights.ndim() != 1) 
+                throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be flattened.");
+            if (weights.strides(0) != sizeof(uint64_t))
+                throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be contiguous.");
+            if (weights.size() != self.input_dims * self.output_dims) 
+                throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be of size input_dims * output_dims.");
+            return self.encode_weights(encoder, get_pointer_from_buffer(weights));
+        })
+        .def("encode_inputs", [](const MatmulHelper& self, const BatchEncoder& encoder, const py::array_t<uint64_t>& inputs) {
+            if (inputs.ndim() != 1) 
+                throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be flattened.");
+            if (inputs.strides(0) != sizeof(uint64_t))
+                throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be contiguous.");
+            if (inputs.size() != self.batch_size * self.input_dims)
+                throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be of size batch_size * input_dims.");
+            return self.encode_inputs(encoder, get_pointer_from_buffer(inputs));
+        })
+        .def("encode_outputs", [](const MatmulHelper& self, const BatchEncoder& encoder, const py::array_t<uint64_t>& outputs) {
+            if (outputs.ndim() != 1) 
+                throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be flattened.");
+            if (outputs.strides(0) != sizeof(uint64_t))
+                throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be contiguous.");
+            if (outputs.size() != self.batch_size * self.output_dims)
+                throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be of size batch_size * output_dims.");
+            return self.encode_outputs(encoder, get_pointer_from_buffer(outputs));
+        })
+        .def("matmul", &MatmulHelper::matmul)
+        .def("matmul_reverse", &MatmulHelper::matmul_reverse)
+        .def("matmul_cipher", &MatmulHelper::matmul_cipher)
+        .def("decrypt_outputs", [](const MatmulHelper& self, const BatchEncoder& encoder, const Decryptor& decryptor, const Cipher2d& outputs) {
+            std::vector<uint64_t> result = self.decrypt_outputs(encoder, decryptor, outputs);
+            return get_buffer_from_vector(result);
+        })
+        .def("pack_outputs", &MatmulHelper::pack_outputs)
+        .def("serialize_outputs", [](const MatmulHelper& self, const Evaluator &evaluator, const Cipher2d& x) {
+            ostringstream ss; self.serialize_outputs(evaluator, x, ss); return py::bytes(ss.str());
+        })
+        .def("deserialize_outputs", [](const MatmulHelper& self, const Evaluator &evaluator, const py::bytes& str) {
+            istringstream ss(str); return self.deserialize_outputs(evaluator, ss);
+        })
+    ;
+    
 }

@@ -332,7 +332,7 @@ namespace troy { namespace linear {
         return dec;
     }
 
-    Cipher2d MatmulHelper::packOutputs(const Evaluator& evaluator, const GaloisKeys& autoKey, const Cipher2d& cipher) const {
+    Cipher2d MatmulHelper::pack_outputs(const Evaluator& evaluator, const GaloisKeys& autoKey, const Cipher2d& cipher) const {
         if (!this->pack_lwe) {
             throw std::invalid_argument("[MatmulHelper::packOutputs] PackLwe not enabled");
         }

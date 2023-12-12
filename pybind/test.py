@@ -293,6 +293,7 @@ class GeneralHeContext:
         self.scale = scale
         self.tolerance = tolerance
         self.is_ckks = scheme == SchemeType.CKKS
+        self.device = device
 
     def random_simd(self, size: int) -> GeneralVector:
         return self.encoder.random_simd(size, self.t, self.input_max)
@@ -592,7 +593,6 @@ def create_test_class(ghe: GeneralHeContext):
             self.ghe = ghe
             self.tester = HeTest(self.ghe, self)
             return super().setUp()
-        
         def test_setup_ok(self):
             pass
         def test_encode_simd(self):
@@ -628,7 +628,6 @@ def create_test_class(ghe: GeneralHeContext):
 
     return UnnamedClass
 
-
 TestBFVHost = create_test_class(GeneralHeContext(False, SchemeType.BFV, 32, 20, [60, 40, 40, 60], True, 0x123))
 TestCKKSHost = create_test_class(GeneralHeContext(False, SchemeType.CKKS, 32, 0, [60, 40, 40, 60], True, 0x123, 10, 1<<20, 1e-2))
 TestBGVHost = create_test_class(GeneralHeContext(False, SchemeType.BGV, 32, 20, [60, 40, 40, 60], True, 0x123))
@@ -654,10 +653,7 @@ class DeviceTestSuite(unittest.TestSuite):
         self.addTest(unittest.makeSuite(TestBGVDevice))
 
 def custom_main():
-    ghe = GeneralHeContext(False, SchemeType.BFV, 32, 20, [60, 40, 40, 60], True, 0x123)
-    context = ghe.context
-    key_context_data = context.key_context_data()
-    print(key_context_data.parms_id())
+    print("There is nothing here.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

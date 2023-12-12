@@ -73,7 +73,7 @@ void test_matmul(const GeneralHeContext& context, size_t m, size_t r, size_t n, 
     }
     if (pack_lwe) {
         timer.restart();
-        y_encrypted = helper.packOutputs(evaluator, automorphism_key, y_encrypted);
+        y_encrypted = helper.pack_outputs(evaluator, automorphism_key, y_encrypted);
         timer.finish("Pack outputs");
     }
 
