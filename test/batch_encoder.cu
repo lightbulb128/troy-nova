@@ -13,7 +13,7 @@ namespace batch_encoder {
         parms.set_coeff_modulus(CoeffModulus::create(64, {60}).const_reference());
         parms.set_plain_modulus(257);
 
-        HeContextPointer context = HeContext::create(parms, false, SecurityLevel::None);
+        HeContextPointer context = HeContext::create(parms, false, SecurityLevel::Nil);
         ASSERT_TRUE(context->first_context_data().value()->qualifiers().using_batching);
 
         BatchEncoder encoder(context);
@@ -67,7 +67,7 @@ namespace batch_encoder {
         parms.set_coeff_modulus(CoeffModulus::create(64, {60}).const_reference());
         parms.set_plain_modulus(256);
 
-        HeContextPointer context = HeContext::create(parms, false, SecurityLevel::None);
+        HeContextPointer context = HeContext::create(parms, false, SecurityLevel::Nil);
         ASSERT_FALSE(context->first_context_data().value()->qualifiers().using_batching);
 
         BatchEncoder encoder(context);

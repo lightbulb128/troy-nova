@@ -82,6 +82,21 @@ namespace lwe {
         Plaintext decrypted = context.decryptor().decrypt_new(assembled);
         GeneralVector decoded = context.encoder().decode_polynomial(decrypted);
         ASSERT_TRUE(message.near_equal(decoded, tolerance));
+
+        // pack 7 lwes
+        for (size_t i = 0; i < 32; i++) {
+            if (i % 4 == 0 && i / 4 < 7) continue;
+            if (message.is_integers()) message.integers()[i] = 0;
+            else message.doubles()[i] = 0;
+        }
+        extracted.resize(7);
+        for (size_t i = 0; i < 7; i++) {
+            extracted[i] = context.evaluator().extract_lwe_new(encrypted, i * 4);
+        }
+        assembled = context.evaluator().pack_lwe_ciphertexts_new(extracted, automorphism_key);
+        decrypted = context.decryptor().decrypt_new(assembled);
+        decoded = context.encoder().decode_polynomial(decrypted);
+        ASSERT_TRUE(message.near_equal(decoded, tolerance));
     }
     
     TEST(LweTest, HostBFVPackLWEs) {

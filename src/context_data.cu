@@ -52,7 +52,7 @@ namespace troy {
             return;
         }
         
-        if (parms.scheme() == SchemeType::None) {
+        if (parms.scheme() == SchemeType::Nil) {
             qualifiers.parameter_error = EncryptionParameterErrorType::InvalidScheme;
             return;
         }
@@ -113,8 +113,8 @@ namespace troy {
         qualifiers.security_level = sec_level;
         // Check if the parameters are secure according to HomomorphicEncryption.org security standard
         if (this->total_coeff_modulus_bit_count_ > CoeffModulus::max_bit_count(poly_modulus_degree, sec_level)) {
-            qualifiers.security_level = SecurityLevel::None;
-            if (sec_level != SecurityLevel::None) {
+            qualifiers.security_level = SecurityLevel::Nil;
+            if (sec_level != SecurityLevel::Nil) {
                 qualifiers.parameter_error = EncryptionParameterErrorType::InvalidParametersInsecure;
                 return;
             } 

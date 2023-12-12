@@ -13,7 +13,7 @@ namespace troy {
 
         inline SecretKey() {}
 
-        inline SecretKey(Plaintext sk): sk(sk.clone()) {}
+        inline SecretKey(const Plaintext& sk): sk(sk.clone()) {}
 
         inline bool on_device() const {
             return sk.on_device();
@@ -91,7 +91,7 @@ namespace troy {
 
     public:
         inline PublicKey() {}
-        inline PublicKey(Ciphertext pk): pk(pk.clone()) {}
+        inline PublicKey(const Ciphertext& pk): pk(pk.clone()) {}
 
         inline bool on_device() const {
             return pk.on_device();

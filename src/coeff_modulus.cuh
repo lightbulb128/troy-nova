@@ -14,7 +14,7 @@ namespace troy {
 
         inline static size_t max_bit_count(size_t poly_modulus_degree, SecurityLevel sec_level) {
             switch (sec_level) {
-                case SecurityLevel::None: return 2147483648;
+                case SecurityLevel::Nil: return 2147483648;
                 case SecurityLevel::Classical128: return he_standard_params::params_classical_128(poly_modulus_degree);
                 case SecurityLevel::Classical192: return he_standard_params::params_classical_192(poly_modulus_degree);
                 case SecurityLevel::Classical256: return he_standard_params::params_classical_256(poly_modulus_degree);

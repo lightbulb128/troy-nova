@@ -153,6 +153,9 @@ namespace troy {
             result.keys = keys.clone();
             return result;
         }
+        inline bool on_device() const {
+            return keys.on_device();
+        }
         inline void to_device_inplace() {
             keys.to_device_inplace();
         }
@@ -241,6 +244,9 @@ namespace troy {
             GaloisKeys result;
             result.keys = keys.clone();
             return result;
+        }
+        inline bool on_device() const {
+            return keys.on_device();
         }
         inline void to_device_inplace() {
             keys.to_device_inplace();

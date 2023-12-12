@@ -25,7 +25,7 @@ namespace tool {
         this->params_host_ = parms;
         // create gadgets
         bool ckks = scheme == SchemeType::CKKS;
-        auto context = HeContext::create(parms, expand_mod_chain, SecurityLevel::None, seed);
+        auto context = HeContext::create(parms, expand_mod_chain, SecurityLevel::Nil, seed);
         auto encoder = ckks ? new GeneralEncoder(CKKSEncoder(context)) : new GeneralEncoder(BatchEncoder(context));
         if (device && !to_device_after_keygeneration) { 
             context->to_device_inplace();

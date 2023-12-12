@@ -23,13 +23,6 @@ namespace troy {
             parms_id_(parms_id_zero), 
             scale_(1.0), correction_factor_(1) {}
 
-        inline bool on_device() const {
-            if (c0_.on_device() != c1_.on_device()) {
-                throw std::runtime_error("[LWECiphertext::on_device] c0 and c1 are not on the same device");
-            }
-            return c0_.on_device();
-        }
-
         inline LWECiphertext clone() const {
             LWECiphertext res;
             res.coeff_modulus_size_ = coeff_modulus_size_;
@@ -40,6 +33,24 @@ namespace troy {
             res.scale_ = scale_;
             res.correction_factor_ = correction_factor_;
             return res;
+        }
+
+        inline LWECiphertext(LWECiphertext&& source) = default;
+        inline LWECiphertext(const LWECiphertext& source): LWECiphertext(source.clone()) {}
+        inline LWECiphertext& operator =(LWECiphertext&& source) = default;
+        inline LWECiphertext& operator =(const LWECiphertext& assign) {
+            if (this == &assign) {
+                return *this;
+            }
+            *this = assign.clone();
+            return *this;
+        }
+
+        inline bool on_device() const {
+            if (c0_.on_device() != c1_.on_device()) {
+                throw std::runtime_error("[LWECiphertext::on_device] c0 and c1 are not on the same device");
+            }
+            return c0_.on_device();
         }
 
         inline void to_device_inplace() {

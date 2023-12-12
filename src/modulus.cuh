@@ -84,7 +84,7 @@ namespace troy {
         }
 
         __host__ __device__
-        inline uint64_t reduce_mul_uint64(uint64_t operand1, uint64_t operand2) {
+        inline uint64_t reduce_mul_uint64(uint64_t operand1, uint64_t operand2) const {
             uint64_t tmp[2];
             utils::Slice<uint64_t> tmp_slice(tmp, 2, utils::on_device());
             utils::multiply_uint64_uint64(operand1, operand2, tmp_slice);

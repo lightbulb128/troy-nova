@@ -5,7 +5,7 @@
 namespace troy {
 
     enum SchemeType {
-        None = 0,
+        Nil = 0,
         BFV,
         CKKS,
         BGV
@@ -13,8 +13,8 @@ namespace troy {
 
     inline std::ostream& operator << (std::ostream& os, const SchemeType& scheme_type) {
         switch (scheme_type) {
-        case SchemeType::None:
-            os << "None";
+        case SchemeType::Nil:
+            os << "Nil";
             break;
         case SchemeType::BFV:
             os << "BFV";
@@ -54,7 +54,7 @@ namespace troy {
             plain_modulus_host_(0)
         {}
 
-        inline EncryptionParameters() : EncryptionParameters(SchemeType::None) {}
+        inline EncryptionParameters() : EncryptionParameters(SchemeType::Nil) {}
 
         inline EncryptionParameters(const EncryptionParameters& parms):
             scheme_(parms.scheme_),
@@ -202,14 +202,14 @@ namespace troy {
     std::ostream& operator << (std::ostream& os, const EncryptionParameters& parms);
 
     enum class SecurityLevel {
-        None = 0,
+        Nil = 0,
         Classical128 = 128,
         Classical192 = 192,
         Classical256 = 256,
     };
 
     enum class EncryptionParameterErrorType {
-        None = -1,
+        Nil = -1,
         Success = 0,
         CreatedFromDeviceParms,
         InvalidScheme,
@@ -230,13 +230,13 @@ namespace troy {
     };
 
     struct EncryptionParameterQualifiers {
-        EncryptionParameterErrorType parameter_error = EncryptionParameterErrorType::None;
+        EncryptionParameterErrorType parameter_error = EncryptionParameterErrorType::Nil;
         bool using_fft = false;
         bool using_ntt = false;
         bool using_batching = false;
         bool using_fast_plain_lift = false;
         bool using_descending_modulus_chain = false;
-        SecurityLevel security_level = SecurityLevel::None;
+        SecurityLevel security_level = SecurityLevel::Nil;
 
         bool parameters_set() const noexcept {
             return parameter_error == EncryptionParameterErrorType::Success;

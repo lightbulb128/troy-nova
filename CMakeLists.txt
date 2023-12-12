@@ -15,7 +15,13 @@ cmake_minimum_required(VERSION 3.16)
 option(TROY_TEST "Build tests" OFF)
 option(TROY_BENCH "Build benchmarks" OFF)
 option(TROY_MEMORY_POOL "Use memory pool" ON)
+option(TROY_PYBIND "Build python encapsulation with Pybind11" ON)
 
 add_subdirectory(src)
+
+if(TROY_PYBIND)
+  add_subdirectory(extern/pybind11)
+  add_subdirectory(pybind)
+endif()
 
 add_subdirectory(test)

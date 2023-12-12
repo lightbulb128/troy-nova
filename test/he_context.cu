@@ -63,96 +63,96 @@ namespace he_context {
         SchemeType scheme = SchemeType::BFV;
         EncryptionParameters parms(scheme);
 
-        auto context = HeContext::create(parms, false, SecurityLevel::None);
+        auto context = HeContext::create(parms, false, SecurityLevel::Nil);
         ASSERT_TRUE(test_qualifiers(context, EncryptionParameterErrorType::InvalidCoeffModulusSize,
-            false, false, false, false, false, false, SecurityLevel::None, false, false));
+            false, false, false, false, false, false, SecurityLevel::Nil, false, false));
 
         Array<Modulus> moduli;
         parms.set_poly_modulus_degree(4);
         moduli = to_moduli({2, 30});
         parms.set_coeff_modulus(moduli.const_reference());
         parms.set_plain_modulus(Modulus(2));
-        context = HeContext::create(parms, false, SecurityLevel::None);
+        context = HeContext::create(parms, false, SecurityLevel::Nil);
         ASSERT_TRUE(test_qualifiers(context, EncryptionParameterErrorType::FailedCreatingRNSBase,
-            false, true, false, false, false, false, SecurityLevel::None, false, false));
+            false, true, false, false, false, false, SecurityLevel::Nil, false, false));
 
         parms.set_poly_modulus_degree(4);
         moduli = to_moduli({17, 41});
         parms.set_coeff_modulus(moduli.const_reference());
         parms.set_plain_modulus(Modulus(34));
-        context = HeContext::create(parms, false, SecurityLevel::None);
+        context = HeContext::create(parms, false, SecurityLevel::Nil);
         ASSERT_TRUE(test_qualifiers(context, EncryptionParameterErrorType::InvalidPlainModulusCoprimality,
-            false, true, true, false, false, false, SecurityLevel::None, false, false
+            false, true, true, false, false, false, SecurityLevel::Nil, false, false
         ));
         
         parms.set_poly_modulus_degree(4);
         moduli = to_moduli({17});
         parms.set_coeff_modulus(moduli.const_reference());
         parms.set_plain_modulus(Modulus(41));
-        context = HeContext::create(parms, false, SecurityLevel::None);
+        context = HeContext::create(parms, false, SecurityLevel::Nil);
         ASSERT_TRUE(test_qualifiers(context, EncryptionParameterErrorType::InvalidPlainModulusTooLarge,
-            false, true, true, false, false, false, SecurityLevel::None, false, false
+            false, true, true, false, false, false, SecurityLevel::Nil, false, false
         ));
 
         parms.set_poly_modulus_degree(4);
         moduli = to_moduli({3});
         parms.set_coeff_modulus(moduli.const_reference());
         parms.set_plain_modulus(Modulus(2));
-        context = HeContext::create(parms, false, SecurityLevel::None);
+        context = HeContext::create(parms, false, SecurityLevel::Nil);
         ASSERT_TRUE(test_qualifiers(context, EncryptionParameterErrorType::InvalidCoeffModulusNoNTT,
-            false, true, false, false, false, false, SecurityLevel::None, false, false
+            false, true, false, false, false, false, SecurityLevel::Nil, false, false
         ));
 
         parms.set_poly_modulus_degree(4);
         moduli = to_moduli({17, 41});
         parms.set_coeff_modulus(moduli.const_reference());
         parms.set_plain_modulus(Modulus(18));
-        context = HeContext::create(parms, false, SecurityLevel::None);
+        context = HeContext::create(parms, false, SecurityLevel::Nil);
         ASSERT_EQ(context->first_context_data().value()->total_coeff_modulus()[0], 697);
         ASSERT_TRUE(test_qualifiers(context, EncryptionParameterErrorType::Success,
-            true, true, true, false, false, false, SecurityLevel::None, false, false
+            true, true, true, false, false, false, SecurityLevel::Nil, false, false
         ));
 
         parms.set_poly_modulus_degree(4);
         moduli = to_moduli({17, 41});
         parms.set_coeff_modulus(moduli.const_reference());
         parms.set_plain_modulus(Modulus(16));
-        context = HeContext::create(parms, false, SecurityLevel::None);
+        context = HeContext::create(parms, false, SecurityLevel::Nil);
         ASSERT_EQ(context->first_context_data().value()->total_coeff_modulus()[0], 17);
         ASSERT_EQ(context->key_context_data().value()->total_coeff_modulus()[0], 697);
         ASSERT_TRUE(test_qualifiers(context, EncryptionParameterErrorType::Success,
-            true, true, true, false, true, false, SecurityLevel::None, true, true
+            true, true, true, false, true, false, SecurityLevel::Nil, true, true
         ));
 
         parms.set_poly_modulus_degree(4);
         moduli = to_moduli({17, 41});
         parms.set_coeff_modulus(moduli.const_reference());
         parms.set_plain_modulus(Modulus(49));
-        context = HeContext::create(parms, false, SecurityLevel::None);
+        context = HeContext::create(parms, false, SecurityLevel::Nil);
         ASSERT_EQ(context->first_context_data().value()->total_coeff_modulus()[0], 697);
         ASSERT_TRUE(test_qualifiers(context, EncryptionParameterErrorType::Success,
-            true, true, true, false, false, false, SecurityLevel::None, false, false
+            true, true, true, false, false, false, SecurityLevel::Nil, false, false
         ));
         
         parms.set_poly_modulus_degree(4);
         moduli = to_moduli({17, 41});
         parms.set_coeff_modulus(moduli.const_reference());
         parms.set_plain_modulus(Modulus(73));
-        context = HeContext::create(parms, false, SecurityLevel::None);
+        context = HeContext::create(parms, false, SecurityLevel::Nil);
         ASSERT_EQ(context->first_context_data().value()->total_coeff_modulus()[0], 697);
         ASSERT_TRUE(test_qualifiers(context, EncryptionParameterErrorType::Success,
-            true, true, true, true, false, false, SecurityLevel::None, false, false
+            true, true, true, true, false, false, SecurityLevel::Nil, false, false
         ));
         
         parms.set_poly_modulus_degree(4);
         moduli = to_moduli({137, 193});
         parms.set_coeff_modulus(moduli.const_reference());
         parms.set_plain_modulus(Modulus(73));
-        context = HeContext::create(parms, false, SecurityLevel::None);
+        context = HeContext::create(parms, false, SecurityLevel::Nil);
         ASSERT_EQ(context->first_context_data().value()->total_coeff_modulus()[0], 137);
         ASSERT_EQ(context->key_context_data().value()->total_coeff_modulus()[0], 26441);
         ASSERT_TRUE(test_qualifiers(context, EncryptionParameterErrorType::Success,
-            true, true, true, true, true, false, SecurityLevel::None, true, true
+            true, true, true, true, true, false, SecurityLevel::Nil, true, true
         ));
         
         parms.set_poly_modulus_degree(4);
@@ -161,7 +161,7 @@ namespace he_context {
         parms.set_plain_modulus(Modulus(73));
         context = HeContext::create(parms, false, SecurityLevel::Classical128);
         ASSERT_TRUE(test_qualifiers(context, EncryptionParameterErrorType::InvalidParametersInsecure,
-            false, true, false, false, false, false, SecurityLevel::None, false, false
+            false, true, false, false, false, false, SecurityLevel::Nil, false, false
         ));
 
         parms.set_poly_modulus_degree(2048);
@@ -170,7 +170,7 @@ namespace he_context {
         parms.set_plain_modulus(Modulus(73));
         context = HeContext::create(parms, false, SecurityLevel::Classical128);
         ASSERT_TRUE(test_qualifiers(context, EncryptionParameterErrorType::InvalidParametersInsecure,
-            false, true, false, false, false, false, SecurityLevel::None, false, false
+            false, true, false, false, false, false, SecurityLevel::Nil, false, false
         ));
 
         parms.set_poly_modulus_degree(4096);
@@ -185,17 +185,17 @@ namespace he_context {
         parms.set_poly_modulus_degree(2048);
         parms.set_coeff_modulus(to_moduli({0x1ffffe0001, 0xffffee001, 0xffffc4001}).const_reference());
         parms.set_plain_modulus(Modulus(73));
-        context = HeContext::create(parms, false, SecurityLevel::None);
+        context = HeContext::create(parms, false, SecurityLevel::Nil);
         ASSERT_TRUE(test_qualifiers(context, EncryptionParameterErrorType::Success,
-            true, true, true, false, true, true, SecurityLevel::None, true, true
+            true, true, true, false, true, true, SecurityLevel::Nil, true, true
         ));
         
         parms.set_poly_modulus_degree(2048);
         parms.set_coeff_modulus(CoeffModulus::create(2048, {40}).const_reference());
         parms.set_plain_modulus(Modulus(65537));
-        context = HeContext::create(parms, false, SecurityLevel::None);
+        context = HeContext::create(parms, false, SecurityLevel::Nil);
         ASSERT_TRUE(test_qualifiers(context, EncryptionParameterErrorType::Success,
-            true, true, true, true, true, true, SecurityLevel::None, false, false
+            true, true, true, true, true, true, SecurityLevel::Nil, false, false
         ));
     }
 
@@ -209,7 +209,7 @@ namespace he_context {
         parms.set_poly_modulus_degree(4);
         parms.set_coeff_modulus(to_moduli({41, 137, 193, 65537}).const_reference());
         parms.set_plain_modulus(Modulus(73));
-        auto context = HeContext::create(parms, true, SecurityLevel::None);
+        auto context = HeContext::create(parms, true, SecurityLevel::Nil);
         auto context_data = context->key_context_data().value();
         ASSERT_EQ(context_data->chain_index(), 2);
         ASSERT_EQ(context_data->total_coeff_modulus()[0], 71047416497);
@@ -232,7 +232,7 @@ namespace he_context {
         ASSERT_FALSE(context_data->next_context_data().has_value());
         ASSERT_EQ(context_data->parms_id(), context->last_parms_id());
 
-        context = HeContext::create(parms, false, SecurityLevel::None);
+        context = HeContext::create(parms, false, SecurityLevel::Nil);
         ASSERT_EQ(context->key_context_data().value()->chain_index(), 1);
         ASSERT_EQ(context->first_context_data().value()->chain_index(), 0);
         ASSERT_EQ(context->key_context_data().value()->total_coeff_modulus()[0], 71047416497);
@@ -246,7 +246,7 @@ namespace he_context {
         parms.set_poly_modulus_degree(4);
         parms.set_coeff_modulus(to_moduli({41, 137, 193, 65537}).const_reference());
         parms.set_plain_modulus(Modulus(73));
-        context = HeContext::create(parms, true, SecurityLevel::None);
+        context = HeContext::create(parms, true, SecurityLevel::Nil);
         context_data = context->key_context_data().value();
         ASSERT_EQ(context_data->chain_index(), 2);
         ASSERT_EQ(context_data->total_coeff_modulus()[0], 71047416497);
@@ -269,7 +269,7 @@ namespace he_context {
         ASSERT_FALSE(context_data->next_context_data().has_value());
         ASSERT_EQ(context_data->parms_id(), context->last_parms_id());
 
-        context = HeContext::create(parms, false, SecurityLevel::None);
+        context = HeContext::create(parms, false, SecurityLevel::Nil);
         ASSERT_EQ(context->key_context_data().value()->chain_index(), 1);
         ASSERT_EQ(context->first_context_data().value()->chain_index(), 0);
         ASSERT_EQ(context->key_context_data().value()->total_coeff_modulus()[0], 71047416497);
@@ -282,7 +282,7 @@ namespace he_context {
 
         parms.set_poly_modulus_degree(4);
         parms.set_coeff_modulus(to_moduli({41, 137, 193, 65537}).const_reference());
-        context = HeContext::create(parms, true, SecurityLevel::None);
+        context = HeContext::create(parms, true, SecurityLevel::Nil);
         context_data = context->key_context_data().value();
         ASSERT_EQ(context_data->chain_index(), 3);
         ASSERT_EQ(context_data->total_coeff_modulus()[0], 71047416497);
@@ -313,7 +313,7 @@ namespace he_context {
         ASSERT_FALSE(context_data->next_context_data().has_value());
         ASSERT_EQ(context_data->parms_id(), context->last_parms_id());
 
-        context = HeContext::create(parms, false, SecurityLevel::None);
+        context = HeContext::create(parms, false, SecurityLevel::Nil);
         ASSERT_EQ(context->key_context_data().value()->chain_index(), 1);
         ASSERT_EQ(context->first_context_data().value()->chain_index(), 0);
         ASSERT_EQ(context->key_context_data().value()->total_coeff_modulus()[0], 71047416497);
@@ -330,7 +330,7 @@ namespace he_context {
         parms.set_poly_modulus_degree(4);
         parms.set_coeff_modulus(to_moduli({41, 137, 193, 65537}).const_reference());
         parms.set_plain_modulus(Modulus(73));
-        auto context = HeContext::create(parms, true, SecurityLevel::None);
+        auto context = HeContext::create(parms, true, SecurityLevel::Nil);
         context->to_device_inplace();
         
         // BGV
@@ -350,7 +350,7 @@ namespace he_context {
 
         parms.set_poly_modulus_degree(4);
         parms.set_coeff_modulus(to_moduli({41, 137, 193, 65537}).const_reference());
-        context = HeContext::create(parms, true, SecurityLevel::None);
+        context = HeContext::create(parms, true, SecurityLevel::Nil);
         context->to_device_inplace();
 
         utils::MemoryPool::Destroy();

@@ -28,7 +28,7 @@ namespace ckks_encoder {
         slots = 32;
         parms.set_poly_modulus_degree(slots << 1);
         parms.set_coeff_modulus(CoeffModulus::create(slots << 1, {40, 40, 40, 40}).const_reference());
-        context = HeContext::create(parms, true, SecurityLevel::None);
+        context = HeContext::create(parms, true, SecurityLevel::Nil);
         CKKSEncoder encoder = CKKSEncoder(context);
         if (device) {
             context->to_device_inplace();
@@ -76,7 +76,7 @@ namespace ckks_encoder {
         parms.set_poly_modulus_degree(slots << 1);
         parms.set_coeff_modulus(CoeffModulus::create(slots << 1, {30, 30, 30, 30, 30}).const_reference());
         delta = std::pow(2.0, 30.0);
-        context = HeContext::create(parms, false, SecurityLevel::None);
+        context = HeContext::create(parms, false, SecurityLevel::Nil);
         encoder = CKKSEncoder(context);
         if (device) {
             context->to_device_inplace();
@@ -121,7 +121,7 @@ namespace ckks_encoder {
         slots = 32;
         parms.set_poly_modulus_degree(slots << 1);
         parms.set_coeff_modulus(CoeffModulus::create(slots << 1, {40, 40, 40, 40}).const_reference());
-        context = HeContext::create(parms, true, SecurityLevel::None);
+        context = HeContext::create(parms, true, SecurityLevel::Nil);
         CKKSEncoder encoder = CKKSEncoder(context);
         if (device) {
             context->to_device_inplace();
@@ -192,7 +192,7 @@ namespace ckks_encoder {
         slots = 32;
         parms.set_poly_modulus_degree(slots << 1);
         parms.set_coeff_modulus(CoeffModulus::create(slots << 1, {40, 40, 40, 40}).const_reference());
-        context = HeContext::create(parms, true, SecurityLevel::None);
+        context = HeContext::create(parms, true, SecurityLevel::Nil);
         CKKSEncoder encoder = CKKSEncoder(context);
         if (device) {
             context->to_device_inplace();

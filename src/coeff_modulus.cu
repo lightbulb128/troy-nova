@@ -8,8 +8,8 @@ namespace troy {
             throw std::invalid_argument("[CoeffModulus::bfv_default_vector] Invalid poly_modulus_degree or sec_level.");
         }
         switch (sec_level) {
-            case SecurityLevel::None: 
-                throw std::invalid_argument("[CoeffModulus::bfv_default_vector] No default for None security.");
+            case SecurityLevel::Nil: 
+                throw std::invalid_argument("[CoeffModulus::bfv_default_vector] No default for Nil security.");
             case SecurityLevel::Classical128: {
                 switch (poly_modulus_degree) {
                     case 1024: return { 0x7e00001 };

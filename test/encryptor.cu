@@ -55,7 +55,7 @@ namespace encryptor {
         parms.set_coeff_modulus(CoeffModulus::create(n, log_qi));
         // create gadgets
         bool ckks = scheme == SchemeType::CKKS;
-        auto context = HeContext::create(parms, expand_mod_chain, SecurityLevel::None, seed);
+        auto context = HeContext::create(parms, expand_mod_chain, SecurityLevel::Nil, seed);
         auto encoder = ckks ? GeneralEncoder(CKKSEncoder(context)) : GeneralEncoder(BatchEncoder(context));
         if (device) {
             context->to_device_inplace();

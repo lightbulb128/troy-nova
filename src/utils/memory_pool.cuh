@@ -74,7 +74,14 @@ namespace troy {namespace utils {
             }
             if (free < required + PRESERVED_MEMORY_BYTES) {
                 release_unused();
-                return try_allocate(required);
+                // try again
+                status = cudaMemGetInfo(&free, &total);
+                if (status != cudaSuccess) {
+                    runtime_error("[MemoryPool::try_allocate] cudaMemGetInfo failed", status);
+                }
+                if (free < required + PRESERVED_MEMORY_BYTES) {
+                    throw std::runtime_error("[MemoryPool::try_allocate] Not enough memory.");
+                }
             }
             void* ptr = nullptr;
             status = cudaMalloc(&ptr, required);

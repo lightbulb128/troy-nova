@@ -14,8 +14,8 @@ namespace troy {
             throw std::runtime_error(msg);
         }
 
-        inline void initialize() {
-            cudaError_t status = cudaSetDevice(0);
+        inline void initialize(int device = 0) {
+            cudaError_t status = cudaSetDevice(device);
             if (status != cudaSuccess) {
                 runtime_error("[kernel_provider::initialize] cudaSetDevice failed", status);
             }

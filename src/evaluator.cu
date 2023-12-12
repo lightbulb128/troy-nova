@@ -2231,10 +2231,10 @@ namespace troy {
         }
         // take the first element
         Ciphertext ret = std::move(rlwes[0]);
-        field_trace_inplace(ret, automorphism_keys, l);
         if (scheme == SchemeType::CKKS) {
             this->transform_to_ntt_inplace(ret);
         }
+        field_trace_inplace(ret, automorphism_keys, l);
         return ret;
     }
 }
