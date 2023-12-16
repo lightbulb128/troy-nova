@@ -63,4 +63,10 @@ if(TROY_BENCH)
     )
     target_link_libraries(bench_matmul troy)
 
+    add_executable(bench_ntt)
+    target_sources(bench_ntt PRIVATE 
+        bench/ntt.cu
+    )
+    target_link_libraries(bench_ntt troy)
+
 endif()

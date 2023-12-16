@@ -1,6 +1,9 @@
 #include "ntt.cuh"
+#include "timer.h"
 
 namespace troy {namespace utils {
+
+    static const size_t NTT_KERNEL_THREAD_COUNT = 256;
 
     NTTTables::NTTTables(size_t coeff_count_power, const Modulus& modulus) {
 
@@ -178,8 +181,8 @@ namespace troy {namespace utils {
         bool device = operand.on_device();
         if (device) {
             size_t total = pcount * tables.size() * (1 << (log_degree - 1));
-            size_t block_count = ceil_div<size_t>(total, KERNEL_THREAD_COUNT);
-            kernel_ntt_transfer_to_rev_layer<<<block_count, KERNEL_THREAD_COUNT>>>(layer, operand, pcount, log_degree, tables, use_inv_root_powers);
+            size_t block_count = ceil_div<size_t>(total, NTT_KERNEL_THREAD_COUNT);
+            kernel_ntt_transfer_to_rev_layer<<<block_count, NTT_KERNEL_THREAD_COUNT>>>(layer, operand, pcount, log_degree, tables, use_inv_root_powers);
         } else {
             host_ntt_transfer_to_rev_layer(layer, operand, pcount, log_degree, tables, use_inv_root_powers);
         }
@@ -191,15 +194,12 @@ namespace troy {namespace utils {
         if (device != tables.on_device()) {
             throw std::invalid_argument("[ntt_transfer_to_rev] Operand and tables must be on the same device.");
         }
-        size_t m = 1; size_t layer = 0;
-        size_t n = static_cast<size_t>(1) << log_degree;
-        for (; m <= (n >> 1); m <<= 1) {
+        for (size_t layer = 0; layer < log_degree; layer++) {
             ntt_transfer_to_rev_layer(
                 layer, operand,
                 pcount, log_degree,
                 tables, use_inv_root_powers 
             );
-            layer ++;
         }
     }
 
@@ -237,12 +237,14 @@ namespace troy {namespace utils {
         if (global_index >= (pcount * coeff_modulus_size * i_upperbound)) {
             return;
         }
-        size_t m = 1 << (log_degree - layer - 1);
-        size_t gap_power = layer;
-        size_t gap = 1 << gap_power;
+        
         size_t k = global_index / (coeff_modulus_size * i_upperbound);
         size_t j = (global_index / i_upperbound) % coeff_modulus_size;
         size_t i = global_index % i_upperbound;
+
+        size_t m = 1 << (log_degree - layer - 1);
+        size_t gap_power = layer;
+        size_t gap = 1 << gap_power;
 
         const Modulus& modulus = tables[j].modulus();
         uint64_t two_times_modulus = modulus.value() << 1;
@@ -264,8 +266,8 @@ namespace troy {namespace utils {
         bool device = operand.on_device();
         if (device) {
             size_t total = (pcount * tables.size()) << (log_degree - 1);
-            size_t block_count = ceil_div<size_t>(total, KERNEL_THREAD_COUNT);
-            kernel_ntt_transfer_from_rev_layer<<<block_count, KERNEL_THREAD_COUNT>>>(layer, operand, pcount, log_degree, tables, use_inv_root_powers);
+            size_t block_count = ceil_div<size_t>(total, NTT_KERNEL_THREAD_COUNT);
+            kernel_ntt_transfer_from_rev_layer<<<block_count, NTT_KERNEL_THREAD_COUNT>>>(layer, operand, pcount, log_degree, tables, use_inv_root_powers);
         } else {
             host_ntt_transfer_from_rev_layer(layer, operand, pcount, log_degree, tables, use_inv_root_powers);
         }
