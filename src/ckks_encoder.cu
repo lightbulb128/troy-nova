@@ -270,6 +270,7 @@ namespace troy {
     }
 
     static void fft_transform_from_rev(Slice<complex<double>> operand, size_t logn, ConstSlice<complex<double>> roots, double fix) {
+        // TODO: Improve this like NTT (with 8 layers into one kernel with __syncthreads())
         bool device = operand.on_device();
         if (device != roots.on_device()) {
             throw std::invalid_argument("[CKKSEncoder::fft_transform_from_rev] operand and roots must be on the same device.");
@@ -332,6 +333,7 @@ namespace troy {
     }
 
     static void fft_transform_to_rev(Slice<complex<double>> operand, size_t logn, ConstSlice<complex<double>> roots) {
+        // TODO: Improve this like NTT (with 8 layers into one kernel with __syncthreads())
         bool device = operand.on_device();
         if (device != roots.on_device()) {
             throw std::invalid_argument("[CKKSEncoder::fft_transform_to_rev] operand and roots must be on the same device.");
@@ -782,7 +784,7 @@ namespace troy {
         multiply_double_scalar(real_values.reference(), scale);
 
         set_plaintext_value_array(context_data, coeff_count, real_values.const_reference(), coeff_modulus, destination);
-        
+
         // Transform to NTT domain
         utils::ntt_negacyclic_harvey_p(destination.poly(), coeff_count, ntt_tables);
 

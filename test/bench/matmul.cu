@@ -104,7 +104,7 @@ std::string bool_to_string(bool b) {
 int main(int argc, char** argv) {
     // require m, r, n arguments at least
     if (argc < 4) {
-        std::cout << "Usage: " << argv[0] << " m r n [pack_lwe] [mod_switch_to_next]" << std::endl;
+        std::cout << "Usage: " << argv[0] << " m r n [pack_lwe] [mod_switch_to_next] [poly_modulus_degree]" << std::endl;
         return 1;
     }
     size_t m = std::stoi(argv[1]);
@@ -118,6 +118,10 @@ int main(int argc, char** argv) {
     if (argc >= 6) {
         mod_switch_to_next = std::stoi(argv[5]);
     }
+    size_t poly_modulus_degree = 8192;
+    if (argc >= 7) {
+        poly_modulus_degree = std::stoi(argv[6]);
+    }
     std::cout << "[Arguments]" << std::endl;
     std::cout << "  m = " << m << std::endl;
     std::cout << "  r = " << r << std::endl;
@@ -125,7 +129,7 @@ int main(int argc, char** argv) {
     std::cout << "  pack_lwe = " << bool_to_string(pack_lwe) << std::endl;
     std::cout << "  mod_switch_to_next = " << bool_to_string(mod_switch_to_next) << std::endl;
     
-    GeneralHeContext ghe(true, SchemeType::BFV, 8192, 40, { 60, 60, 60 }, true, 0x123, 0);
+    GeneralHeContext ghe(true, SchemeType::BFV, poly_modulus_degree, 40, { 60, 60, 60 }, true, 0x123, 0);
     test_matmul(ghe, m, r, n, pack_lwe, mod_switch_to_next);
 
     utils::MemoryPool::Destroy();

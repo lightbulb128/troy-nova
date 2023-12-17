@@ -11,7 +11,21 @@ using std::complex;
 
 namespace ckks_encoder {
 
-    void print_complex_vector(vector<complex<double>> &a) {
+    void print_complex_vector(const vector<complex<double>> &a) {
+        for (size_t i = 0; i < a.size(); i++) {
+            std::cout << a[i] << " ";
+        }
+        std::cout << std::endl;
+    }
+
+    void print_double_vector(const vector<double> &a) {
+        for (size_t i = 0; i < a.size(); i++) {
+            std::cout << a[i] << " ";
+        }
+        std::cout << std::endl;
+    }
+
+    void print_uint64_vector(const vector<uint64_t> &a) {
         for (size_t i = 0; i < a.size(); i++) {
             std::cout << a[i] << " ";
         }
@@ -25,7 +39,7 @@ namespace ckks_encoder {
         HeContextPointer context;
         vector<complex<double>> values;
         
-        slots = 32;
+        slots = 1024;
         parms.set_poly_modulus_degree(slots << 1);
         parms.set_coeff_modulus(CoeffModulus::create(slots << 1, {40, 40, 40, 40}).const_reference());
         context = HeContext::create(parms, true, SecurityLevel::Nil);
@@ -72,7 +86,7 @@ namespace ckks_encoder {
         ASSERT_TRUE(near_vector(values, result));
 
 
-        slots = 64;
+        slots = 1024;
         parms.set_poly_modulus_degree(slots << 1);
         parms.set_coeff_modulus(CoeffModulus::create(slots << 1, {30, 30, 30, 30, 30}).const_reference());
         delta = std::pow(2.0, 30.0);
@@ -118,7 +132,7 @@ namespace ckks_encoder {
         HeContextPointer context;
         vector<double> values;
         
-        slots = 32;
+        slots = 1024;
         parms.set_poly_modulus_degree(slots << 1);
         parms.set_coeff_modulus(CoeffModulus::create(slots << 1, {40, 40, 40, 40}).const_reference());
         context = HeContext::create(parms, true, SecurityLevel::Nil);
@@ -143,7 +157,9 @@ namespace ckks_encoder {
             values[i] = rand() % (2 * bound) - bound;
         }
         plain = encoder.encode_float64_polynomial_new(values, std::nullopt, delta);
+        // std::cout << "plain: "; print_uint64_vector(plain.data().to_vector());
         result = encoder.decode_float64_polynomial_new(plain);
+        // std::cout << "result: "; print_double_vector(result);
         ASSERT_TRUE(near_vector(values, result));
 
         for (size_t i = 0; i < slots * 2; i++) {
@@ -189,7 +205,7 @@ namespace ckks_encoder {
         HeContextPointer context;
         vector<int64_t> values;
         
-        slots = 32;
+        slots = 1024;
         parms.set_poly_modulus_degree(slots << 1);
         parms.set_coeff_modulus(CoeffModulus::create(slots << 1, {40, 40, 40, 40}).const_reference());
         context = HeContext::create(parms, true, SecurityLevel::Nil);

@@ -19,35 +19,36 @@ void ASSERT_TRUE(bool condition) {
         printf("ASSERTION FAILED\n");
     }
 }
-    
 
 int main() {
-    GeneralHeContext gheh(false, SchemeType::BFV, 8, 20, { 60, 60, 60 }, true, 0x123, 0);
-    GeneralHeContext ghed( true, SchemeType::BFV, 8, 20, { 60, 60, 60 }, true, 0x123, 0);
+    size_t n = 32;
+    GeneralHeContext gheh(false, SchemeType::BFV, n, 40, { 60, 60, 60 }, true, 0x123, 0);
+    GeneralHeContext ghed( true, SchemeType::BFV, n, 40, { 60, 60, 60 }, true, 0x123, 0);
     
     uint64_t t = gheh.t();
     double scale = gheh.scale();
     double tolerance = gheh.tolerance();
 
     GeneralVector message = gheh.random_polynomial_full();
-    Plaintext encoded = gheh.encoder().encode_polynomial(message, std::nullopt, scale);
-    Ciphertext encrypted = gheh.encryptor().encrypt_asymmetric_new(encoded);
-    Ciphertext encrypted_device = encrypted.to_device();
 
-    vector<size_t> terms = {1};
-    for (size_t term : terms) {
-        auto extracted_device = ghed.evaluator().extract_lwe_new(encrypted_device, term);
-        auto extracted = extracted_device.to_host();
-        // auto extracted = extracted_device.to_host();
-        // auto assembled_device = ghed.evaluator().assemble_lwe_new(extracted_device);
-        auto assembled = gheh.evaluator().assemble_lwe_new(extracted);
-        if (gheh.params_host().scheme() == SchemeType::CKKS) {
-            gheh.evaluator().transform_to_ntt_inplace(assembled);
+    Array<uint64_t> message_host = Array<uint64_t>::from_vector(vector(message.integers()));
+    Array<uint64_t> message_device = message_host.to_device();
+
+    std::cerr << "1" << std::endl;
+    utils::inverse_ntt_negacyclic_harvey(message_host.reference(), n, gheh.context()->first_context_data().value()->plain_ntt_tables());
+    
+    std::cerr << "2" << std::endl;
+    utils::inverse_ntt_negacyclic_harvey(message_device.reference(), n, ghed.context()->first_context_data().value()->plain_ntt_tables());
+
+    Array<uint64_t> message_device_to_host = message_device.to_host();
+    bool same = true;
+    for (size_t i = 0; i < n; i++) {
+        if (message_host[i] != message_device_to_host[i]) {
+            same = false;
+            break;
         }
-        auto decrypted = gheh.decryptor().decrypt_new(assembled);
-        auto decoded = gheh.encoder().decode_polynomial(decrypted);
-        ASSERT_TRUE(message.element(term).near_equal(decoded.element(0), tolerance));
     }
+    std::cerr << "same: " << same << std::endl;
 
     return 0;
 }

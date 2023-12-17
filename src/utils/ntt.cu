@@ -4,6 +4,7 @@
 namespace troy {namespace utils {
 
     static const size_t NTT_KERNEL_THREAD_COUNT = 256;
+    static const size_t NTT_KERNEL_THREAD_COUNT_LOG2 = 8;
 
     NTTTables::NTTTables(size_t coeff_count_power, const Modulus& modulus) {
 
@@ -143,19 +144,21 @@ namespace troy {namespace utils {
         }
     }
 
-    __global__ void kernel_ntt_transfer_to_rev_layer(size_t layer, Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers) {
+    __global__ void kernel_ntt_transfer_to_rev_layer1(size_t layer, Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers) {
         size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
         size_t i_upperbound = 1 << (log_degree - 1);
         size_t coeff_modulus_size = tables.size();
         if (global_index >= (pcount * coeff_modulus_size * i_upperbound)) {
             return;
         }
-        size_t m = 1 << layer;
-        size_t gap_power = log_degree - layer - 1;
-        size_t gap = 1 << gap_power;
+
         size_t k = global_index / (coeff_modulus_size * i_upperbound);
         size_t j = (global_index / i_upperbound) % coeff_modulus_size;
         size_t i = global_index % i_upperbound;
+
+        size_t m = 1 << layer;
+        size_t gap_power = log_degree - layer - 1;
+        size_t gap = 1 << gap_power;
 
         const Modulus& modulus = tables[j].modulus();
         uint64_t two_times_modulus = modulus.value() << 1;
@@ -173,18 +176,68 @@ namespace troy {namespace utils {
         uint64_t v = utils::multiply_uint64operand_mod_lazy(y, r, modulus);
         x = u + v;
         y = u + two_times_modulus - v;
+
         operand[x_index] = x;
         operand[y_index] = y;
     }
 
-    void ntt_transfer_to_rev_layer(size_t layer, Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers) {
-        bool device = operand.on_device();
-        if (device) {
-            size_t total = pcount * tables.size() * (1 << (log_degree - 1));
-            size_t block_count = ceil_div<size_t>(total, NTT_KERNEL_THREAD_COUNT);
-            kernel_ntt_transfer_to_rev_layer<<<block_count, NTT_KERNEL_THREAD_COUNT>>>(layer, operand, pcount, log_degree, tables, use_inv_root_powers);
-        } else {
-            host_ntt_transfer_to_rev_layer(layer, operand, pcount, log_degree, tables, use_inv_root_powers);
+    __global__ void kernel_ntt_transfer_to_rev_layers(size_t layer_lower, size_t layer_upper, Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers) {
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        size_t i_upperbound = 1 << (log_degree - 1);
+        size_t coeff_modulus_size = tables.size();
+        if (global_index >= (pcount * coeff_modulus_size * i_upperbound)) {
+            return;
+        }
+
+        size_t k = global_index / (coeff_modulus_size * i_upperbound);
+        size_t j = (global_index / i_upperbound) % coeff_modulus_size;
+
+        size_t block_idx = static_cast<size_t>(blockIdx.x) % (gridDim.x / (pcount * coeff_modulus_size));
+        size_t gap_power = log_degree - layer_lower - 1;
+        size_t gap = 1 << gap_power;
+        size_t E = min(static_cast<size_t>(blockDim.x), gap); // elements in gap
+        size_t C = blockDim.x / E; // gaps crossed
+        size_t stride = gap / E;
+
+        size_t component_global_offset = (k * coeff_modulus_size + j) << log_degree;
+        size_t coefficient_offset = block_idx % stride + (block_idx / stride) * C * 2 * gap;
+
+        const Modulus& modulus = tables[j].modulus();
+        uint64_t two_times_modulus = modulus.value() << 1;
+
+        for (size_t dl = 0; dl < layer_upper - layer_lower; dl++) {
+
+            size_t layer = layer_lower + dl;
+
+            size_t x_index = threadIdx.x / E * 2 * gap + threadIdx.x % E * stride + coefficient_offset;
+            
+            size_t m = 1 << layer;
+
+            size_t i = ((x_index >> (gap_power + 1)) << gap_power) + (x_index & (gap - 1));
+            size_t rid = m + (i / gap);
+
+            x_index += component_global_offset;
+            size_t y_index = x_index + gap;
+            
+            MultiplyUint64Operand r = use_inv_root_powers ?
+                tables[j].inv_root_powers()[rid] :
+                tables[j].root_powers()[rid];
+            uint64_t x = operand[x_index];
+            uint64_t y = operand[y_index];
+            uint64_t u = (x >= two_times_modulus) ? (x - two_times_modulus) : x;
+            uint64_t v = utils::multiply_uint64operand_mod_lazy(y, r, modulus);
+            x = u + v;
+            y = u + two_times_modulus - v;
+
+            operand[x_index] = x;
+            operand[y_index] = y;
+
+            __syncthreads();
+
+            E >>= 1;
+            gap >>= 1;
+            gap_power -= 1;
+
         }
     }
 
@@ -194,12 +247,28 @@ namespace troy {namespace utils {
         if (device != tables.on_device()) {
             throw std::invalid_argument("[ntt_transfer_to_rev] Operand and tables must be on the same device.");
         }
-        for (size_t layer = 0; layer < log_degree; layer++) {
-            ntt_transfer_to_rev_layer(
-                layer, operand,
-                pcount, log_degree,
-                tables, use_inv_root_powers 
-            );
+        if (!device) {
+            for (size_t layer = 0; layer < log_degree; layer++) {
+                host_ntt_transfer_to_rev_layer(layer, operand, pcount, log_degree, tables, use_inv_root_powers);
+            }
+        } else {
+            if (log_degree <= NTT_KERNEL_THREAD_COUNT_LOG2) {
+                size_t total = pcount * tables.size() * (1 << (log_degree - 1));
+                size_t thread_count = 1 << (log_degree - 1);
+                size_t block_count = ceil_div<size_t>(total, thread_count);
+                kernel_ntt_transfer_to_rev_layers<<<block_count, thread_count>>>(
+                    0, log_degree, operand, pcount, log_degree, tables, use_inv_root_powers
+                );
+            } else {
+                for (size_t layer_lower = 0; layer_lower < log_degree; layer_lower += NTT_KERNEL_THREAD_COUNT_LOG2) {
+                    size_t layer_upper = std::min(layer_lower + NTT_KERNEL_THREAD_COUNT_LOG2, log_degree);
+                    size_t total = pcount * tables.size() * (1 << (log_degree - 1));
+                    size_t block_count = ceil_div<size_t>(total, NTT_KERNEL_THREAD_COUNT);
+                    kernel_ntt_transfer_to_rev_layers<<<block_count, NTT_KERNEL_THREAD_COUNT>>>(
+                        layer_lower, layer_upper, operand, pcount, log_degree, tables, use_inv_root_powers
+                    );
+                }
+            }
         }
     }
 
@@ -230,7 +299,7 @@ namespace troy {namespace utils {
         }
     }
 
-    __global__ void kernel_ntt_transfer_from_rev_layer(size_t layer, Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers) {
+    __global__ void kernel_ntt_transfer_from_rev_layer1(size_t layer, Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers) {
         size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
         size_t i_upperbound = 1 << (log_degree - 1);
         size_t coeff_modulus_size = tables.size();
@@ -260,16 +329,66 @@ namespace troy {namespace utils {
         uint64_t v = operand[y_index];
         operand[x_index] = (u + v > two_times_modulus) ? (u + v - two_times_modulus) : (u + v);
         operand[y_index] = utils::multiply_uint64operand_mod_lazy(u + two_times_modulus - v, r, modulus);
+
     }
 
-    void ntt_transfer_from_rev_layer(size_t layer, Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers) {
-        bool device = operand.on_device();
-        if (device) {
-            size_t total = (pcount * tables.size()) << (log_degree - 1);
-            size_t block_count = ceil_div<size_t>(total, NTT_KERNEL_THREAD_COUNT);
-            kernel_ntt_transfer_from_rev_layer<<<block_count, NTT_KERNEL_THREAD_COUNT>>>(layer, operand, pcount, log_degree, tables, use_inv_root_powers);
-        } else {
-            host_ntt_transfer_from_rev_layer(layer, operand, pcount, log_degree, tables, use_inv_root_powers);
+
+    __global__ void kernel_ntt_transfer_from_rev_layers(size_t layer_lower, size_t layer_upper, Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers) {
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        size_t i_upperbound = 1 << (log_degree - 1);
+        size_t coeff_modulus_size = tables.size();
+        if (global_index >= (pcount * coeff_modulus_size * i_upperbound)) {
+            return;
+        }
+
+        size_t k = global_index / (coeff_modulus_size * i_upperbound);
+        size_t j = (global_index / i_upperbound) % coeff_modulus_size;
+
+        size_t block_idx = static_cast<size_t>(blockIdx.x) % (gridDim.x / (pcount * coeff_modulus_size));
+        size_t gap_power = layer_upper - 1;
+        size_t gap = 1 << gap_power;
+        size_t E = min(static_cast<size_t>(blockDim.x), gap); // elements in gap
+        size_t C = blockDim.x / E; // gaps crossed
+        size_t stride = gap / E;
+
+        size_t component_global_offset = (k * coeff_modulus_size + j) << log_degree;
+        size_t coefficient_offset = block_idx % stride + (block_idx / stride) * C * 2 * gap;
+
+        gap >>= (layer_upper - layer_lower - 1);
+        gap_power -= (layer_upper - layer_lower - 1);
+        E >>= (layer_upper - layer_lower - 1);
+
+        const Modulus& modulus = tables[j].modulus();
+        uint64_t two_times_modulus = modulus.value() << 1;
+        const MultiplyUint64Operand* r_ptr = use_inv_root_powers ?
+            tables[j].inv_root_powers().raw_pointer() :
+            tables[j].root_powers().raw_pointer();
+
+        for (size_t layer = layer_lower; layer < layer_upper; layer++) {
+
+            size_t x_index = threadIdx.x / E * 2 * gap + threadIdx.x % E * stride + coefficient_offset;
+            
+            size_t m = 1 << (log_degree - layer - 1);
+
+            size_t i = ((x_index >> (gap_power + 1)) << gap_power) + (x_index & (gap - 1));
+            size_t rid = (1 << log_degree) - (m << 1) + 1 + (i >> gap_power);
+
+            x_index += component_global_offset;
+            size_t y_index = x_index + gap;
+
+            const MultiplyUint64Operand& r = r_ptr[rid];
+            
+            uint64_t u = operand[x_index];
+            uint64_t v = operand[y_index];
+            operand[x_index] = (u + v > two_times_modulus) ? (u + v - two_times_modulus) : (u + v);
+            operand[y_index] = utils::multiply_uint64operand_mod_lazy(u + two_times_modulus - v, r, modulus);
+
+            __syncthreads();
+
+            E <<= 1;
+            gap <<= 1;
+            gap_power += 1;
+
         }
     }
 
@@ -279,16 +398,28 @@ namespace troy {namespace utils {
         if (device != tables.on_device()) {
             throw std::invalid_argument("[ntt_transfer_from_rev] Operand and tables must be on the same device.");
         }
-        size_t n = static_cast<size_t>(1) << log_degree;
-        size_t m = n >> 1;
-        size_t layer = 0;
-        for (; m >= 1; m >>= 1) {
-            ntt_transfer_from_rev_layer(
-                layer, operand,
-                pcount, log_degree,
-                tables, use_inv_root_powers
-            );
-            layer ++;
+        if (!device) {
+            for (size_t layer = 0; layer < log_degree; layer++) {
+                host_ntt_transfer_from_rev_layer(layer, operand, pcount, log_degree, tables, use_inv_root_powers);
+            }
+        } else {
+            if (log_degree <= NTT_KERNEL_THREAD_COUNT_LOG2) {
+                size_t total = pcount * tables.size() * (1 << (log_degree - 1));
+                size_t thread_count = 1 << (log_degree - 1);
+                size_t block_count = ceil_div<size_t>(total, thread_count);
+                kernel_ntt_transfer_from_rev_layers<<<block_count, thread_count>>>(
+                    0, log_degree, operand, pcount, log_degree, tables, use_inv_root_powers
+                );
+            } else {
+                for (size_t layer_lower = 0; layer_lower < log_degree; layer_lower += NTT_KERNEL_THREAD_COUNT_LOG2) {
+                    size_t layer_upper = std::min(layer_lower + NTT_KERNEL_THREAD_COUNT_LOG2, log_degree);
+                    size_t total = pcount * tables.size() * (1 << (log_degree - 1));
+                    size_t block_count = ceil_div<size_t>(total, NTT_KERNEL_THREAD_COUNT);
+                    kernel_ntt_transfer_from_rev_layers<<<block_count, NTT_KERNEL_THREAD_COUNT>>>(
+                        layer_lower, layer_upper, operand, pcount, log_degree, tables, use_inv_root_powers
+                    );
+                }
+            }
         }
         ntt_multiply_inv_degree(
             operand, pcount, log_degree, tables

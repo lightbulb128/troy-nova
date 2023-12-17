@@ -6,12 +6,15 @@ using namespace troy;
 
 namespace batch_encoder {
 
+    static const size_t DEGREE = 1024;
+
     void test_unbatch_uint_vector(bool device) {
 
         EncryptionParameters parms(SchemeType::BFV);
-        parms.set_poly_modulus_degree(64);
-        parms.set_coeff_modulus(CoeffModulus::create(64, {60}).const_reference());
-        parms.set_plain_modulus(257);
+        parms.set_poly_modulus_degree(DEGREE);
+        parms.set_coeff_modulus(CoeffModulus::create(DEGREE, {60}).const_reference());
+        Modulus t = PlainModulus::batching(DEGREE, 20);
+        parms.set_plain_modulus(t);
 
         HeContextPointer context = HeContext::create(parms, false, SecurityLevel::Nil);
         ASSERT_TRUE(context->first_context_data().value()->qualifiers().using_batching);
@@ -25,7 +28,7 @@ namespace batch_encoder {
 
         std::vector<uint64_t> plain_vec(encoder.slot_count());
         for (size_t i = 0; i < encoder.slot_count(); i++) {
-            plain_vec[i] = i;
+            plain_vec[i] = i % t.value();
         }
         Plaintext plain = encoder.encode_new(plain_vec);
         auto decoded_vec = encoder.decode_new(plain);
@@ -63,8 +66,8 @@ namespace batch_encoder {
     void test_polynomial(bool device) {
 
         EncryptionParameters parms(SchemeType::BFV);
-        parms.set_poly_modulus_degree(64);
-        parms.set_coeff_modulus(CoeffModulus::create(64, {60}).const_reference());
+        parms.set_poly_modulus_degree(DEGREE);
+        parms.set_coeff_modulus(CoeffModulus::create(DEGREE, {60}).const_reference());
         parms.set_plain_modulus(256);
 
         HeContextPointer context = HeContext::create(parms, false, SecurityLevel::Nil);
@@ -79,7 +82,7 @@ namespace batch_encoder {
 
         std::vector<uint64_t> plain_vec(encoder.slot_count());
         for (size_t i = 0; i < encoder.slot_count(); i++) {
-            plain_vec[i] = i;
+            plain_vec[i] = i % 256;
         }
         Plaintext plain = encoder.encode_polynomial_new(plain_vec);
         auto decoded_vec = encoder.decode_polynomial_new(plain);
