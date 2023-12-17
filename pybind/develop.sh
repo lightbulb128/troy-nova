@@ -3,10 +3,10 @@ set -e
 
 cd ../build
 cmake .. -DTROY_PYBIND=ON
-make pytroy
+make pytroy_raw
 
-# get filename called "pybind/pytroy.cpython*"
-filename=$(ls pybind/pytroy.cpython*)
+# get filename called "pybind/pytroy_raw.cpython*"
+filename=$(ls pybind/pytroy_raw.cpython*)
 
 # copy it to pybind folder
 cp $filename ../pybind
@@ -32,10 +32,10 @@ fi
 pip install -e .
 
 # run stubgen
-pybind11-stubgen pytroy
+pybind11-stubgen pytroy_raw
 
 # move and rename the stub file
-mv stubs/pytroy.pyi __init__.pyi
+mv stubs/pytroy_raw.pyi __init__.pyi
 
 # remove the stubs folder
 rm -r stubs
@@ -46,3 +46,7 @@ rm -r pytroy.egg-info
 
 # reinstall the wheel
 pip install --force-reinstall dist/pytroy*.whl
+
+rm pytroy_raw.cpython*.so
+
+python test.py

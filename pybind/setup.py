@@ -1,7 +1,7 @@
 from setuptools import setup
 import os
 
-data_files = ['*.so']
+data_files = ['*.so', "__init__.py"]
 
 # is there a __init__.pyi file?
 if os.path.isfile('./__init__.pyi'):

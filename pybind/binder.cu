@@ -160,7 +160,7 @@ size_t serialized_size_he(const T& object, HeContextPointer context) {
     return object.serialized_size(context);
 }
 
-PYBIND11_MODULE(pytroy, m) {
+PYBIND11_MODULE(pytroy_raw, m) {
 
     m
         .def("it_works", []() {
