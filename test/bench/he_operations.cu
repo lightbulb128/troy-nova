@@ -64,6 +64,23 @@ namespace bench {
         timer.print_divided(repeat);
     }
 
+    void test_negate(const string& name, const GeneralHeContext& context, size_t repeat = 100) {
+        double scale = context.scale();
+        Timer timer;
+        size_t timer_neg = timer.register_timer(name + ".Negate");
+        GeneralVector message = context.random_simd_full();
+        Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale);
+        Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain);
+        Ciphertext result; 
+        for (size_t i = 0; i < repeat; i++) {
+            timer.tick(timer_neg);
+            Ciphertext cipher_neg = context.evaluator().negate_new(cipher);
+            // context.evaluator().add(cipher, cipher, result);
+            timer.tock(timer_neg);
+        }
+        timer.print_divided(repeat);
+    }
+
     void test_add(const string& name, const GeneralHeContext& context, size_t repeat = 100) {
         double scale = context.scale();
         Timer timer;
@@ -258,6 +275,7 @@ namespace bench {
         test_encode_simd(name, context, repeat_count);
         test_encode_polynomial(name, context, repeat_count);
         test_encrypt(name, context, repeat_count);
+        test_negate(name, context, repeat_count);
         test_add(name, context, repeat_count);
         test_add_plain(name, context, repeat_count);
         test_multiply_relinearize(name, context, repeat_count);

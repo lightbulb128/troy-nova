@@ -1,7 +1,8 @@
 .vscode/
 build/
 r.py
-*_notes.txt
+*notes.txt
+*notes.md
 reports/
 binder/*.so
 gather_code.*

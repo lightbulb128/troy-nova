@@ -49,10 +49,7 @@ namespace troy {namespace utils {
 
     __global__ void kernel_negate_ps(ConstSlice<uint64_t> polys, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-        if (idx < pcount * moduli.size() * degree) {
-            size_t j = (idx / degree) % moduli.size();
-            result[idx] = polys[idx] == 0 ? 0 : moduli[j].value() - polys[idx];
-        }
+        result[idx] = polys[idx] == 0 ? 0 : moduli[(idx / degree) % moduli.size()].value() - polys[idx];
     }
 
     void negate_ps(ConstSlice<uint64_t> polys, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
@@ -61,8 +58,10 @@ namespace troy {namespace utils {
             throw std::runtime_error("[negate_ps] All inputs must be on the same device");
         }
         if (device) {
-            size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
-            kernel_negate_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys, pcount, degree, moduli, result);
+            size_t total = pcount * moduli.size() * degree;
+            size_t thread_count = min(total, KERNEL_THREAD_COUNT);
+            size_t block_count = ceil_div<size_t>(total, thread_count);
+            kernel_negate_ps<<<block_count, thread_count>>>(polys, pcount, degree, moduli, result);
         } else {
             host_negate_ps(polys, pcount, degree, moduli, result);
         }

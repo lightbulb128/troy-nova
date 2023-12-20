@@ -62,6 +62,7 @@ int main() {
     mainr(16384, true);
     mainr(65536 * 2, false);
     mainr(65536 * 2, true);
+    troy::utils::MemoryPool::Destroy();
 }
 
 // make custom && ./test/custom > a.log 2>&1

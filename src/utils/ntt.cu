@@ -259,7 +259,7 @@ namespace troy {namespace utils {
 
         unsigned int block_idx = blockIdx.x % (gridDim.x / (pcount * coeff_modulus_size));
         unsigned int gap_power = log_degree - layer_lower - 1;
-        unsigned int E_power = min(static_cast<unsigned int>(layer_upper - layer_lower), gap_power); // elements in gap
+        unsigned int E_power = min(static_cast<unsigned int>(get_power_of_two(blockDim.x)), gap_power); // elements in gap
         unsigned int E_mask = (1 << E_power) - 1;
         unsigned int stride_power = gap_power - E_power;
         unsigned int stride_mask = (1 << stride_power) - 1;
