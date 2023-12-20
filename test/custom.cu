@@ -20,8 +20,7 @@ void ASSERT_TRUE(bool condition) {
     }
 }
 
-int main() {
-    size_t n = 32;
+void mainr(size_t n, bool inv) {
     GeneralHeContext gheh(false, SchemeType::BFV, n, 40, { 60, 60, 60 }, true, 0x123, 0);
     GeneralHeContext ghed( true, SchemeType::BFV, n, 40, { 60, 60, 60 }, true, 0x123, 0);
     
@@ -34,11 +33,13 @@ int main() {
     Array<uint64_t> message_host = Array<uint64_t>::from_vector(vector(message.integers()));
     Array<uint64_t> message_device = message_host.to_device();
 
-    std::cerr << "1" << std::endl;
-    utils::inverse_ntt_negacyclic_harvey(message_host.reference(), n, gheh.context()->first_context_data().value()->plain_ntt_tables());
-    
-    std::cerr << "2" << std::endl;
-    utils::inverse_ntt_negacyclic_harvey(message_device.reference(), n, ghed.context()->first_context_data().value()->plain_ntt_tables());
+    if (inv) {
+        utils::inverse_ntt_negacyclic_harvey(message_host.reference(), n, gheh.context()->first_context_data().value()->plain_ntt_tables());
+        utils::inverse_ntt_negacyclic_harvey(message_device.reference(), n, ghed.context()->first_context_data().value()->plain_ntt_tables());
+    } else {
+        utils::ntt_negacyclic_harvey(message_host.reference(), n, gheh.context()->first_context_data().value()->plain_ntt_tables());
+        utils::ntt_negacyclic_harvey(message_device.reference(), n, ghed.context()->first_context_data().value()->plain_ntt_tables());
+    }
 
     Array<uint64_t> message_device_to_host = message_device.to_host();
     bool same = true;
@@ -50,7 +51,17 @@ int main() {
     }
     std::cerr << "same: " << same << std::endl;
 
-    return 0;
+}
+
+int main() {
+    mainr(32, false);
+    mainr(32, true);
+    mainr(1024, false);
+    mainr(1024, true);
+    mainr(16384, false);
+    mainr(16384, true);
+    mainr(65536 * 2, false);
+    mainr(65536 * 2, true);
 }
 
 // make custom && ./test/custom > a.log 2>&1

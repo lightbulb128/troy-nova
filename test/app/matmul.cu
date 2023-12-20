@@ -115,20 +115,20 @@ namespace matmul {
         GeneralHeContext ghe(false, SchemeType::BFV, 1024, 40, { 60, 40, 40, 60 }, true, 0x123, 0);
         srand(0);
         test_matmul(ghe, 4, 5, 6, false, false);
-        // test_matmul(ghe, 64, 128, 256, false, false);
-        // test_matmul(ghe, 4, 5, 6, true, false);
-        // test_matmul(ghe, 64, 128, 256, true, false);
+        test_matmul(ghe, 64, 128, 256, false, false);
+        test_matmul(ghe, 4, 5, 6, true, false);
+        test_matmul(ghe, 64, 128, 256, true, false);
     }
 
     TEST(MatmulTest, DeviceMatmul) {
         GeneralHeContext ghe(true, SchemeType::BFV, 1024, 40, { 60, 40, 40, 60 }, true, 0x123, 0);
         srand(0);
         test_matmul(ghe, 4, 5, 6, false, false);
-        // test_matmul(ghe, 64, 128, 256, false, false);
-        // test_matmul(ghe, 400, 500, 600, false, false);
-        // test_matmul(ghe, 4, 5, 6, true, false);
-        // test_matmul(ghe, 64, 128, 256, true, false);
-        // test_matmul(ghe, 400, 500, 600, true, false);
+        test_matmul(ghe, 64, 128, 256, false, false);
+        test_matmul(ghe, 400, 500, 600, false, false);
+        test_matmul(ghe, 4, 5, 6, true, false);
+        test_matmul(ghe, 64, 128, 256, true, false);
+        test_matmul(ghe, 400, 500, 600, true, false);
     }
 
 }
