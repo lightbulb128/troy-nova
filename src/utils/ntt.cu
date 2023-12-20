@@ -181,6 +181,8 @@ namespace troy {namespace utils {
         operand[y_index] = y;
     }
 
+
+    /* This old version does not use shared memory
     __global__ void kernel_ntt_transfer_to_rev_layers(size_t layer_lower, size_t layer_upper, Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers) {
         size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
         size_t i_upperbound = 1 << (log_degree - 1);
@@ -239,6 +241,83 @@ namespace troy {namespace utils {
             gap_power -= 1;
 
         }
+    }
+    */
+
+    __global__ void kernel_ntt_transfer_to_rev_layers(size_t layer_lower, size_t layer_upper, Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers) {
+        unsigned int global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        unsigned int i_upperbound = 1 << (log_degree - 1);
+        unsigned int coeff_modulus_size = tables.size();
+        if (global_index >= (pcount * coeff_modulus_size * i_upperbound)) {
+            return;
+        }
+
+        unsigned int k = global_index / (coeff_modulus_size * i_upperbound);
+        unsigned int j = (global_index / i_upperbound) % coeff_modulus_size;
+        
+        const Modulus& modulus = tables[j].modulus();
+        uint64_t two_times_modulus = modulus.value() << 1;
+
+        unsigned int block_idx = blockIdx.x % (gridDim.x / (pcount * coeff_modulus_size));
+        unsigned int gap_power = log_degree - layer_lower - 1;
+        unsigned int gap = 1 << gap_power;
+        unsigned int E = min(blockDim.x, gap); // elements in gap
+        unsigned int stride = gap / E;
+
+        unsigned int coefficient_offset = block_idx % stride + (block_idx / stride) * (blockDim.x / E) * 2 * gap;
+        unsigned int global_offset = (k * coeff_modulus_size + j) << log_degree;
+
+        __shared__ uint64_t sdata[NTT_KERNEL_THREAD_COUNT * 2];
+        unsigned int from_x_index = 
+            threadIdx.x / E * 2 * gap 
+            + threadIdx.x % E * stride 
+            + coefficient_offset 
+            + global_offset;
+
+        unsigned int from_y_index = from_x_index + gap;
+        sdata[threadIdx.x] = operand[from_x_index];
+        sdata[threadIdx.x + blockDim.x] = operand[from_y_index];
+
+        const MultiplyUint64Operand* r_ptr = use_inv_root_powers ?
+            tables[j].inv_root_powers().raw_pointer() :
+            tables[j].root_powers().raw_pointer();
+
+        __syncthreads();
+
+        coefficient_offset = block_idx % stride + (block_idx / stride) * (blockDim.x / E) * gap;
+
+        for (unsigned int layer = layer_lower; layer < layer_upper; layer++) {
+
+            unsigned int i = threadIdx.x / E * gap + threadIdx.x % E * stride + coefficient_offset;
+            unsigned int rid = (1 << layer) + (i >> gap_power);
+            
+            MultiplyUint64Operand r = r_ptr[rid];
+
+            unsigned int sgap = blockDim.x >> (layer - layer_lower);
+            unsigned int x_index = threadIdx.x / sgap * 2 * sgap + threadIdx.x % sgap; // wrt shared data
+            unsigned int y_index = x_index + sgap; 
+            
+            uint64_t x = sdata[x_index];
+            uint64_t y = sdata[y_index];
+            uint64_t u = (x >= two_times_modulus) ? (x - two_times_modulus) : x;
+            uint64_t v = utils::multiply_uint64operand_mod_lazy(y, r, modulus);
+            x = u + v;
+            y = u + two_times_modulus - v;
+
+            sdata[x_index] = x;
+            sdata[y_index] = y;
+
+            __syncthreads();
+
+            E >>= 1;
+            gap >>= 1;
+            gap_power -= 1;
+
+        }
+        
+        operand[from_x_index] = sdata[threadIdx.x];
+        operand[from_y_index] = sdata[threadIdx.x + blockDim.x];
+
     }
 
     void ntt_transfer_to_rev(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers) {
