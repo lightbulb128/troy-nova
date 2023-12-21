@@ -2,7 +2,7 @@
 set -e
 
 cd ../build
-cmake .. -DTROY_PYBIND=ON
+cmake .. -DTROY_PYBIND=ON -DCMAKE_BUILD_TYPE=Release
 make pytroy_raw
 
 # get filename called "pybind/pytroy_raw.cpython*"

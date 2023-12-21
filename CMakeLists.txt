@@ -10,6 +10,11 @@ if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
   set(CMAKE_CUDA_ARCHITECTURES 70 72 75 80 86)
 endif()
 
+# if CMAKE_BUILD_TYPE is empty, set it to Release
+if(NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "")
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+
 cmake_minimum_required(VERSION 3.16)
 
 option(TROY_TEST "Build tests" OFF)
