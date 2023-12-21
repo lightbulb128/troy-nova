@@ -46,15 +46,18 @@ namespace troy { namespace linear {
                 size_t oc = ceil_div(output_dims, o);
                 size_t c = 0;
                 if (objective == MatmulObjective::EncryptLeft) {
-                    c = bc * (ceil_div(input_dims, i) + ceil_div(output_dims, o));
+                    c = bc * ceil_div(input_dims, i);
+                    c += ceil_div(bc * ceil_div(output_dims, o), i);
                 } else if (objective == MatmulObjective::EncryptRight) {
-                    c = (bc + ceil_div(input_dims, i)) * ceil_div(output_dims, o);
+                    c = ceil_div(output_dims, o) * ceil_div(input_dims, i);
+                    c += ceil_div(bc * ceil_div(output_dims, o), i);
                 } else if (objective == MatmulObjective::Crossed) {
-                    c = bc * input_dims + (bc + ceil_div(input_dims, i)) * ceil_div(output_dims, o);
+                    c = bc * ceil_div(input_dims, i);
+                    c += ceil_div(output_dims, o) * ceil_div(input_dims, i);
+                    c += ceil_div(bc * ceil_div(output_dims, o), i);
                 } else {
-                    throw std::runtime_error("[MatmulHelper::determine_block] Invalid objective");
+                    throw std::runtime_error("MatmulHelper: invalid objective");
                 }
-                c = ceil_div(c, i);
                 if (c >= c_best) {continue;}
                 b_best = b; i_best = i; o_best = o; c_best = c;
             }
