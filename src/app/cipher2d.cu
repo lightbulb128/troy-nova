@@ -63,6 +63,7 @@ namespace troy { namespace linear {
                 bytes += (*this)[i][j].serialized_size(context);
             }
         }
+        return bytes;
     }
 
 
