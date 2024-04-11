@@ -16,7 +16,7 @@ make troy
 Build python bindings.
 
 ```
-mkdir -p build
+mkdir -p build     # ensure build folder exists.
 cd pybind
 bash develop.sh
 ```
@@ -29,6 +29,7 @@ You will get a `pytroy*.whl` which could be installed.
 cd build
 cmake .. -DTROY_TEST=ON -DTROY_BENCH=ON
 make
+cd test
 ctest
-./test/troybench
+./troybench
 ```

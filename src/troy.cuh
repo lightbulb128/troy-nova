@@ -19,3 +19,4 @@
 #include "plaintext.cuh"
 
 #include "app/matmul.cuh"
+#include "app/conv2d.cuh"

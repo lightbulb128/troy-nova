@@ -1,6 +1,8 @@
 
 if(TROY_TEST)
 
+    include(CTest)
+
     message(STATUS "Tests enabled")
 
     enable_testing()
@@ -31,6 +33,7 @@ if(TROY_TEST)
         lwe.cu
         
         app/matmul.cu
+        app/conv2d.cu
 
     )
 
