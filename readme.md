@@ -33,3 +33,7 @@ cd test
 ctest
 ./troybench
 ```
+
+## Contribute
+Feel free to fork / pull request.
+Please cite this repository if you use it in your work.
