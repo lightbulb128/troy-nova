@@ -1,6 +1,6 @@
 # Troy-Nova
 
-The new implementation of Troy (CUDA-HE). We support RNS version of BFV, CKKS and BGV scheme. The implementation itself is inspired by the [Microsoft SEAL](https://github.com/microsoft/SEAL) library, so the interfaces are very similar to theirs. 
+The new implementation of Troy, a CUDA based GPU parallelized implementation of RLWE homomorphic encryption schemes. We support RNS version of BFV, CKKS and BGV schemes. The implementation itself is inspired by the [Microsoft SEAL](https://github.com/microsoft/SEAL) library, so the interfaces are very similar to theirs. 
 
 We also include some utilities for privacy computing, including the matrix multiplication (from [BumbleBee](https://eprint.iacr.org/2023/1678)), 2d convolution (from [Cheetah](https://www.usenix.org/system/files/sec22-huang-zhicong.pdf)) and LWE-ciphertext extraction and packing (from [Chen et al.](https://eprint.iacr.org/2020/015.pdf)).
 
