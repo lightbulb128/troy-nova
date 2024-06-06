@@ -397,8 +397,8 @@ namespace troy {
     }
     
     void Evaluator::bgv_multiply_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2) const {
-        check_is_not_ntt_form("[Evaluator::bgv_multiply_inplace]", encrypted1);
-        check_is_not_ntt_form("[Evaluator::bgv_multiply_inplace]", encrypted2);
+        check_is_ntt_form("[Evaluator::bgv_multiply_inplace]", encrypted1);
+        check_is_ntt_form("[Evaluator::bgv_multiply_inplace]", encrypted2);
         
         // Extract encryption parameters.
         ContextDataPointer context_data = this->get_context_data("[Evaluator::bgv_multiply_inplace]", encrypted1.parms_id());
@@ -416,15 +416,6 @@ namespace troy {
         encrypted1.resize(this->context(), context_data->parms_id(), dest_size);
         bool device = encrypted1.on_device();
 
-        utils::ntt_negacyclic_harvey_ps(
-            encrypted1.polys(0, encrypted1_size), 
-            encrypted1_size, coeff_count, ntt_tables
-        );
-        Ciphertext encrypted2_copy = encrypted2;
-        utils::ntt_negacyclic_harvey_ps(
-            encrypted2_copy.polys(0, encrypted2_size), 
-            encrypted2_size, coeff_count, ntt_tables
-        );
         Buffer<uint64_t> temp(dest_size, coeff_modulus_size, coeff_count, device);
 
         Buffer<uint64_t> prod(coeff_modulus_size, coeff_count, device);
@@ -441,7 +432,7 @@ namespace troy {
             for (size_t j = 0; j < steps; j++) {
                 utils::dyadic_product_p(
                     encrypted1.const_poly(curr_encrypted1_first + j),
-                    encrypted2_copy.const_poly(curr_encrypted2_first - j),
+                    encrypted2.const_poly(curr_encrypted2_first - j),
                     coeff_count,
                     coeff_modulus,
                     prod.reference()
@@ -456,10 +447,6 @@ namespace troy {
         }
         
         encrypted1.polys(0, dest_size).copy_from_slice(temp.const_reference());
-        utils::inverse_ntt_negacyclic_harvey_ps(
-            encrypted1.polys(0, dest_size), 
-            dest_size, coeff_count, ntt_tables
-        );
         encrypted1.correction_factor() = utils::multiply_uint64_mod(
             encrypted1.correction_factor(),
             encrypted2.correction_factor(),
@@ -648,7 +635,7 @@ namespace troy {
     }
     
     void Evaluator::bgv_square_inplace(Ciphertext& encrypted) const {
-        check_is_not_ntt_form("[Evaluator::bgv_square_inplace]", encrypted);
+        check_is_ntt_form("[Evaluator::bgv_square_inplace]", encrypted);
         
         // Extract encryption parameters.
         ContextDataPointer context_data = this->get_context_data("[Evaluator::bgv_square_inplace]", encrypted.parms_id());
@@ -671,10 +658,6 @@ namespace troy {
         encrypted.resize(this->context(), context_data->parms_id(), dest_size);
         bool device = encrypted.on_device();
 
-        utils::ntt_negacyclic_harvey_ps(
-            encrypted.polys(0, encrypted_size), 
-            encrypted_size, coeff_count, ntt_tables
-        );
         Buffer<uint64_t> temp(dest_size, coeff_modulus_size, coeff_count, device);
 
         ConstSlice<uint64_t> eq0 = encrypted.const_poly(0);
@@ -691,10 +674,6 @@ namespace troy {
         utils::dyadic_product_p(eq1, eq1, coeff_count, coeff_modulus, tq2);
 
         encrypted.polys(0, dest_size).copy_from_slice(temp.const_reference());
-        utils::inverse_ntt_negacyclic_harvey_ps(
-            encrypted.polys(0, dest_size), 
-            dest_size, coeff_count, ntt_tables
-        );
         encrypted.correction_factor() = utils::multiply_uint64_mod(
             encrypted.correction_factor(),
             encrypted.correction_factor(),
@@ -1334,11 +1313,11 @@ namespace troy {
         const EncryptionParameters& parms = context_data->parms();
         SchemeType scheme = parms.scheme();
         switch (scheme) {
-            case SchemeType::BFV: case SchemeType::BGV: {
+            case SchemeType::BFV: {
                 check_is_not_ntt_form("[Evaluator::mod_switch_scale_to_next_internal]", encrypted);
                 break;
             }
-            case SchemeType::CKKS: {
+            case SchemeType::CKKS: case SchemeType::BGV: {
                 check_is_ntt_form("[Evaluator::mod_switch_scale_to_next_internal]", encrypted);
                 break;
             }
@@ -1373,7 +1352,7 @@ namespace troy {
             }
             case SchemeType::BGV: {
                 for (size_t i = 0; i < encrypted_size; i++) {
-                    rns_tool.mod_t_and_divide_q_last_inplace(encrypted_copy.poly(i));
+                    rns_tool.mod_t_and_divide_q_last_ntt_inplace(encrypted_copy.poly(i), context_data->small_ntt_tables());
                 }
                 break;
             }
@@ -1546,8 +1525,11 @@ namespace troy {
         const EncryptionParameters& parms = context_data->parms();
         SchemeType scheme = parms.scheme();
         switch (scheme) {
-            case SchemeType::BFV: case SchemeType::BGV: {
+            case SchemeType::BFV: {
                 check_is_not_ntt_form("[Evaluator::translate_plain_inplace]", encrypted);
+                if (encrypted.is_ntt_form() != plain.is_ntt_form()) {
+                    throw std::invalid_argument("[Evaluator::translate_plain_inplace] Plaintext and ciphertext are not in the same NTT form.");
+                }
                 break;
             }
             case SchemeType::CKKS: {
@@ -1555,14 +1537,21 @@ namespace troy {
                 if (!utils::are_close_double(plain.scale(), encrypted.scale())) {
                     throw std::invalid_argument("[Evaluator::translate_plain_inplace] Plaintext scale is not equal to the scale of the ciphertext.");
                 }
+                if (encrypted.is_ntt_form() != plain.is_ntt_form()) {
+                    throw std::invalid_argument("[Evaluator::translate_plain_inplace] Plaintext and ciphertext are not in the same NTT form.");
+                }
+                break;
+            }
+            case SchemeType::BGV: {
+                check_is_ntt_form("[Evaluator::translate_plain_inplace]", encrypted);
+                if (plain.is_ntt_form()) {
+                    throw std::invalid_argument("[Evaluator::translate_plain_inplace] Plaintext is in NTT form.");
+                }
                 break;
             }
             default: {
                 throw std::logic_error("[Evaluator::translate_plain_inplace] Scheme not implemented.");
             }
-        }
-        if (encrypted.is_ntt_form() != plain.is_ntt_form()) {
-            throw std::invalid_argument("[Evaluator::translate_plain_inplace] Plaintext and ciphertext are not in the same NTT form.");
         }
         size_t coeff_count = parms.poly_modulus_degree();
         ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
@@ -1586,10 +1575,11 @@ namespace troy {
             case SchemeType::BGV: {
                 Plaintext plain_copy = plain;
                 utils::multiply_scalar(plain.poly(), encrypted.correction_factor(), parms.plain_modulus(), plain_copy.poly());
+                this->transform_plain_to_ntt_inplace(plain_copy, encrypted.parms_id());
                 if (!subtract) {
-                    scaling_variant::add_plain(plain_copy, context_data, encrypted.poly(0));
+                    utils::add_inplace_p(encrypted.poly(0), plain_copy.const_poly(), coeff_count, coeff_modulus);
                 } else {
-                    scaling_variant::sub_plain(plain_copy, context_data, encrypted.poly(0));
+                    utils::sub_inplace_p(encrypted.poly(0), plain_copy.const_poly(), coeff_count, coeff_modulus);
                 }
                 break;
             }
@@ -1764,13 +1754,20 @@ namespace troy {
     }
 
     void Evaluator::multiply_plain_inplace(Ciphertext& encrypted, const Plaintext& plain) const {
-        if (encrypted.is_ntt_form() != plain.is_ntt_form()) {
-            throw std::invalid_argument("[Evaluator::multiply_plain_inplace] Plaintext and ciphertext are not in the same NTT form.");
-        }
-        if (encrypted.is_ntt_form()) {
+        bool encrypted_ntt = encrypted.is_ntt_form();
+        bool plain_ntt = plain.is_ntt_form();
+        if (encrypted_ntt && plain_ntt) {
             this->multiply_plain_ntt_inplace(encrypted, plain);
-        } else {
+        } else if (!encrypted_ntt && !plain_ntt) {
             this->multiply_plain_normal_inplace(encrypted, plain);
+        } else if (encrypted_ntt && !plain_ntt) {
+            Plaintext plain_copy = plain.clone();
+            this->transform_plain_to_ntt_inplace(plain_copy, encrypted.parms_id());
+            this->multiply_plain_ntt_inplace(encrypted, plain_copy);
+        } else { // !encrypted_ntt && plain_ntt
+            this->transform_to_ntt_inplace(encrypted);
+            this->multiply_plain_ntt_inplace(encrypted, plain);
+            this->transform_from_ntt_inplace(encrypted);
         }
     }
 
