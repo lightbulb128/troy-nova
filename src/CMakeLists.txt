@@ -31,5 +31,5 @@ install(TARGETS troy
 file(GLOB MAIN_DIR_HEADERS *.h *.hpp *.cuh)
 file(GLOB UTILS_HEADERS utils/*.h *.hpp *.cuh)
 
-install(FILES ${MAIN_DIR_HEADERS} DESTINATION include/troy)
-install(FILES ${UTILS_HEADERS} DESTINATION include/troy/utils)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/ DESTINATION include/troy
+        FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.cuh")
