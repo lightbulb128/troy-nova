@@ -897,18 +897,15 @@ namespace troy {
         }
     }
 
-    __global__ static void kernel_ski_util5(
+    __global__ static void kernel_ski_util5_step1(
         ConstSlice<uint64_t> t_last,
-        Slice<uint64_t> t_poly_prod_i,
         size_t coeff_count,
         ConstPointer<Modulus> plain_modulus,
         ConstSlice<Modulus> key_modulus,
         size_t decomp_modulus_size,
-        size_t rns_modulus_size,
         uint64_t qk_inv_qp,
         uint64_t qk,
-        ConstSlice<MultiplyUint64Operand> modswitch_factors,
-        Slice<uint64_t> encrypted_i
+        Slice<uint64_t> delta_array
     ) {
         size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
         if (global_index >= coeff_count * decomp_modulus_size) return;
@@ -916,18 +913,37 @@ namespace troy {
         size_t j = global_index / coeff_count;
         uint64_t k = utils::barrett_reduce_uint64(t_last[i], *plain_modulus);
         k = utils::negate_uint64_mod(k, *plain_modulus);
-        if (qk_inv_qp != 1) 
+        if (qk_inv_qp != 1) {
             k = utils::multiply_uint64_mod(k, qk_inv_qp, *plain_modulus);
-        uint64_t delta = 0; uint64_t c_mod_qi = 0;
-        delta = utils::barrett_reduce_uint64(k, key_modulus[j]);
+        }
+        uint64_t delta = utils::barrett_reduce_uint64(k, key_modulus[j]);
         delta = utils::multiply_uint64_mod(delta, qk, key_modulus[j]);
-        c_mod_qi = utils::barrett_reduce_uint64(t_last[i], key_modulus[j]);
-        const uint64_t Lqi = key_modulus[j].value() << 1;
-        uint64_t& target = t_poly_prod_i[j * coeff_count + i];
-        target = target + Lqi - (delta + c_mod_qi);
-        target = utils::multiply_uint64operand_mod(target, modswitch_factors[j], key_modulus[j]);
-        encrypted_i[j * coeff_count + i] = utils::add_uint64_mod(target, encrypted_i[j * coeff_count + i], key_modulus[j]);
+        uint64_t c_mod_qi = utils::barrett_reduce_uint64(t_last[i], key_modulus[j]);
+        delta = utils::add_uint64_mod(delta, c_mod_qi, key_modulus[j]);
+        delta_array[global_index] = delta;
     }
+
+
+    __global__ static void kernel_ski_util5_step2(
+        Slice<uint64_t> t_poly_prod_i,
+        size_t coeff_count,
+        ConstSlice<Modulus> key_modulus,
+        size_t decomp_modulus_size,
+        ConstSlice<MultiplyUint64Operand> modswitch_factors,
+        Slice<uint64_t> encrypted_i,
+        ConstSlice<uint64_t> delta_array
+    ) {
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        if (global_index >= coeff_count * decomp_modulus_size) return;
+        size_t i = global_index % coeff_count;
+        size_t j = global_index / coeff_count;
+        uint64_t delta = delta_array[global_index];
+        uint64_t& target = t_poly_prod_i[j * coeff_count + i];
+        target = utils::sub_uint64_mod(target, delta, key_modulus[j]);
+        target = utils::multiply_uint64operand_mod(target, modswitch_factors[j], key_modulus[j]);
+        encrypted_i[global_index] = utils::add_uint64_mod(target, encrypted_i[global_index], key_modulus[j]);
+    }
+
 
     static void ski_util5(
         ConstSlice<uint64_t> t_last,
@@ -935,6 +951,7 @@ namespace troy {
         size_t coeff_count,
         ConstPointer<Modulus> plain_modulus,
         ConstSlice<Modulus> key_modulus,
+        ConstSlice<NTTTables> key_ntt_tables,
         size_t decomp_modulus_size,
         size_t rns_modulus_size,
         uint64_t qk_inv_qp,
@@ -944,29 +961,50 @@ namespace troy {
     ) {
         bool device = t_last.on_device();
         if (!device) {
-            for (size_t i = 0; i < coeff_count; i++) {
-                uint64_t k = utils::barrett_reduce_uint64(t_last[i], *plain_modulus);
-                k = utils::negate_uint64_mod(k, *plain_modulus);
-                if (qk_inv_qp != 1) 
-                    k = utils::multiply_uint64_mod(k, qk_inv_qp, *plain_modulus);
-                uint64_t delta = 0; uint64_t c_mod_qi = 0;
-                for (size_t j = 0; j < decomp_modulus_size; j++) {
-                    delta = utils::barrett_reduce_uint64(k, key_modulus[j]);
-                    delta = utils::multiply_uint64_mod(delta, qk, key_modulus[j]);
-                    c_mod_qi = utils::barrett_reduce_uint64(t_last[i], key_modulus[j]);
-                    const uint64_t Lqi = key_modulus[j].value() << 1;
-                    uint64_t& target = t_poly_prod_i[j * coeff_count + i];
-                    target = target + Lqi - (delta + c_mod_qi);
-                    target = utils::multiply_uint64operand_mod(target, modswitch_factors[j], key_modulus[j]);
-                    encrypted_i[j * coeff_count + i] = utils::add_uint64_mod(target, encrypted_i[j * coeff_count + i], key_modulus[j]);
-                }
+
+            Array<uint64_t> buffer(coeff_count * 3, false);
+            Slice<uint64_t> delta = buffer.slice(0, coeff_count);
+            Slice<uint64_t> c_mod_qi = buffer.slice(coeff_count, 2 * coeff_count);
+            Slice<uint64_t> k = buffer.slice(2 * coeff_count, 3 * coeff_count);
+
+            utils::modulo(t_last, plain_modulus, k);
+            utils::negate_inplace(k, plain_modulus);
+            if (qk_inv_qp != 1) {
+                utils::multiply_scalar_inplace(k, qk_inv_qp, plain_modulus);
             }
+
+            for (size_t j = 0; j < decomp_modulus_size; j++) {
+                // delta = k mod q_i
+                utils::modulo(k.as_const(), key_modulus.at(j), delta);
+                // delta = k * q_k mod q_i
+                utils::multiply_scalar_inplace(delta, qk, key_modulus.at(j));
+                // c mod q_i
+                utils::modulo(t_last, key_modulus.at(j), c_mod_qi);
+                // delta = c + k * q_k mod q_i
+                // c_{i} = c_{i} - delta mod q_i
+                utils::add_inplace(delta, c_mod_qi.as_const(), key_modulus.at(j));
+                utils::ntt_negacyclic_harvey(delta, coeff_count, key_ntt_tables.at(j));
+                Slice<uint64_t> t_poly_prod_i_comp_j = t_poly_prod_i.slice(j * coeff_count, (j + 1) * coeff_count);
+                utils::sub_inplace(t_poly_prod_i_comp_j, delta.as_const(), key_modulus.at(j));
+                utils::multiply_uint64operand_inplace(t_poly_prod_i_comp_j, modswitch_factors.at(j), key_modulus.at(j));
+                utils::add_inplace(encrypted_i.slice(j * coeff_count, (j + 1) * coeff_count), t_poly_prod_i_comp_j.as_const(), key_modulus.at(j));
+            }
+
         } else {
+            Array<uint64_t> delta(coeff_count * decomp_modulus_size, true);
             size_t block_count = utils::ceil_div(coeff_count * decomp_modulus_size, utils::KERNEL_THREAD_COUNT);
-            kernel_ski_util5<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
-                t_last, t_poly_prod_i, coeff_count, plain_modulus, key_modulus, 
-                decomp_modulus_size, rns_modulus_size, qk_inv_qp, qk, modswitch_factors, encrypted_i
+
+            kernel_ski_util5_step1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                t_last, coeff_count, plain_modulus, key_modulus, 
+                decomp_modulus_size, qk_inv_qp, qk,
+                delta.reference()
             );
+            utils::ntt_negacyclic_harvey_p(delta.reference(), coeff_count, key_ntt_tables.const_slice(0, decomp_modulus_size));
+            kernel_ski_util5_step2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                t_poly_prod_i, coeff_count, key_modulus, 
+                decomp_modulus_size, modswitch_factors, encrypted_i, delta.const_reference()
+            );
+
         }
     }
 
@@ -1215,19 +1253,11 @@ namespace troy {
                 size_t t_last_offset = coeff_count * rns_modulus_size * i + decomp_modulus_size * coeff_count;
                 Slice<uint64_t> t_last = poly_prod.slice(t_last_offset, t_last_offset + coeff_count);
                 utils::inverse_ntt_negacyclic_harvey(t_last, coeff_count, key_ntt_tables.at(key_modulus_size - 1));
-                utils::inverse_ntt_negacyclic_harvey_p(
-                    poly_prod.slice(
-                        i * coeff_count * rns_modulus_size, 
-                        i * coeff_count * rns_modulus_size + decomp_modulus_size * coeff_count
-                    ), 
-                    coeff_count, 
-                    key_ntt_tables.const_slice(0, decomp_modulus_size)
-                );
                 ConstPointer<Modulus> plain_modulus = parms.plain_modulus();
 
                 ski_util5(
                     t_last.as_const(), poly_prod.slice(i * coeff_count * rns_modulus_size, poly_prod.size()),
-                    coeff_count, plain_modulus, key_modulus,
+                    coeff_count, plain_modulus, key_modulus, key_ntt_tables,
                     decomp_modulus_size, rns_modulus_size, qk_inv_qp, qk,
                     modswitch_factors, encrypted.poly(i)
                 );
