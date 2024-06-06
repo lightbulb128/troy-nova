@@ -23,7 +23,7 @@ namespace lwe {
         for (size_t term : terms) {
             auto extracted = context.evaluator().extract_lwe_new(encrypted, term);
             auto assembled = context.evaluator().assemble_lwe_new(extracted);
-            if (context.params_host().scheme() == SchemeType::CKKS) {
+            if (context.params_host().scheme() == SchemeType::CKKS || context.params_host().scheme() == SchemeType::BGV) {
                 context.evaluator().transform_to_ntt_inplace(assembled);
             }
             auto decrypted = context.decryptor().decrypt_new(assembled);

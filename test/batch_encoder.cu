@@ -63,9 +63,9 @@ namespace batch_encoder {
         utils::MemoryPool::Destroy();
     }
 
-    void test_polynomial(bool device) {
+    void test_polynomial(bool device, bool is_bgv) {
 
-        EncryptionParameters parms(SchemeType::BFV);
+        EncryptionParameters parms(!is_bgv ? SchemeType::BFV : SchemeType::BGV);
         parms.set_poly_modulus_degree(DEGREE);
         parms.set_coeff_modulus(CoeffModulus::create(DEGREE, {60}).const_reference());
         parms.set_plain_modulus(256);
@@ -98,13 +98,21 @@ namespace batch_encoder {
         ASSERT_TRUE(same_vector(plain_vec, decoded_vec));
     }
 
-    TEST(BatchEncoderTest, HostPolynomial) {
-        test_polynomial(false);
+    TEST(BatchEncoderTest, HostBFVPolynomial) {
+        test_polynomial(false, false);
     }
 
-    TEST(BatchEncoderTest, DevicePolynomial) {
-        test_polynomial(true);
+    TEST(BatchEncoderTest, DeviceBFVPolynomial) {
+        test_polynomial(true, false);
         utils::MemoryPool::Destroy();
     }
 
+    TEST(BatchEncoderTest, HostBGVPolynomial) {
+        test_polynomial(false, true);
+    }
+
+    TEST(BatchEncoderTest, DeviceBGVPolynomial) {
+        test_polynomial(true, true);
+        utils::MemoryPool::Destroy();
+    }
 }

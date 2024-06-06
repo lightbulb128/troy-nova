@@ -2166,6 +2166,7 @@ namespace troy {
     }
     
     Ciphertext Evaluator::pack_lwe_ciphertexts_new(const std::vector<LWECiphertext>& lwes, const GaloisKeys& automorphism_keys) const {
+        
         size_t lwes_count = lwes.size();
         if (lwes_count == 0) {
             throw std::invalid_argument("[Evaluator::pack_lwe_ciphertexts_new] LWE ciphertexts must not be empty.");
@@ -2180,6 +2181,7 @@ namespace troy {
 
         ContextDataPointer context_data = this->get_context_data("[Evaluator::pack_lwe_ciphertexts_new]", lwe_parms_id);
         SchemeType scheme = context_data->parms().scheme();
+        bool ntt_form = scheme == SchemeType::CKKS || scheme == SchemeType::BGV;
         if (scheme == SchemeType::CKKS) {
             // all should have same scale
             double scale = lwes[0].scale();
@@ -2232,11 +2234,11 @@ namespace troy {
                 );
                 this->sub(even, temp, odd);
                 this->add_inplace(even, temp);
-                if (scheme == SchemeType::CKKS) {
+                if (ntt_form) {
                     this->transform_to_ntt_inplace(odd);
                 }
                 this->apply_galois_inplace(odd, (1 << (layer + 1)) + 1, automorphism_keys);
-                if (scheme == SchemeType::CKKS) {
+                if (ntt_form) {
                     this->transform_from_ntt_inplace(odd);
                 }
                 this->add_inplace(even, odd);
@@ -2245,7 +2247,7 @@ namespace troy {
         }
         // take the first element
         Ciphertext ret = std::move(rlwes[0]);
-        if (scheme == SchemeType::CKKS) {
+        if (ntt_form) {
             this->transform_to_ntt_inplace(ret);
         }
         field_trace_inplace(ret, automorphism_keys, l);
