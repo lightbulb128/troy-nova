@@ -122,6 +122,8 @@ namespace troy {namespace utils {
 
         void mod_t_and_divide_q_last_inplace(Slice<uint64_t> input) const;
 
+        void mod_t_and_divide_q_last_ntt_inplace(Slice<uint64_t> input, ConstSlice<NTTTables> rns_ntt_tables) const;
+
         inline void decrypt_mod_t(ConstSlice<uint64_t> phase, Slice<uint64_t> destination) const {
             this->base_q_to_t_conv().exact_convey_array(phase, destination);
         }

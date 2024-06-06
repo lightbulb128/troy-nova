@@ -3,6 +3,25 @@
 
 namespace troy {namespace utils {
 
+    static void print_array(ConstSlice<uint64_t> array, bool end_line = true) {
+        if (array.on_device()) {
+            Array<uint64_t> host = Array<uint64_t>::create_and_copy_from_slice(array);
+            host.to_host_inplace();
+            print_array(host.const_reference(), end_line);
+            return;
+        }
+        std::cout << "[";
+        for (size_t i = 0; i < array.size(); i++) {
+            std::cout << array[i];
+            if (i != array.size() - 1) {
+                std::cout << ", ";
+            }
+        }
+        std::cout << "]";
+        if (end_line) {
+            std::cout << std::endl;
+        }
+    }
     
     RNSTool::RNSTool(size_t poly_modulus_degree, const RNSBase& q, const Modulus& t) {
 
@@ -1050,26 +1069,6 @@ namespace troy {namespace utils {
         }
     }
 
-    void print_array(ConstSlice<uint64_t> array, bool end_line = true) {
-        if (array.on_device()) {
-            Array<uint64_t> host = Array<uint64_t>::create_and_copy_from_slice(array);
-            host.to_host_inplace();
-            print_array(host.const_reference(), end_line);
-            return;
-        }
-        std::cout << "[";
-        for (size_t i = 0; i < array.size(); i++) {
-            std::cout << array[i];
-            if (i != array.size() - 1) {
-                std::cout << ", ";
-            }
-        }
-        std::cout << "]";
-        if (end_line) {
-            std::cout << std::endl;
-        }
-    }
-
     void RNSTool::mod_t_and_divide_q_last_inplace(Slice<uint64_t> input) const {
         bool device = this->on_device();
         if (device != input.on_device()) {
@@ -1092,6 +1091,147 @@ namespace troy {namespace utils {
         }
 
         mod_t_and_divide_q_last_inplace_step1(*this, input, neg_c_last_mod_t.const_reference());
+
+    }
+
+    static void host_mod_t_and_divide_q_last_ntt_inplace_step1(const RNSTool& self, Slice<uint64_t> input, ConstSlice<uint64_t> neg_c_last_mod_t, ConstSlice<NTTTables> rns_ntt_tables) {
+        bool device = self.on_device();
+        size_t base_q_size = self.base_q().size();
+        size_t coeff_count = self.coeff_count();
+        Array<uint64_t> delta_mod_q_i(coeff_count, device);
+        uint64_t last_modulus_value = self.base_q().base().at(base_q_size - 1)->value();
+        for (size_t i = 0; i < base_q_size - 1; i++) {
+
+            // delta_mod_q_i = neg_c_last_mod_t (mod q_i)
+            ConstPointer<Modulus> modulus = self.base_q().base().at(i);
+            utils::modulo(neg_c_last_mod_t, modulus, delta_mod_q_i.reference());
+
+            // delta_mod_q_i *= q_last (mod q_i)
+            utils::multiply_scalar_inplace(
+                delta_mod_q_i.reference(), last_modulus_value, modulus
+            );
+
+            // c_i = c_i - c_last - neg_c_last_mod_t * q_last (mod 2q_i)
+            //   first all all those to be subtracted to delta_mod_q_i
+            for (size_t j = 0; j < coeff_count; j++) {
+                delta_mod_q_i[j] = add_uint64_mod(
+                    delta_mod_q_i[j], 
+                    modulus->reduce(input[(base_q_size - 1) * coeff_count + j]),
+                    *modulus
+                );
+            }
+            ntt_negacyclic_harvey(delta_mod_q_i.reference(), coeff_count, rns_ntt_tables.at(i));
+            //   then subtract them all
+            for (size_t j = 0; j < coeff_count; j++) {
+                input[i * coeff_count + j] = sub_uint64_mod(
+                    input[i * coeff_count + j], delta_mod_q_i[j], *modulus
+                );
+            }
+            
+            // c_i = c_i * inv_q_last_mod_q_i (mod q_i)
+            utils::multiply_uint64operand_inplace(
+                input.slice(i * coeff_count, (i + 1) * coeff_count),
+                self.inv_q_last_mod_q().at(i),
+                modulus
+            );
+        }
+    }
+
+    __global__ static void kernel_mod_t_and_divide_q_last_ntt_inplace_step1_inner1(
+        ConstSlice<Modulus> base_q,
+        size_t coeff_count,
+        ConstSlice<uint64_t> neg_c_last_mod_t,
+        ConstSlice<uint64_t> input,
+        Slice<uint64_t> delta_mod_q_i
+    ) {
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        size_t base_q_size = base_q.size();
+        if (global_index >= coeff_count * (base_q_size - 1)) return;
+        size_t i = global_index / coeff_count;
+        size_t j = global_index % coeff_count;
+
+        const Modulus& modulus = *base_q.at(i);
+        uint64_t result;
+        // delta_mod_q_i = neg_c_last_mod_t (mod q_i)
+        result = modulus.reduce(neg_c_last_mod_t[j]);
+        // delta_mod_q_i *= q_last (mod q_i)
+        result = utils::multiply_uint64_mod(result, base_q[base_q_size - 1].value(), modulus);
+        // c_i = c_i - c_last - neg_c_last_mod_t * q_last (mod 2q_i)
+        result = utils::add_uint64_mod(result, modulus.reduce(input[(base_q_size - 1) * coeff_count + j]), modulus);
+        delta_mod_q_i[global_index] = result;
+    }
+
+    __global__ static void kernel_mod_t_and_divide_q_last_ntt_inplace_step1_inner2(
+        ConstSlice<Modulus> base_q,
+        size_t coeff_count,
+        ConstSlice<MultiplyUint64Operand> inv_q_last_mod_q,
+        Slice<uint64_t> input,
+        ConstSlice<uint64_t> delta_mod_q_i
+    ) {
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        size_t base_q_size = base_q.size();
+        if (global_index >= coeff_count * (base_q_size - 1)) return;
+        size_t i = global_index / coeff_count;
+        size_t j = global_index % coeff_count;
+
+        uint64_t& dest = input[i * coeff_count + j];
+        const Modulus& modulus = *base_q.at(i);
+        // subtract
+        dest = utils::sub_uint64_mod(dest, delta_mod_q_i[global_index], modulus);
+        // c_i = c_i * inv_q_last_mod_q_i (mod q_i)
+        dest = utils::multiply_uint64operand_mod(dest, inv_q_last_mod_q[i], modulus);
+    }
+
+    static void mod_t_and_divide_q_last_ntt_inplace_step1(const RNSTool& self, Slice<uint64_t> input, ConstSlice<uint64_t> neg_c_last_mod_t, ConstSlice<NTTTables> rns_ntt_tables) {
+        bool device = self.on_device();
+        size_t base_q_size = self.base_q().size();
+        size_t coeff_count = self.coeff_count();
+        if (device) {
+            size_t block_count = utils::ceil_div(coeff_count * (base_q_size - 1), utils::KERNEL_THREAD_COUNT);
+            Array<uint64_t> delta_mod_q_i(coeff_count * (base_q_size - 1), device);
+            kernel_mod_t_and_divide_q_last_ntt_inplace_step1_inner1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                self.base_q().base(),
+                coeff_count,
+                neg_c_last_mod_t,
+                input.as_const(),
+                delta_mod_q_i.reference()
+            );
+            utils::ntt_negacyclic_harvey_p(delta_mod_q_i.reference(), coeff_count, rns_ntt_tables.const_slice(0, base_q_size - 1));
+            kernel_mod_t_and_divide_q_last_ntt_inplace_step1_inner2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                self.base_q().base(),
+                coeff_count,
+                self.inv_q_last_mod_q(),
+                input,
+                delta_mod_q_i.const_reference()
+            );
+
+        } else {
+            host_mod_t_and_divide_q_last_ntt_inplace_step1(self, input, neg_c_last_mod_t, rns_ntt_tables);
+        }
+    }
+
+    void RNSTool::mod_t_and_divide_q_last_ntt_inplace(Slice<uint64_t> input, ConstSlice<NTTTables> rns_ntt_tables) const {
+        bool device = this->on_device();
+        if (!utils::same(device, input.on_device(), rns_ntt_tables.on_device())) {
+            throw std::invalid_argument("[RNSTool::mod_t_and_divide_q_last_ntt_inplace] RNSTool, input, rns_ntt_tables must be on the same device.");
+        }
+        
+        size_t modulus_size = this->base_q().size();
+        size_t coeff_count = this->coeff_count();
+
+        Slice<uint64_t> c_last = input.slice((modulus_size - 1) * coeff_count, modulus_size * coeff_count);
+        utils::inverse_ntt_negacyclic_harvey(c_last, coeff_count, rns_ntt_tables.at(modulus_size - 1));
+        
+        // neg_c_last_mod_t = - c_last (mod t)
+        Array<uint64_t> neg_c_last_mod_t(coeff_count, device);
+        utils::modulo(c_last.as_const(), this->t(), neg_c_last_mod_t.reference());
+        utils::negate_inplace(neg_c_last_mod_t.reference(), this->t());
+        if (this->inv_q_last_mod_t() != 1) {
+            // neg_c_last_mod_t *= q_last^(-1) (mod t)
+            utils::multiply_scalar_inplace(neg_c_last_mod_t.reference(), this->inv_q_last_mod_t(), this->t());
+        }
+
+        mod_t_and_divide_q_last_ntt_inplace_step1(*this, input, neg_c_last_mod_t.const_reference(), rns_ntt_tables);
 
     }
 

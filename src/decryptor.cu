@@ -179,8 +179,8 @@ namespace troy {
     }
 
     void Decryptor::bgv_decrypt(const Ciphertext& encrypted, Plaintext& destination) const {
-        if (encrypted.is_ntt_form()) {
-            throw std::invalid_argument("[Decryptor::bgv_decrypt] Ciphertext is in NTT form.");
+        if (!encrypted.is_ntt_form()) {
+            throw std::invalid_argument("[Decryptor::bgv_decrypt] Ciphertext is not in NTT form.");
         }
         ContextDataPointer context_data = this->context()->get_context_data(encrypted.parms_id()).value();
         const EncryptionParameters& parms = context_data->parms();
@@ -199,6 +199,8 @@ namespace troy {
         // Allocate a full size destination to write to
         destination.parms_id() = parms_id_zero;
         destination.resize(coeff_count);
+
+        utils::inverse_ntt_negacyclic_harvey_p(tmp_dest_modq.reference(), coeff_count, context_data->small_ntt_tables());
 
         // Divide scaling variant using BEHZ FullRNS techniques
         context_data->rns_tool().decrypt_mod_t(
