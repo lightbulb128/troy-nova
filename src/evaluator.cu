@@ -1120,20 +1120,7 @@ namespace troy {
         ContextDataPointer key_context_data = this->context()->key_context_data().value();
         const EncryptionParameters& key_parms = key_context_data->parms();
         SchemeType scheme = parms.scheme();
-
-        switch (scheme) {
-            case SchemeType::BFV: case SchemeType::BGV: {
-                check_is_not_ntt_form("[Evaluator::switch_key_inplace_internal]", encrypted);
-                break;
-            }
-            case SchemeType::CKKS: {
-                check_is_ntt_form("[Evaluator::switch_key_inplace_internal]", encrypted);
-                break;
-            }
-            default: {
-                throw std::logic_error("[Evaluator::switch_key_inplace_internal] Scheme not implemented.");
-            }
-        }
+        bool is_ntt_form = encrypted.is_ntt_form();
 
         size_t coeff_count = parms.poly_modulus_degree();
         size_t decomp_modulus_size = parms.coeff_modulus().size();
@@ -1156,8 +1143,8 @@ namespace troy {
         }
         Array<uint64_t> target_copied = Array<uint64_t>::create_and_copy_from_slice(target);
 
-        // In CKKS target is in NTT form; switch back to normal form
-        if (scheme == SchemeType::CKKS) {
+        // If target is in NTT form; switch back to normal form
+        if (is_ntt_form) {
             utils::inverse_ntt_negacyclic_harvey_p(
                 target_copied.reference(), coeff_count, key_ntt_tables.const_slice(0, decomp_modulus_size)
             );
@@ -1183,7 +1170,7 @@ namespace troy {
             temp_ntt.set_zero();
             for (size_t j = 0; j < decomp_modulus_size; j++) {
                 ConstSlice<uint64_t> temp_operand(nullptr, 0, device);
-                if ((scheme == SchemeType::CKKS) && (i == j)) {
+                if (is_ntt_form && (i == j)) {
                     temp_operand = target.const_slice(j * coeff_count, (j + 1) * coeff_count);
                 } else {
                     if (key_modulus_host[j].value() <= key_modulus_host[key_index].value()) {
@@ -1279,9 +1266,9 @@ namespace troy {
                     temp_ntt.reference()
                 );
             
-                if (scheme == SchemeType::CKKS) {
+                if (is_ntt_form) {
                     utils::ntt_negacyclic_harvey_lazy_p(temp_ntt.reference(), coeff_count, key_ntt_tables.const_slice(0, decomp_modulus_size));
-                } else if (scheme == SchemeType::BFV) {
+                } else {
                     utils::inverse_ntt_negacyclic_harvey_p(
                         poly_prod.slice(
                             i * coeff_count * rns_modulus_size, 

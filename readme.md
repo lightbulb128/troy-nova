@@ -6,7 +6,7 @@ We also include some utilities for privacy computing, including the matrix multi
 
 # Build
 
-Build C++/CUDA.
+Build C++/CUDA. 
 
 ```
 mkdir build
@@ -14,6 +14,8 @@ cd build
 cmake ..
 make troy
 ```
+
+Note: You could set the CUDA architecture to suit your graphic card, by setting "CMAKE_CUDA_ARCHITECTURES" variable when calling cmake. For example, `cmake .. -DCMAKE_CUDA_ARCHITECTURES="80;89"`
 
 Build python bindings.
 

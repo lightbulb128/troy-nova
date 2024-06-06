@@ -35,6 +35,8 @@ if(TROY_TEST)
         app/matmul.cu
         app/conv2d.cu
 
+        special_prime_for_encryption.cu
+
     )
 
     target_link_libraries(troytest gtest gtest_main troy)

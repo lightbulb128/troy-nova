@@ -4,7 +4,7 @@ namespace tool {
 
     GeneralHeContext::GeneralHeContext(bool device, SchemeType scheme, size_t n, size_t log_t, vector<size_t> log_qi, 
         bool expand_mod_chain, uint64_t seed, double input_max, double scale, double tolerance,
-        bool to_device_after_keygeneration)
+        bool to_device_after_keygeneration, bool use_special_prime_for_encryption)
     {
         if (scheme == SchemeType::CKKS && (input_max == 0 || scale == 0)) {
             throw std::invalid_argument("input_max and scale must be set for CKKS");
@@ -22,6 +22,7 @@ namespace tool {
             auto moduli = CoeffModulus::create(n, log_qi);
             parms.set_coeff_modulus(moduli);
         }
+        parms.set_use_special_prime_for_encryption(use_special_prime_for_encryption);
         this->params_host_ = parms;
         // create gadgets
         bool ckks = scheme == SchemeType::CKKS;

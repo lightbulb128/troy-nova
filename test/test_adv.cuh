@@ -379,7 +379,7 @@ namespace tool {
     public:
         GeneralHeContext(bool device, SchemeType scheme, size_t n, size_t log_t, vector<size_t> log_qi, 
             bool expand_mod_chain, uint64_t seed, double input_max = 0, double scale = 0, double tolerance = 1e-4,
-            bool to_device_after_keygeneration = false
+            bool to_device_after_keygeneration = false, bool use_special_prime_for_encryption = false
         );
         ~GeneralHeContext();
 

@@ -44,6 +44,7 @@ namespace troy {
         utils::Array<Modulus> coeff_modulus_;
         utils::Box<Modulus> plain_modulus_;
         Modulus plain_modulus_host_;
+        bool use_special_prime_for_encryption_;
 
         void compute_parms_id();
 
@@ -51,7 +52,7 @@ namespace troy {
 
         inline EncryptionParameters(SchemeType scheme_type) : 
             scheme_(scheme_type), device(false), plain_modulus_(new Modulus(0), false),
-            plain_modulus_host_(0)
+            plain_modulus_host_(0), use_special_prime_for_encryption_(false)
         {}
 
         inline EncryptionParameters() : EncryptionParameters(SchemeType::Nil) {}
@@ -63,6 +64,7 @@ namespace troy {
             coeff_modulus_(parms.coeff_modulus_.clone()),
             plain_modulus_(parms.plain_modulus_.clone()),
             plain_modulus_host_(parms.plain_modulus_host_),
+            use_special_prime_for_encryption_(parms.use_special_prime_for_encryption_),
             device(parms.device) {}
             
         EncryptionParameters(EncryptionParameters&& parms) = default;
@@ -78,6 +80,7 @@ namespace troy {
             coeff_modulus_ = parms.coeff_modulus_.clone();
             plain_modulus_ = parms.plain_modulus_.clone();
             plain_modulus_host_ = parms.plain_modulus_host_;
+            use_special_prime_for_encryption_ = parms.use_special_prime_for_encryption_;
             device = parms.device;
             return *this;
         }
@@ -107,6 +110,10 @@ namespace troy {
 
         inline const Modulus& plain_modulus_host() const noexcept {
             return plain_modulus_host_;
+        }
+
+        inline bool use_special_prime_for_encryption() const noexcept {
+            return use_special_prime_for_encryption_;
         }
 
         inline bool on_device() const noexcept {
@@ -161,6 +168,10 @@ namespace troy {
 
         inline void set_plain_modulus(uint64_t plain_modulus) {
             set_plain_modulus(Modulus(plain_modulus));
+        }
+
+        inline void set_use_special_prime_for_encryption(bool use_special_prime_for_encryption) {
+            use_special_prime_for_encryption_ = use_special_prime_for_encryption;
         }
 
         inline EncryptionParameters clone() const {

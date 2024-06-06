@@ -125,10 +125,10 @@ namespace matmul {
         srand(0);
         test_matmul(ghe, 4, 5, 6, false, false);
         test_matmul(ghe, 64, 128, 256, false, false);
-        test_matmul(ghe, 400, 500, 600, false, false);
+        // test_matmul(ghe, 400, 500, 600, false, false); // very slow!
         test_matmul(ghe, 4, 5, 6, true, false);
         test_matmul(ghe, 64, 128, 256, true, false);
-        test_matmul(ghe, 400, 500, 600, true, false);
+        // test_matmul(ghe, 400, 500, 600, true, false); // very slow!
     }
 
 }

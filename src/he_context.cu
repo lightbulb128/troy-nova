@@ -71,7 +71,7 @@ namespace troy {
         // the chain by one step. Otherwise, we set first_parms_id_ to equal
         // key_parms_id_.
         ParmsID first_parms_id;
-        if (!context_data_map.at(key_parms_id)->qualifiers().parameters_set() || parms.coeff_modulus().size() == 1) {
+        if (!context_data_map.at(key_parms_id)->qualifiers().parameters_set() || parms.coeff_modulus().size() == 1 || parms.use_special_prime_for_encryption()) {
             first_parms_id = key_parms_id;
         } else {
             ParmsID next_parms_id = he.create_next_context_data(key_parms_id);
