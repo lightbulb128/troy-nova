@@ -408,7 +408,6 @@ namespace troy {
         size_t coeff_modulus_size = coeff_modulus.size();
         size_t encrypted1_size = encrypted1.polynomial_count();
         size_t encrypted2_size = encrypted2.polynomial_count();
-        ConstSlice<NTTTables> ntt_tables = context_data->small_ntt_tables();
         
         // Determine destination.size()
         size_t dest_size = encrypted1_size + encrypted2_size - 1;
@@ -649,8 +648,6 @@ namespace troy {
             this->bgv_multiply_inplace(encrypted, encrypted);
             return;
         }
-        
-        ConstSlice<NTTTables> ntt_tables = context_data->small_ntt_tables();
         
         // Determine destination.size()
         size_t dest_size = 2 * encrypted_size - 1;

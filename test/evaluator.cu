@@ -28,25 +28,49 @@ namespace evaluator {
     }
 
     TEST(EvaluatorTest, HostBFVNegate) {
-        GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
-        test_negate(ghe);
+        {
+            GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+            test_negate(ghe);
+        }
+        {
+            GeneralHeContext ghe(false, SchemeType::BFV, 32, 35, { 30, 30, 30, 30 }, false, 0x123, 0);
+            test_negate(ghe);
+        }
     }
     TEST(EvaluatorTest, HostBGVNegate) {
-        GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
-        test_negate(ghe);
+        {
+            GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+            test_negate(ghe);
+        }
+        {
+            GeneralHeContext ghe(false, SchemeType::BGV, 32, 35, { 30, 30, 30, 30 }, false, 0x123, 0);
+            test_negate(ghe);
+        }
     }
     TEST(EvaluatorTest, HostCKKSNegate) {
         GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1<<16, 1e-2);
         test_negate(ghe);
     }
     TEST(EvaluatorTest, DeviceBFVNegate) {
-        GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
-        test_negate(ghe);
+        {
+            GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+            test_negate(ghe);
+        }
+        {
+            GeneralHeContext ghe(true, SchemeType::BFV, 32, 35, { 30, 30, 30 }, false, 0x123, 0);
+            test_negate(ghe);
+        }
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceBGVNegate) {
-        GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
-        test_negate(ghe);
+        {
+            GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+            test_negate(ghe);
+        }
+        {
+            GeneralHeContext ghe(true, SchemeType::BGV, 32, 35, { 30, 30, 30 }, false, 0x123, 0);
+            test_negate(ghe);
+        }
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceCKKSNegate) {
@@ -139,25 +163,49 @@ namespace evaluator {
     
 
     TEST(EvaluatorTest, HostBFVMultiply) {
-        GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
-        test_multiply(ghe);
+        {
+            GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+            test_multiply(ghe);
+        }
+        {
+            GeneralHeContext ghe(false, SchemeType::BFV, 32, 35, { 30, 30, 30, 30 }, false, 0x123, 0);
+            test_multiply(ghe);
+        }
     }
     TEST(EvaluatorTest, HostBGVMultiply) {
-        GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
-        test_multiply(ghe);
+        {
+            GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+            test_multiply(ghe);
+        }
+        {
+            GeneralHeContext ghe(false, SchemeType::BGV, 32, 35, { 30, 30, 30, 30 }, false, 0x123, 0);
+            test_multiply(ghe);
+        }
     }
     TEST(EvaluatorTest, HostCKKSMultiply) {
         GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1ull<<20, 1e-2);
         test_multiply(ghe);
     }
     TEST(EvaluatorTest, DeviceBFVMultiply) {
-        GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
-        test_multiply(ghe);
+        {
+            GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+            test_multiply(ghe);
+        }
+        {
+            GeneralHeContext ghe(true, SchemeType::BFV, 32, 35, { 30, 30, 30, 30 }, false, 0x123, 0);
+            test_multiply(ghe);
+        }
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceBGVMultiply) {
-        GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
-        test_multiply(ghe);
+        {
+            GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+            test_multiply(ghe);
+        }
+        {
+            GeneralHeContext ghe(true, SchemeType::BGV, 32, 35, { 30, 30, 30, 30 }, false, 0x123, 0);
+            test_multiply(ghe);
+        }
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceCKKSMultiply) {
@@ -292,25 +340,49 @@ namespace evaluator {
     }
 
     TEST(EvaluatorTest, HostBFVRelinearize) {
-        GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
-        test_relinearize(ghe);
+        {
+            GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, false, 0x123, 0);
+            test_relinearize(ghe);
+        }
+        {
+            GeneralHeContext ghe(false, SchemeType::BFV, 32, 35, { 60, 30, 30, 60 }, false, 0x123, 0);
+            test_relinearize(ghe);
+        }
     }
     TEST(EvaluatorTest, HostBGVRelinearize) {
-        GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
-        test_relinearize(ghe);
+        {
+            GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, false, 0x123, 0);
+            test_relinearize(ghe);
+        }
+        {
+            GeneralHeContext ghe(false, SchemeType::BGV, 32, 35, { 60, 30, 30, 60 }, false, 0x123, 0);
+            test_relinearize(ghe);
+        }
     }
     TEST(EvaluatorTest, HostCKKSRelinearize) {
         GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
         test_relinearize(ghe);
     }
     TEST(EvaluatorTest, DeviceBFVRelinearize) {
-        GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
-        test_relinearize(ghe);
+        {
+            GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, false, 0x123, 0);
+            test_relinearize(ghe);
+        }
+        {
+            GeneralHeContext ghe(true, SchemeType::BFV, 32, 35, { 60, 30, 30, 60 }, false, 0x123, 0);
+            test_relinearize(ghe);
+        }
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceBGVRelinearize) {
-        GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
-        test_relinearize(ghe);
+        {
+            GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, false, 0x123, 0);
+            test_relinearize(ghe);
+        }
+        {
+            GeneralHeContext ghe(false, SchemeType::BFV, 32, 35, { 60, 30, 30, 60 }, false, 0x123, 0);
+            test_relinearize(ghe);
+        }
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceCKKSRelinearize) {
