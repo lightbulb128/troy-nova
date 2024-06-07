@@ -5,6 +5,7 @@ source_group("Include" FILES ${CURRENT_HEADERS})
 source_group("Source" FILES ${CURRENT_SOURCES})
 
 add_library(troy SHARED ${CURRENT_HEADERS} ${CURRENT_SOURCES})
+add_library(troy_static STATIC ${CURRENT_HEADERS} ${CURRENT_SOURCES})
 set_target_properties(troy PROPERTIES CUDA_SEPERABLE_COMPILATION ON)
 
 set(gcc_like_cxx "$<COMPILE_LANG_AND_ID:CXX,ARMClang,AppleClang,Clang,GNU>")
@@ -20,7 +21,7 @@ if(TROY_MEMORY_POOL)
   target_compile_definitions(troy PUBLIC TROY_MEMORY_POOL)
 endif()
 
-install(TARGETS troy
+install(TARGETS troy troy_static
   EXPORT troyTargets
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
