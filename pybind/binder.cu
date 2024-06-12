@@ -622,8 +622,6 @@ PYBIND11_MODULE(pytroy_raw, m) {
     py::class_<utils::RandomGenerator>(m, "RandomGenerator")
         .def(py::init<>())
         .def(py::init<uint64_t>())
-        .def("init_curand_states", &utils::RandomGenerator::init_curand_states)
-        .def("curand_state_count", &utils::RandomGenerator::curand_state_count)
         .def("reset_seed", &utils::RandomGenerator::reset_seed)
         .def("sample_uint64", &utils::RandomGenerator::sample_uint64)
     ;

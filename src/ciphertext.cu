@@ -44,7 +44,6 @@ namespace troy {
             throw std::invalid_argument("[Ciphertext::expand_seed] ParmsID is not valid.");
         }
         utils::RandomGenerator c1_prng(this->seed());
-        if (this->on_device()) {c1_prng.init_curand_states(this->poly_modulus_degree());}
         utils::ConstSlice<Modulus> coeff_modulus = context_data_optional.value()->parms().coeff_modulus();
         c1_prng.sample_poly_uniform(this->poly(1), this->poly_modulus_degree(), coeff_modulus);
         this->seed() = 0;

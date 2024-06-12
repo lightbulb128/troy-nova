@@ -10,17 +10,10 @@ namespace random_generator {
     bool test_body_seeded_rng(bool device) {
 
         // same seed should get same results
-
-        size_t curand_state_count = 16;
         size_t produce_count = 100;
         
         RandomGenerator rng1(36);
         RandomGenerator rng2(36);
-
-        if (device) {
-            rng1.init_curand_states(curand_state_count);
-            rng2.init_curand_states(curand_state_count);
-        }
         
         Array<uint64_t> buffer1(produce_count, device);
         Array<uint64_t> buffer2(produce_count, device);
@@ -32,7 +25,7 @@ namespace random_generator {
             buffer1.to_host_inplace();
             buffer2.to_host_inplace();
         }
-
+        
         // check results
         
         for (size_t i = 0; i < produce_count; i++) {
@@ -45,11 +38,6 @@ namespace random_generator {
 
         RandomGenerator rng3(13);
         RandomGenerator rng4(49);
-
-        if (device) {
-            rng3.init_curand_states(curand_state_count);
-            rng4.init_curand_states(curand_state_count);
-        }
 
         // reuse buffers
         if (device) {
@@ -101,9 +89,6 @@ namespace random_generator {
         }
 
         RandomGenerator rng(13);
-        if (device) {
-            rng.init_curand_states(n);
-        }
 
         Array<uint64_t> buffer(n * moduli_count, device);
 
@@ -169,9 +154,6 @@ namespace random_generator {
         }
 
         RandomGenerator rng(13);
-        if (device) {
-            rng.init_curand_states(n);
-        }
 
         Array<uint64_t> buffer(n * moduli_count, device);
 
@@ -202,6 +184,30 @@ namespace random_generator {
     TEST(RandomGeneratorTest, DeviceUniform) {
         ASSERT_TRUE(test_body_uniform(true));
         MemoryPool::Destroy();
+    }
+
+    TEST(RandomGeneratorTest, HostDeviceConsistency) {
+        
+        // same seed should get same results
+        size_t produce_count = 123;
+        
+        RandomGenerator rng1(36);
+        RandomGenerator rng2(36);
+        
+        Array<uint8_t> buffer1(produce_count, false);
+        Array<uint8_t> buffer2(produce_count, true);
+
+        rng1.fill_bytes(buffer1.reference());
+        rng2.fill_bytes(buffer2.reference());
+
+        buffer1.to_host_inplace();
+        buffer2.to_host_inplace();
+
+        // check results
+        for (size_t i = 0; i < produce_count; i++) {
+            ASSERT_EQ(buffer1[i], buffer2[i]);
+        }
+
     }
 
 

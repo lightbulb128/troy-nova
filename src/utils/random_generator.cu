@@ -1,101 +1,92 @@
 #include "random_generator.cuh"
 
+#include "aes_impl.inc"
+
+#define TROY_AES_DEVICE
+#include "aes_impl.inc"
+#undef TROY_AES_DEVICE
+
 namespace troy {namespace utils {
 
-    __global__ static void kernel_init_curand_states(Slice<curandState_t> states, size_t count, uint64_t seed) {
+    __global__ static void kernel_fill_uint128s(Slice<uint8_t> bytes, ruint128_t seed, ruint128_t counter) {
         size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-        if (idx < count) {
-            curand_init(idx + seed, 0, 0, &states[idx]);
+        if (idx < bytes.size() / sizeof(ruint128_t)) {
+            ruint128_t value = counter.add(idx);
+            aes::device::encrypt(value.as_bytes(), seed.as_bytes());
+            reinterpret_cast<ruint128_t*>(bytes.raw_pointer())[idx] = value;
         }
     }
 
-    void RandomGenerator::init_curand_states(size_t count) {
-        this->curand_states = Array<curandState_t>(count, true);
-        size_t block_count = utils::ceil_div(count, utils::KERNEL_THREAD_COUNT);
-        kernel_init_curand_states<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
-            this->curand_states.reference(), count, this->seed);
-    }
-
-    __global__ static void kernel_fill_bytes(
-        Slice<uint8_t> bytes, Slice<curandState_t> states
-    ) {
-        size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-        if (idx < states.size()) {
-            curandState_t& state = states[idx];
-            for (size_t index = idx; index < bytes.size(); index += states.size()) {
-                bytes[index] = static_cast<uint8_t>(curand(&state));
+    void fill_uint128s(Slice<uint8_t> bytes, ruint128_t seed, ruint128_t& counter) {
+#if DEBUG
+        if (bytes.size() % sizeof(ruint128_t) != 0) {
+            throw std::runtime_error("[fill_uint128s] bytes.len() must be a multiple of sizeof(ruint128_t)");
+        }
+#endif
+        size_t n = bytes.size() / sizeof(ruint128_t);
+        if (!bytes.on_device()) {
+            ruint128_t* pointer = reinterpret_cast<ruint128_t*>(bytes.raw_pointer());
+            for (size_t i = 0; i < n; i++) {
+                *pointer = counter;
+                aes::host::encrypt(pointer->as_bytes(), seed.as_bytes());
+                counter.increase_inplace();
+                pointer++;
             }
+        } else {
+            size_t block_count = utils::ceil_div(n, utils::KERNEL_THREAD_COUNT);
+            kernel_fill_uint128s<<<block_count, utils::KERNEL_THREAD_COUNT>>>(bytes, seed, counter);
+            counter = counter.add(n);
         }
+    }
+
+    ruint128_t host_generate_uint128(ruint128_t seed, ruint128_t& counter) {
+        ruint128_t value = counter;
+        aes::host::encrypt(value.as_bytes(), seed.as_bytes());
+        counter.increase_inplace();
+        return value;
+    }
+
+    __device__ ruint128_t device_generate_uint128(const ruint128_t& seed, const ruint128_t& counter) {
+        ruint128_t value = counter;
+        aes::device::encrypt(value.as_bytes(), seed.as_bytes());
+        return value;
     }
     
     void RandomGenerator::fill_bytes(Slice<uint8_t> bytes) {
-        if (bytes.on_device()) {
-            size_t block_count = utils::ceil_div(this->curand_states.size(), utils::KERNEL_THREAD_COUNT);
-            kernel_fill_bytes<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
-                bytes, this->curand_states.reference()
-            );
-        } else {
-            blake2xb(
-                bytes.raw_pointer(), bytes.size(),
-                &this->counter, sizeof(this->counter),
-                &this->seed, sizeof(this->seed)
-            );
-            this->counter++;
+        size_t main = bytes.size() / sizeof(ruint128_t);
+        size_t tail = bytes.size() % sizeof(ruint128_t);
+        if (main > 0) {
+            fill_uint128s(bytes.slice(0, main * sizeof(ruint128_t)), this->seed, this->counter);
         }
-    }
-
-    __device__ inline
-    uint64_t generate_uint64(curandState_t& state) {
-        return (static_cast<uint64_t>(curand(&state)))
-            + (static_cast<uint64_t>(curand(&state)) << 32);
-    }
-
-    __global__ static void kernel_fill_uint64s(
-        Slice<uint64_t> uint64s, Slice<curandState_t> states
-    ) {
-        size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-        if (idx < states.size()) {
-            curandState_t& state = states[idx];
-            for (size_t index = idx; index < uint64s.size(); index += states.size()) {
-                uint64s[index] = generate_uint64(state);
-            }
+        if (tail > 0) {
+            ruint128_t value = host_generate_uint128(this->seed, this->counter);
+            Slice<uint8_t> tail_slice = bytes.slice(main * sizeof(ruint128_t), bytes.size());
+            tail_slice.copy_from_slice(ConstSlice<uint8_t>(reinterpret_cast<uint8_t*>(&value), tail, false));
         }
     }
 
     void RandomGenerator::fill_uint64s(Slice<uint64_t> uint64s) {
-        if (uint64s.on_device()) {
-            size_t block_count = utils::ceil_div(this->curand_states.size(), utils::KERNEL_THREAD_COUNT);
-            kernel_fill_uint64s<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
-                uint64s, this->curand_states.reference()
-            );
-        } else {
-            blake2xb(
-                uint64s.raw_pointer(), uint64s.size() * sizeof(uint64_t),
-                &this->counter, sizeof(this->counter),
-                &this->seed, sizeof(this->seed)
-            );
-            this->counter++;
-        }
+        this->fill_bytes(
+            Slice<uint8_t>(
+                reinterpret_cast<uint8_t*>(uint64s.raw_pointer()), 
+                uint64s.size() * sizeof(uint64_t), 
+                uint64s.on_device()
+            )
+        );
     }
     
     uint64_t RandomGenerator::sample_uint64() {
-        uint64_t ret;
-        blake2xb(
-            &ret, sizeof(ret),
-            &this->counter, sizeof(this->counter),
-            &this->seed, sizeof(this->seed)
-        );
-        this->counter++;
-        return ret;
+        ruint128_t value = host_generate_uint128(this->seed, this->counter);
+        return value.low;
     }
 
     __global__ static void kernel_sample_poly_ternary(
-        Slice<uint64_t> destination, size_t degree, Slice<curandState_t> states, ConstSlice<Modulus> moduli
+        Slice<uint64_t> destination, size_t degree, ConstSlice<Modulus> moduli,
+        ruint128_t seed, ruint128_t counter
     ) {
         size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
         if (idx < degree) {
-            curandState_t& state = states[idx];
-            uint8_t r = curand(&state) % 3;
+            uint8_t r = device_generate_uint128(seed, counter.add(idx)).low % 3;
             size_t i = 0;
             for (size_t index = idx; index < destination.size(); index += degree) {
                 if (r == 2) {
@@ -128,13 +119,12 @@ namespace troy {namespace utils {
                 }
             }
         } else {
-            if (degree != this->curand_states.size()) {
-                throw std::runtime_error("[RandomGenerator::sample_poly_ternary] degree must be equal to the number of curand states");
-            }
             size_t block_count = utils::ceil_div(degree, utils::KERNEL_THREAD_COUNT);
             kernel_sample_poly_ternary<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
-                destination, degree, this->curand_states.reference(), moduli
+                destination, degree, moduli,
+                this->seed, this->counter
             );
+            this->counter = this->counter.add(degree);
         }
     }
 
@@ -152,12 +142,12 @@ namespace troy {namespace utils {
     }
 
     __global__ static void kernel_sample_poly_centered_binomial(
-        Slice<uint64_t> destination, size_t degree, Slice<curandState_t> states, ConstSlice<Modulus> moduli
+        Slice<uint64_t> destination, size_t degree, ConstSlice<Modulus> moduli,
+        ruint128_t seed, ruint128_t counter
     ) {
         size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
         if (idx < degree) {
-            curandState_t& state = states[idx];
-            int r = uint64_to_cbd(generate_uint64(state));
+            int r = uint64_to_cbd(device_generate_uint128(seed, counter.add(idx)).low);
             size_t i = 0;
             for (size_t index = idx; index < destination.size(); index += degree) {
                 if (r >= 0) {
@@ -190,13 +180,11 @@ namespace troy {namespace utils {
                 }
             }
         } else {
-            if (degree != this->curand_states.size()) {
-                throw std::runtime_error("[RandomGenerator::sample_poly_centered_binomial] degree must be equal to the number of curand states");
-            }
             size_t block_count = utils::ceil_div(degree, utils::KERNEL_THREAD_COUNT);
             kernel_sample_poly_centered_binomial<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
-                destination, degree, this->curand_states.reference(), moduli
+                destination, degree, moduli, this->seed, this->counter
             );
+            this->counter = this->counter.add(degree);
         }
     }
 
@@ -204,11 +192,6 @@ namespace troy {namespace utils {
         bool device = destination.on_device();
         if (device != moduli.on_device()) {
             throw std::runtime_error("[RandomGenerator::sample_poly_uniform] destination and modulus must be on the same device");
-        }
-        if (device) {
-            if (degree != this->curand_states.size()) {
-                throw std::runtime_error("[RandomGenerator::sample_poly_uniform] degree must be equal to the number of curand states");
-            }
         }
         this->fill_uint64s(destination);
         utils::modulo_inplace_p(destination, degree, moduli);

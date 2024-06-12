@@ -213,10 +213,6 @@ namespace encryptor {
         auto prng_seed = seed + 1;
         utils::RandomGenerator rng1(prng_seed);
         utils::RandomGenerator rng2(prng_seed);
-        if (device) {
-            rng1.init_curand_states(n);
-            rng2.init_curand_states(n);
-        }
         if (ckks) message_complex64 = random_complex64_vector(encoder.slot_count());
         else message_uint64 = random_uint64_vector(encoder.slot_count(), t);
         plain = ckks ? encoder.ckks().encode_complex64_simd_new(message_complex64, std::nullopt, scale) : encoder.batch().encode_new(message_uint64);

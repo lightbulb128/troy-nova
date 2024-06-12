@@ -43,12 +43,6 @@ namespace troy {namespace rlwe {
         if (context_data->on_device() != device) {
             throw std::invalid_argument("[rlwe::asymmetric_with_u_prng] context_data and public_key is not on the same device.");
         }
-        if (device && u_prng.curand_state_count() != coeff_count) {
-            throw std::invalid_argument("[rlwe::asymmetric_with_u_prng] u_prng's curand states are not initialized with the correct size.");
-        }
-        if (device && context_prng.curand_state_count() != coeff_count) {
-            throw std::invalid_argument("[rlwe::asymmetric_with_u_prng] context_prng's curand states are not initialized with the correct size.");
-        }
 
         // make destination have right size and parms_id
         if (device) destination.to_device_inplace();
@@ -144,12 +138,6 @@ namespace troy {namespace rlwe {
         if (context_data->on_device() != device) {
             throw std::invalid_argument("[rlwe::symmetric_with_c1_prng] context_data and public_key is not on the same device.");
         }
-        if (device && c1_prng.curand_state_count() != coeff_count) {
-            throw std::invalid_argument("[rlwe::symmetric_with_c1_prng] c1_prng's curand states are not initialized with the correct size.");
-        }
-        if (device && context_prng.curand_state_count() != coeff_count) {
-            throw std::invalid_argument("[rlwe::symmetric_with_c1_prng] context_prng's curand states are not initialized with the correct size.");
-        }
 
         // make destination have right size and parms_id
         if (device) destination.to_device_inplace();
@@ -163,7 +151,6 @@ namespace troy {namespace rlwe {
         while (seed == 0) seed = c1_prng.sample_uint64();
 
         RandomGenerator c1_new_prng(seed);
-        if (device) c1_new_prng.init_curand_states(coeff_count);
         
         // Generate ciphertext: (c[0], c[1]) = ([-(as+ e)]_q, a) in BFV/CKKS
         // Generate ciphertext: (c[0], c[1]) = ([-(as+pe)]_q, a) in BGV
