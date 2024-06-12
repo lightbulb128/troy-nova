@@ -58,6 +58,13 @@ namespace troy { namespace utils {
             this->counter = 0;
         }
 
+        inline void set_counter(__uint128_t counter) {
+            this->counter = counter;
+        }
+        inline __uint128_t get_counter() const {
+            return this->counter.to_uint128();
+        }
+
         void fill_bytes(Slice<uint8_t> bytes);
         void fill_uint64s(Slice<uint64_t> uint64s);
         uint64_t sample_uint64();
