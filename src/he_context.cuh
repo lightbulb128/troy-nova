@@ -45,6 +45,15 @@ namespace troy {
             return it->second;
         }
 
+        // This definition is for those who have difficulty accessing std::optional.
+        inline ContextDataPointer get_context_data_pointer(const ParmsID& parms_id) const noexcept {
+            auto it = context_data_map_.find(parms_id);
+            if (it == context_data_map_.end()) {
+                return std::shared_ptr<ContextData>(nullptr);
+            }
+            return it->second;
+        }
+
         inline std::optional<ContextDataPointer> key_context_data() const noexcept {
             return get_context_data(key_parms_id_);
         }
@@ -55,6 +64,18 @@ namespace troy {
 
         inline std::optional<ContextDataPointer> last_context_data() const noexcept {
             return get_context_data(last_parms_id_);
+        }
+
+        inline ContextDataPointer key_context_data_pointer() const noexcept {
+            return get_context_data_pointer(key_parms_id_);
+        }
+
+        inline ContextDataPointer first_context_data_pointer() const noexcept {
+            return get_context_data_pointer(first_parms_id_);
+        }
+
+        inline ContextDataPointer last_context_data_pointer() const noexcept {
+            return get_context_data_pointer(last_parms_id_);
         }
 
         inline SecurityLevel security_level() const noexcept {
