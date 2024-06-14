@@ -106,6 +106,22 @@ namespace troy {
             return next_context_data_;
         }
 
+        inline std::weak_ptr<const ContextData> prev_context_data_pointer() const noexcept {
+            if (!prev_context_data_.has_value()) {
+                return std::weak_ptr<const ContextData>();
+            } else {
+                return prev_context_data_.value();
+            }
+        }
+
+        inline std::shared_ptr<const ContextData> next_context_data_pointer() const noexcept {
+            if (!next_context_data_.has_value()) {
+                return std::shared_ptr<const ContextData>(nullptr);
+            } else {
+                return next_context_data_.value();
+            }
+        }
+
         inline size_t chain_index() const noexcept {
             return chain_index_;
         }
