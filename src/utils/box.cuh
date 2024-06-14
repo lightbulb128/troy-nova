@@ -363,6 +363,12 @@ namespace troy { namespace utils {
             return array;
         }
 
+        inline static Array<T> create_and_copy_from_slice(ConstSlice<T> slice, bool device) {
+            Array<T> array(slice.size(), device);
+            array.copy_from_slice(slice);
+            return array;
+        }
+
         inline static Array<T> from_vector(std::vector<T>&& vector) {
             Array<T> array(vector.size(), false);
             if (vector.size() > 0) {
