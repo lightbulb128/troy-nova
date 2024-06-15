@@ -6,3 +6,4 @@ r.py
 reports/
 binder/*.so
 gather_code.*
+.cache/
