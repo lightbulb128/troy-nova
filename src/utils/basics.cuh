@@ -592,12 +592,12 @@ namespace troy { namespace utils {
         }
     }
 
-    __host__
+    __host__ __device__
     inline void multiply_uint_uint64_inplace(Slice<uint64_t> operand1, uint64_t operand2) {
         multiply_uint_uint64(operand1.as_const(), operand2, operand1);
     }
 
-    __host__
+    __host__ __device__
     inline void multiply_uint(ConstSlice<uint64_t> operand1, ConstSlice<uint64_t> operand2, Slice<uint64_t> result) {
         if (operand1.size() == 0 || operand2.size() == 0) {return set_zero_uint(result);}
         if (result.size() == 1) {result[0] = operand1[0] * operand1[0]; return;}
