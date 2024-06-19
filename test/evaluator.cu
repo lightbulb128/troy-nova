@@ -625,6 +625,66 @@ namespace evaluator {
         utils::MemoryPool::Destroy();
     }
 
+    void test_add_plain_scaled(const GeneralHeContext& context) {
+        uint64_t t = context.t();
+        double scale = context.scale();
+        double tolerance = context.tolerance();
+
+        GeneralVector message1 = context.random_simd_full();
+        GeneralVector message2 = context.random_simd_full();
+        Plaintext encoded1 = context.encoder().encode_simd(message1, std::nullopt, scale);
+        Plaintext encoded2 = context.encoder().encode_simd(message2, std::nullopt, scale);
+        Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1);
+        context.encoder().batch().scale_up_inplace(encoded2, encrypted1.parms_id());
+        Ciphertext added = context.evaluator().add_plain_new(encrypted1, encoded2);
+        Plaintext decrypted = context.decryptor().decrypt_new(added);
+        GeneralVector result = context.encoder().decode_simd(decrypted);
+        GeneralVector truth = message1.add(message2, t);
+        ASSERT_TRUE(truth.near_equal(result, tolerance));
+    }
+
+    TEST(EvaluatorTest, HostBFVAddPlainScaled) {
+        GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_add_plain_scaled(ghe);
+    }
+    TEST(EvaluatorTest, DeviceBFVAddPlainScaled) {
+        GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_add_plain_scaled(ghe);
+        utils::MemoryPool::Destroy();
+    }
+
+    void test_add_plain_scaled_ntt(const GeneralHeContext& context) {
+        uint64_t t = context.t();
+        double scale = context.scale();
+        double tolerance = context.tolerance();
+
+        GeneralVector message1 = context.random_simd_full();
+        GeneralVector message2 = context.random_simd_full();
+        Plaintext encoded1 = context.encoder().encode_simd(message1, std::nullopt, scale);
+        Plaintext encoded2 = context.encoder().encode_simd(message2, std::nullopt, scale);
+        Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1);
+        context.encoder().batch().scale_up_inplace(encoded2, encrypted1.parms_id());
+        context.evaluator().transform_to_ntt_inplace(encrypted1);
+        context.evaluator().transform_plain_to_ntt_inplace(encoded2, encrypted1.parms_id());
+        Ciphertext added = context.evaluator().add_plain_new(encrypted1, encoded2);
+        context.evaluator().transform_from_ntt_inplace(added);
+        Plaintext decrypted = context.decryptor().decrypt_new(added);
+        GeneralVector result = context.encoder().decode_simd(decrypted);
+        GeneralVector truth = message1.add(message2, t);
+        ASSERT_TRUE(truth.near_equal(result, tolerance));
+    }
+
+    TEST(EvaluatorTest, HostBFVAddPlainScaledNTT) {
+        GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_add_plain_scaled_ntt(ghe);
+    }
+    TEST(EvaluatorTest, DeviceBFVAddPlainScaledNTT) {
+        GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_add_plain_scaled_ntt(ghe);
+        utils::MemoryPool::Destroy();
+    }
+
+
     void test_multiply_plain(const GeneralHeContext& context) {
         uint64_t t = context.t();
         double scale = context.scale();

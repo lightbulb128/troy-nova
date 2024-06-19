@@ -85,6 +85,7 @@ namespace troy {namespace scaling_variant {
         uint64_t plain_modulus_value,
         ConstSlice<Modulus> coeff_modulus,
         Slice<uint64_t> destination,
+        bool add_to_destination,
         bool subtract
     ) {
         size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -106,14 +107,18 @@ namespace troy {namespace scaling_variant {
             plain_data[i], coeff_div_plain_modulus[j], fix[0], coeff_modulus[j]
         );
         uint64_t& destination_target = destination[j * coeff_count + i];
-        if (!subtract) {
-            destination_target = utils::add_uint64_mod(destination_target, scaled_rounded_coeff, coeff_modulus[j]);
+        if (add_to_destination) {
+            if (!subtract) {
+                destination_target = utils::add_uint64_mod(destination_target, scaled_rounded_coeff, coeff_modulus[j]);
+            } else {
+                destination_target = utils::sub_uint64_mod(destination_target, scaled_rounded_coeff, coeff_modulus[j]);
+            }
         } else {
-            destination_target = utils::sub_uint64_mod(destination_target, scaled_rounded_coeff, coeff_modulus[j]);
+            destination_target = scaled_rounded_coeff;
         }
     }
 
-    void multiply_translate_plain(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, bool subtract) {
+    void scale_up(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, bool add_to_destination, bool subtract) {
         bool device = plain.on_device();
         if (!utils::same(device, context_data->on_device(), destination.on_device())) {
             throw std::invalid_argument("[scaling_variant::multiply_translate_plain] Arguments are not on the same device.");
@@ -151,10 +156,14 @@ namespace troy {namespace scaling_variant {
                     uint64_t scaled_rounded_coeff = utils::multiply_uint64operand_add_uint64_mod(
                         plain_data[i], coeff_div_plain_modulus[j], fix[0], coeff_modulus[j]
                     );
-                    if (!subtract) {
-                        destination[j * coeff_count + i] = utils::add_uint64_mod(destination[j * coeff_count + i], scaled_rounded_coeff, coeff_modulus[j]);
+                    if (add_to_destination) {
+                        if (!subtract) {
+                            destination[j * coeff_count + i] = utils::add_uint64_mod(destination[j * coeff_count + i], scaled_rounded_coeff, coeff_modulus[j]);
+                        } else {
+                            destination[j * coeff_count + i] = utils::sub_uint64_mod(destination[j * coeff_count + i], scaled_rounded_coeff, coeff_modulus[j]);
+                        }
                     } else {
-                        destination[j * coeff_count + i] = utils::sub_uint64_mod(destination[j * coeff_count + i], scaled_rounded_coeff, coeff_modulus[j]);
+                        destination[j * coeff_count + i] = scaled_rounded_coeff;
                     }
                 }
             }
@@ -171,17 +180,18 @@ namespace troy {namespace scaling_variant {
                 parms.plain_modulus_host().value(),
                 coeff_modulus,
                 destination,
+                add_to_destination,
                 subtract
             );
         }
     }
 
     void multiply_add_plain(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination) {
-        multiply_translate_plain(plain, context_data, destination, false);
+        scale_up(plain, context_data, destination, true, false);
     }
 
     void multiply_sub_plain(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination) {
-        multiply_translate_plain(plain, context_data, destination, true);
+        scale_up(plain, context_data, destination, true, true);
     }
     
 }}

@@ -1554,9 +1554,11 @@ namespace troy {
         SchemeType scheme = parms.scheme();
         switch (scheme) {
             case SchemeType::BFV: {
-                check_is_not_ntt_form("[Evaluator::translate_plain_inplace]", encrypted);
                 if (encrypted.is_ntt_form() != plain.is_ntt_form()) {
                     throw std::invalid_argument("[Evaluator::translate_plain_inplace] Plaintext and ciphertext are not in the same NTT form.");
+                }
+                if (plain.parms_id() == parms_id_zero && encrypted.is_ntt_form()) {
+                    throw std::invalid_argument("[Evaluator::translate_plain_inplace] When plain is mod t, encrypted must not be in NTT form.");
                 }
                 break;
             }
@@ -1585,10 +1587,18 @@ namespace troy {
         ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
         switch (scheme) {
             case SchemeType::BFV: {
-                if (!subtract) {
-                    scaling_variant::multiply_add_plain(plain, context_data, encrypted.poly(0));
+                if (plain.parms_id() == parms_id_zero) {
+                    if (!subtract) {
+                        scaling_variant::multiply_add_plain(plain, context_data, encrypted.poly(0));
+                    } else {
+                        scaling_variant::multiply_sub_plain(plain, context_data, encrypted.poly(0));
+                    }
                 } else {
-                    scaling_variant::multiply_sub_plain(plain, context_data, encrypted.poly(0));
+                    if (!subtract) {
+                        utils::add_inplace_p(encrypted.poly(0), plain.poly(), coeff_count, coeff_modulus);
+                    } else {
+                        utils::sub_inplace_p(encrypted.poly(0), plain.poly(), coeff_count, coeff_modulus);
+                    }
                 }
                 break;
             }
@@ -1862,6 +1872,19 @@ namespace troy {
         }
     }
 
+    /// Transforms a plaintext from normal form to NTT form.
+    /// 
+    /// The input plaintext must be from the BFV scheme, and in this function we do
+    /// not scale by Delta = q/t. Two situations:
+    /// 1. The plaintext is modulo t. In this case, it is converted to mod q NTT form, (so that
+    ///    it may be multiplied with a ciphertext.) Note, since we don't scale by Delta,
+    ///    one usually cannot directly add this converted plaintext to a ciphertext (which must
+    ///    have already been scaled by Delta.)
+    /// 2. The plaintext is already modulo some q. In this case, it is directly NTT-ed. You
+    ///    must ensure the given parms_id is consistent with the plaintext's own parms_id. 
+    ///    Usually, this form of plaintext is created with [BatchEncoder::scale_up],
+    ///    so after NTT-ed it could still be added to a ciphertext, but it cannot be 
+    ///    multiplied with a BFV ciphertext, since both the operands are already scaled.
     void Evaluator::transform_plain_to_ntt_inplace(Plaintext& plain, const ParmsID& parms_id) const {
         if (plain.is_ntt_form()) {
             throw std::invalid_argument("[Evaluator::transform_plain_to_ntt_inplace] Plaintext is already in NTT form.");
@@ -1871,37 +1894,47 @@ namespace troy {
         size_t coeff_count = parms.poly_modulus_degree();
         ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
         size_t coeff_modulus_size = coeff_modulus.size();
-        size_t plain_coeff_count = plain.coeff_count();
-
-        plain.resize(coeff_count * coeff_modulus_size);
-
-        size_t plain_upper_half_threshold = context_data->plain_upper_half_threshold();
-        ConstSlice<uint64_t> plain_upper_half_increment = context_data->plain_upper_half_increment();
         ConstSlice<NTTTables> ntt_tables = context_data->small_ntt_tables();
 
-        if (!context_data->qualifiers().using_fast_plain_lift) {
-            bool device = plain.on_device();
-            Buffer<uint64_t> temp(coeff_modulus_size, coeff_count, device);
-            transform_plain_to_ntt_no_fast_plain_lift(
-                plain_coeff_count, coeff_modulus_size,
-                plain.const_poly(), temp.reference(), plain_upper_half_threshold, plain_upper_half_increment
-            );
-            context_data->rns_tool().base_q().decompose_array(temp.reference());
-            plain.poly().copy_from_slice(temp.const_reference());
-        } else {
-            // Note that in this case plain_upper_half_increment holds its value in RNS form modulo the coeff_modulus
-            // primes.
-            transform_plain_to_ntt_fast_plain_lift(
-                plain_coeff_count, coeff_count, coeff_modulus_size,
-                plain.poly(), plain_upper_half_threshold, plain_upper_half_increment
-            );
-        }
+        if (plain.parms_id() == parms_id_zero) {
+            size_t plain_coeff_count = plain.coeff_count();
 
-        utils::ntt_negacyclic_harvey_p(plain.poly(), coeff_count, ntt_tables);
-        plain.parms_id() = parms_id;
-        plain.is_ntt_form() = true;
-        plain.coeff_modulus_size() = coeff_modulus_size;
-        plain.poly_modulus_degree() = coeff_count;
+            plain.resize(coeff_count * coeff_modulus_size);
+
+            size_t plain_upper_half_threshold = context_data->plain_upper_half_threshold();
+            ConstSlice<uint64_t> plain_upper_half_increment = context_data->plain_upper_half_increment();
+            
+
+            if (!context_data->qualifiers().using_fast_plain_lift) {
+                bool device = plain.on_device();
+                Buffer<uint64_t> temp(coeff_modulus_size, coeff_count, device);
+                transform_plain_to_ntt_no_fast_plain_lift(
+                    plain_coeff_count, coeff_modulus_size,
+                    plain.const_poly(), temp.reference(), plain_upper_half_threshold, plain_upper_half_increment
+                );
+                context_data->rns_tool().base_q().decompose_array(temp.reference());
+                plain.poly().copy_from_slice(temp.const_reference());
+            } else {
+                // Note that in this case plain_upper_half_increment holds its value in RNS form modulo the coeff_modulus
+                // primes.
+                transform_plain_to_ntt_fast_plain_lift(
+                    plain_coeff_count, coeff_count, coeff_modulus_size,
+                    plain.poly(), plain_upper_half_threshold, plain_upper_half_increment
+                );
+            }
+
+            utils::ntt_negacyclic_harvey_p(plain.poly(), coeff_count, ntt_tables);
+            plain.parms_id() = parms_id;
+            plain.is_ntt_form() = true;
+            plain.coeff_modulus_size() = coeff_modulus_size;
+            plain.poly_modulus_degree() = coeff_count;
+        } else {
+            if (plain.parms_id() != parms_id) {
+                throw std::invalid_argument("[Evaluator::transform_plain_to_ntt_inplace] Plaintext parameters do not match.");
+            }
+            utils::ntt_negacyclic_harvey_p(plain.poly(), coeff_count, ntt_tables);
+            plain.is_ntt_form() = true;
+        }
     }
 
     void Evaluator::transform_to_ntt_inplace(Ciphertext& encrypted) const {

@@ -141,6 +141,9 @@ namespace troy {
         context_data->rns_tool().decrypt_scale_and_round(
             tmp_dest_modq.const_reference(), destination.poly()
         );
+        destination.is_ntt_form() = false;
+        destination.coeff_modulus_size() = coeff_modulus_size;
+        destination.poly_modulus_degree() = coeff_count;
     }
 
     void Decryptor::ckks_decrypt(const Ciphertext& encrypted, Plaintext& destination) const {
