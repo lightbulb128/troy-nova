@@ -1014,19 +1014,20 @@ namespace troy {
         Slice<uint64_t> t_ntt
     ) {
         size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
-        if (global_index >= coeff_count * decomp_modulus_size) return;
+        if (global_index >= coeff_count) return;
         size_t i = global_index % coeff_count;
-        size_t j = global_index / coeff_count;
         uint64_t qk_half = qk->value() >> 1;
         t_last[i] = utils::barrett_reduce_uint64(t_last[i] + qk_half, *qk);
-        const Modulus& qi = key_modulus[j];
-        if (qk->value() > qi.value()) {
-            t_ntt[j * coeff_count + i] = utils::barrett_reduce_uint64(t_last[i], qi);
-        } else {
-            t_ntt[j * coeff_count + i] = t_last[i];
+        for (size_t j = 0; j < decomp_modulus_size; j++) {
+            const Modulus& qi = key_modulus[j];
+            if (qk->value() > qi.value()) {
+                t_ntt[j * coeff_count + i] = utils::barrett_reduce_uint64(t_last[i], qi);
+            } else {
+                t_ntt[j * coeff_count + i] = t_last[i];
+            }
+            uint64_t fix = qi.value() - utils::barrett_reduce_uint64(qk_half, key_modulus[j]);
+            t_ntt[j * coeff_count + i] += fix;
         }
-        uint64_t fix = qi.value() - utils::barrett_reduce_uint64(qk_half, key_modulus[j]);
-        t_ntt[j * coeff_count + i] += fix;
     }
 
     static void ski_util6(
@@ -1054,7 +1055,7 @@ namespace troy {
                 }
             }
         } else {
-            size_t block_count = utils::ceil_div(coeff_count * decomp_modulus_size, utils::KERNEL_THREAD_COUNT);
+            size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
             kernel_ski_util6<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_last, coeff_count, qk, key_modulus, decomp_modulus_size, t_ntt
             );
@@ -1271,7 +1272,7 @@ namespace troy {
                     decomp_modulus_size,
                     temp_ntt.reference()
                 );
-            
+                
                 if (is_ntt_form) {
                     utils::ntt_negacyclic_harvey_lazy_p(temp_ntt.reference(), coeff_count, key_ntt_tables.const_slice(0, decomp_modulus_size));
                 } else {
