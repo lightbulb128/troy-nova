@@ -1899,6 +1899,9 @@ namespace troy {
 
         utils::ntt_negacyclic_harvey_p(plain.poly(), coeff_count, ntt_tables);
         plain.parms_id() = parms_id;
+        plain.is_ntt_form() = true;
+        plain.coeff_modulus_size() = coeff_modulus_size;
+        plain.poly_modulus_degree() = coeff_count;
     }
 
     void Evaluator::transform_to_ntt_inplace(Ciphertext& encrypted) const {

@@ -741,6 +741,9 @@ namespace troy {
 
         destination.parms_id() = parms_id;
         destination.scale() = scale;
+        destination.is_ntt_form() = true;
+        destination.coeff_modulus_size() = coeff_modulus_size;
+        destination.poly_modulus_degree() = coeff_count;
     }
 
     void CKKSEncoder::encode_internal_double_polynomial(const std::vector<double>& values, ParmsID parms_id, double scale, Plaintext& destination) const {
@@ -790,6 +793,9 @@ namespace troy {
 
         destination.parms_id() = parms_id;
         destination.scale() = scale;
+        destination.is_ntt_form() = true;
+        destination.coeff_modulus_size() = coeff_modulus_size;
+        destination.poly_modulus_degree() = coeff_count;
     }
 
     __global__ static void kernel_broadcast_double(double d, Slice<double> destination) {
@@ -879,6 +885,9 @@ namespace troy {
 
         destination.parms_id() = parms_id;
         destination.scale() = scale;
+        destination.is_ntt_form() = true;
+        destination.coeff_modulus_size() = coeff_modulus_size;
+        destination.poly_modulus_degree() = coeff_count;
     }
 
     __global__ static void kernel_reduce_values(
@@ -961,6 +970,9 @@ namespace troy {
 
         destination.parms_id() = parms_id;
         destination.scale() = 1.0;
+        destination.is_ntt_form() = true;
+        destination.coeff_modulus_size() = coeff_modulus_size;
+        destination.poly_modulus_degree() = coeff_count;
     }
 
     void CKKSEncoder::encode_internal_integer_single(int64_t value, ParmsID parms_id, Plaintext& destination) const {
@@ -1003,6 +1015,9 @@ namespace troy {
 
         destination.parms_id() = parms_id;
         destination.scale() = 1.0;
+        destination.is_ntt_form() = true;
+        destination.coeff_modulus_size() = coeff_modulus_size;
+        destination.poly_modulus_degree() = coeff_count;
     }
 
     __global__ static void kernel_accumulate_complex(
@@ -1152,14 +1167,14 @@ namespace troy {
 
     void CKKSEncoder::decode_internal_polynomial(const Plaintext& plain, std::vector<double>& destination) const {
         if (!plain.is_ntt_form()) {
-            throw std::invalid_argument("[CKKSEncoder::decode_internal_simd] Plaintext is not in NTT form.");
+            throw std::invalid_argument("[CKKSEncoder::decode_internal_polynomial] Plaintext is not in NTT form.");
         }
         size_t slots = this->slot_count();
         destination.resize(slots * 2);
 
         std::optional<ContextDataPointer> context_data_optional = this->context()->get_context_data(plain.parms_id());
         if (!context_data_optional.has_value()) {
-            throw std::invalid_argument("[CKKSEncoder::decode_internal_simd] parms_id not valid for context.");
+            throw std::invalid_argument("[CKKSEncoder::decode_internal_polynomial] parms_id not valid for context.");
         }
         ContextDataPointer context_data = context_data_optional.value();
         const EncryptionParameters& parms = context_data->parms();
@@ -1169,7 +1184,7 @@ namespace troy {
         
         bool device = plain.on_device();
         if (!utils::same(device, this->on_device(), context_data->on_device())) {
-            throw std::invalid_argument("[CKKSEncoder::decode_internal_simd] Operands must be on the same device.");
+            throw std::invalid_argument("[CKKSEncoder::decode_internal_polynomial] Operands must be on the same device.");
         }
 
         ConstSlice<uint64_t> decryption_modulus = context_data->total_coeff_modulus();
@@ -1178,7 +1193,7 @@ namespace troy {
 
         double inv_scale = 1.0 / plain.scale();
         if (plain.data().size() != coeff_count * coeff_modulus_size) {
-            throw std::invalid_argument("[CKKSEncoder::decode_internal_simd] Plaintext data length is not correct.");
+            throw std::invalid_argument("[CKKSEncoder::decode_internal_polynomial] Plaintext data length is not correct.");
         }
         Array<uint64_t> plain_copy = plain.data().get_inner().clone();
 

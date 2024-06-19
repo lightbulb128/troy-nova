@@ -135,8 +135,11 @@ namespace troy {
         bool device = this->on_device();
         if (device) {destination.to_device_inplace();}
         else {destination.to_host_inplace();}
-        destination.resize(slots);
         destination.parms_id() = parms_id_zero;
+        destination.resize(slots);
+        destination.poly_modulus_degree() = slots;
+        destination.coeff_modulus_size() = 1;
+        destination.is_ntt_form() = false;
         // First write the values to destination coefficients.
         // Read in top row, then bottom row.
         if (!device) {
@@ -184,8 +187,11 @@ namespace troy {
         size_t slots = this->slot_count();
         if (device) {destination.to_device_inplace();}
         else {destination.to_host_inplace();}
-        destination.resize(value_size);
         destination.parms_id() = parms_id_zero;
+        destination.resize(value_size);
+        destination.poly_modulus_degree() = slots;
+        destination.coeff_modulus_size() = 1;
+        destination.is_ntt_form() = false;
         utils::ConstPointer<Modulus> plain_modulus = context_data->parms().plain_modulus();
         if (!device) {
             utils::modulo(

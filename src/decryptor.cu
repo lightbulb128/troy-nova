@@ -176,6 +176,9 @@ namespace troy {
         // Set destination parameters as in encrypted
         destination.parms_id() = encrypted.parms_id();
         destination.scale() = encrypted.scale();
+        destination.is_ntt_form() = true;
+        destination.coeff_modulus_size() = coeff_modulus_size;
+        destination.poly_modulus_degree() = coeff_count;
     }
 
     void Decryptor::bgv_decrypt(const Ciphertext& encrypted, Plaintext& destination) const {
@@ -214,6 +217,10 @@ namespace troy {
             }
             utils::multiply_scalar_inplace(destination.poly(), fix, parms.plain_modulus());
         }
+
+        destination.is_ntt_form() = false;
+        destination.coeff_modulus_size() = coeff_modulus_size;
+        destination.poly_modulus_degree() = coeff_count;
     }
 
 }
