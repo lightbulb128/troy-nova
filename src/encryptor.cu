@@ -258,10 +258,24 @@ namespace troy {
                 if (plain.is_ntt_form()) {
                     throw std::invalid_argument("[Encryptor::encrypt_internal] BFV - Plaintext is in NTT form.");
                 }
-                this->encrypt_zero_internal(this->context()->first_parms_id(), is_asymmetric, save_seed, u_prng, destination);
-                // Multiply plain by scalar coeff_div_plaintext and reposition if in upper-half.
-                // Result gets added into the c_0 term of ciphertext (c_0,c_1).
-                scaling_variant::multiply_add_plain(plain, this->context()->first_context_data().value(), destination.poly(0));
+                if (plain.parms_id() == parms_id_zero) {
+                    this->encrypt_zero_internal(this->context()->first_parms_id(), is_asymmetric, save_seed, u_prng, destination);
+                    // Multiply plain by scalar coeff_div_plaintext and reposition if in upper-half.
+                    // Result gets added into the c_0 term of ciphertext (c_0,c_1).
+                    scaling_variant::multiply_add_plain(plain, this->context()->first_context_data().value(), destination.poly(0));
+                } else {
+                    ParmsID parms_id = plain.parms_id();
+                    std::optional<ContextDataPointer> context_data_optional = this->context()->get_context_data(parms_id);
+                    if (!context_data_optional.has_value()) {
+                        throw std::invalid_argument("[Encryptor::encrypt_internal] BFV - Plaintext parms_id is not valid.");
+                    }
+                    ContextDataPointer context_data = context_data_optional.value();
+                    const EncryptionParameters& parms = context_data->parms();
+                    this->encrypt_zero_internal(parms_id, is_asymmetric, save_seed, u_prng, destination);
+                    utils::add_inplace_p(
+                        destination.poly(0), plain.poly(), parms.poly_modulus_degree(), parms.coeff_modulus()
+                    );
+                }
                 break;
             }
             case SchemeType::CKKS: {
