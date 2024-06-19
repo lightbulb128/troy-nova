@@ -83,6 +83,14 @@ namespace troy {
             plain = scale_up_new(plain, parms_id);
         }
 
+        Plaintext scale_down_new(const Plaintext& plain) const;
+        inline void scale_down(const Plaintext& plain, Plaintext& destination) const {
+            destination = scale_down_new(plain);
+        }
+        inline void scale_down_inplace(Plaintext& plain) const {
+            plain = scale_down_new(plain);
+        }
+
     };
 
 }

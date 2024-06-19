@@ -304,4 +304,34 @@ namespace troy {
         return destination;
     }
 
+    Plaintext BatchEncoder::scale_down_new(const Plaintext& plain) const {
+        if (this->context_->first_context_data().value()->parms().scheme() != SchemeType::BFV) {
+            throw std::logic_error("[BatchEncoder::scale_down_new] Only BFV scheme is supported.");
+        }
+        if (plain.parms_id() == parms_id_zero) {
+            throw std::invalid_argument("[BatchEncoder::scale_down_new] Plaintext not in RNS form.");
+        }
+        if (plain.is_ntt_form()) {
+            throw std::invalid_argument("[BatchEncoder::scale_down_new] Plaintext is in NTT form.");
+        }
+        Plaintext destination;
+        if (plain.on_device()) {
+            destination.to_device_inplace();
+        } else {
+            destination.to_host_inplace();
+        }
+        destination.coeff_modulus_size() = plain.coeff_modulus_size();
+        destination.poly_modulus_degree() = plain.poly_modulus_degree();
+        destination.parms_id() = parms_id_zero;
+        destination.resize(plain.poly_modulus_degree());
+        destination.is_ntt_form() = false;
+        std::optional<ContextDataPointer> context_data_opt = this->context_->get_context_data(plain.parms_id());
+        if (!context_data_opt.has_value()) {
+            throw std::invalid_argument("[BatchEncoder::scale_down_new] Could not find context data.");
+        }
+        ContextDataPointer context_data = context_data_opt.value();
+        context_data->rns_tool().decrypt_scale_and_round(plain.const_reference(), destination.reference());
+        return destination;
+    }
+
 }

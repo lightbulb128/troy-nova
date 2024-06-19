@@ -115,4 +115,46 @@ namespace batch_encoder {
         test_polynomial(true, true);
         utils::MemoryPool::Destroy();
     }
+
+    void test_scale_up_down(bool device) {
+
+        EncryptionParameters parms(SchemeType::BFV);
+        parms.set_poly_modulus_degree(DEGREE);
+        parms.set_coeff_modulus(CoeffModulus::create(DEGREE, {60}).const_reference());
+        Modulus t = PlainModulus::batching(DEGREE, 20);
+        parms.set_plain_modulus(t);
+
+        HeContextPointer context = HeContext::create(parms, false, SecurityLevel::Nil);
+        ASSERT_TRUE(context->first_context_data().value()->qualifiers().using_batching);
+
+        BatchEncoder encoder(context);
+
+        if (device) {
+            context->to_device_inplace();
+            encoder.to_device_inplace();
+        }
+
+        std::vector<uint64_t> plain_vec(encoder.slot_count());
+        for (size_t i = 0; i < encoder.slot_count(); i++) {
+            plain_vec[i] = i % t.value();
+        }
+        Plaintext plain = encoder.encode_new(plain_vec);
+        Plaintext scale_up = encoder.scale_up_new(plain);
+        Plaintext scale_down = encoder.scale_down_new(scale_up);
+
+        auto original_vec = plain.data().to_vector();
+        auto scale_down_vec = scale_down.data().to_vector();
+        ASSERT_TRUE(same_vector(original_vec, scale_down_vec));
+    }
+
+    TEST(BatchEncoderTest, HostScaleUpDown) {
+        test_scale_up_down(false);
+    }
+
+    TEST(BatchEncoderTest, DeviceScaleUpDown) {
+        test_scale_up_down(true);
+        utils::MemoryPool::Destroy();
+    }
+
+
 }
