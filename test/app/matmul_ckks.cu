@@ -1,9 +1,9 @@
 #include <gtest/gtest.h>
 #include <sstream>
 #include "../test_adv.cuh"
-#include "../../src/app/matmul.cuh"
+#include "../../src/app/matmul_ckks.cuh"
 
-namespace matmul {
+namespace matmul_ckks {
 
     using namespace troy;
     using namespace troy::linear;
@@ -32,18 +32,18 @@ namespace matmul {
 
     void test_matmul(const GeneralHeContext& context, size_t m, size_t r, size_t n, bool pack_lwe, bool mod_switch_to_next) {
         SchemeType scheme = context.params_host().scheme();
-        if (scheme != SchemeType::BFV && scheme != SchemeType::BGV) {
+        if (scheme != SchemeType::CKKS) {
             throw std::runtime_error("[test_matmul] Unsupported scheme");
         }
-        uint64_t t = context.t();
+        double scale = context.scale();
         
         GeneralVector x = context.random_polynomial(m * r);
         GeneralVector w = context.random_polynomial(r * n);
         GeneralVector s = context.random_polynomial(m * n);
-        MatmulHelper helper(m, r, n, context.params_host().poly_modulus_degree(), MatmulObjective::EncryptLeft, pack_lwe);
+        CKKSMatmulHelper helper(m, r, n, context.params_host().poly_modulus_degree(), MatmulObjective::EncryptLeft, pack_lwe);
 
         HeContextPointer he = context.context();
-        const BatchEncoder& encoder = context.encoder().batch();
+        const CKKSEncoder& encoder = context.encoder().ckks();
         const Encryptor& encryptor = context.encryptor();
         const Evaluator& evaluator = context.evaluator();
         const Decryptor& decryptor = context.decryptor();
@@ -52,9 +52,9 @@ namespace matmul {
             automorphism_key = context.key_generator().create_automorphism_keys(false);
         }
         
-        Plain2d x_encoded = helper.encode_inputs(encoder, x.integers().data());
-        Plain2d w_encoded = helper.encode_weights(encoder, w.integers().data());
-        Plain2d s_encoded = helper.encode_outputs(encoder, s.integers().data());
+        Plain2d x_encoded = helper.encode_inputs(encoder, x.doubles().data(), std::nullopt, scale);
+        Plain2d w_encoded = helper.encode_weights(encoder, w.doubles().data(), std::nullopt, scale);
+        Plain2d s_encoded = helper.encode_outputs(encoder, s.doubles().data(), std::nullopt, scale * scale);
 
         Cipher2d x_encrypted = x_encoded.encrypt_asymmetric(encryptor);
 
@@ -76,19 +76,15 @@ namespace matmul {
         helper.serialize_outputs(evaluator, y_encrypted, y_serialized);
         y_encrypted = helper.deserialize_outputs(evaluator, y_serialized);
 
-        vector<uint64_t> y_decrypted = helper.decrypt_outputs(encoder, decryptor, y_encrypted);   
+        vector<double> y_decrypted = helper.decrypt_outputs(encoder, decryptor, y_encrypted);   
 
-        vector<uint64_t> y_truth(m * n, 0);
+        vector<double> y_truth(m * n, 0);
         for (size_t i = 0; i < m; i++) {
             for (size_t j = 0; j < n; j++) {
                 for (size_t k = 0; k < r; k++) {
-                    add_mod_inplace(y_truth[i * n + j], 
-                        multiply_mod(
-                            x.integers()[i * r + k], 
-                            w.integers()[k * n + j],
-                        t), t);
+                    y_truth[i * n + j] += x.doubles()[i * r + k] * w.doubles()[k * n + j];
                 }
-                add_mod_inplace(y_truth[i * n + j], s.integers()[i * n + j], t);
+                y_truth[i * n + j] += s.doubles()[i * n + j];
             }
         }
 
@@ -98,12 +94,12 @@ namespace matmul {
         // std::cerr << "Truth:     " << truthv << std::endl;
         // std::cerr << "Decrypted: " << decrypted << std::endl;
         
-        ASSERT_TRUE(truthv.near_equal(decrypted, 0));
+        ASSERT_TRUE(truthv.near_equal(decrypted, context.tolerance()));
     }
 
 
-    TEST(MatmulTest, HostBFVMatmul) {
-        GeneralHeContext ghe(false, SchemeType::BFV, 1024, 40, { 60, 40, 40, 60 }, true, 0x123, 0);
+    TEST(MatmulTest, HostCKKSMatmul) {
+        GeneralHeContext ghe(false, SchemeType::CKKS, 1024, 0, { 60, 40, 40, 60 }, true, 0x123, 2, (double)(1<<20), 1e-2);
         srand(0);
         test_matmul(ghe, 4, 5, 6, false, false);
         test_matmul(ghe, 64, 128, 256, false, false);
@@ -111,29 +107,8 @@ namespace matmul {
         test_matmul(ghe, 64, 128, 256, true, false);
     }
 
-    TEST(MatmulTest, DeviceBFVMatmul) {
-        GeneralHeContext ghe(true, SchemeType::BFV, 1024, 40, { 60, 40, 40, 60 }, true, 0x123, 0);
-        srand(0);
-        test_matmul(ghe, 4, 5, 6, false, false);
-        test_matmul(ghe, 64, 128, 256, false, false);
-        // test_matmul(ghe, 400, 500, 600, false, false); // very slow!
-        test_matmul(ghe, 4, 5, 6, true, false);
-        test_matmul(ghe, 64, 128, 256, true, false);
-        // test_matmul(ghe, 400, 500, 600, true, false); // very slow!
-    }
-
-
-    TEST(MatmulTest, HostBGVMatmul) {
-        GeneralHeContext ghe(false, SchemeType::BGV, 1024, 40, { 60, 40, 40, 60 }, true, 0x123, 0);
-        srand(0);
-        test_matmul(ghe, 4, 5, 6, false, false);
-        test_matmul(ghe, 64, 128, 256, false, false);
-        test_matmul(ghe, 4, 5, 6, true, false);
-        test_matmul(ghe, 64, 128, 256, true, false);
-    }
-
-    TEST(MatmulTest, DeviceBGVMatmul) {
-        GeneralHeContext ghe(true, SchemeType::BGV, 1024, 40, { 60, 40, 40, 60 }, true, 0x123, 0);
+    TEST(MatmulTest, DeviceCKKSMatmul) {
+        GeneralHeContext ghe(true, SchemeType::CKKS, 1024, 0, { 60, 40, 40, 60 }, true, 0x123, 2, (double)(1<<20), 1e-2);
         srand(0);
         test_matmul(ghe, 4, 5, 6, false, false);
         test_matmul(ghe, 64, 128, 256, false, false);

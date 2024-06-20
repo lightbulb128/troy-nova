@@ -33,6 +33,7 @@ if(TROY_TEST)
         lwe.cu
         
         app/matmul.cu
+        app/matmul_ckks.cu
         app/conv2d.cu
 
         special_prime_for_encryption.cu

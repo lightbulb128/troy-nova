@@ -1,8 +1,8 @@
-#include "matmul.cuh"
+#include "matmul_ckks.cuh"
 
 namespace troy { namespace linear {
 
-    void MatmulHelper::determine_block() {
+    void CKKSMatmulHelper::determine_block() {
         size_t b_best = 0, i_best = 0, o_best = 0;
         size_t c_best = 2147483647;
         if (!pack_lwe) {
@@ -23,7 +23,7 @@ namespace troy { namespace linear {
                     } else if (objective == MatmulObjective::Crossed) {
                         c = bc * input_dims + (bc + ceil_div(input_dims, i)) * ceil_div(output_dims, o);
                     } else {
-                        throw std::runtime_error("[MatmulHelper::determine_block] Invalid objective");
+                        throw std::runtime_error("[CKKSMatmulHelper::determine_block] Invalid objective");
                     }
                     if (c >= c_best) continue;
                     b_best = b; i_best = i; o_best = o; c_best = c;
@@ -56,7 +56,7 @@ namespace troy { namespace linear {
                     c += ceil_div(output_dims, o) * ceil_div(input_dims, i);
                     c += ceil_div(bc * ceil_div(output_dims, o), i);
                 } else {
-                    throw std::runtime_error("MatmulHelper: invalid objective");
+                    throw std::runtime_error("CKKSMatmulHelper: invalid objective");
                 }
                 if (c >= c_best) {continue;}
                 b_best = b; i_best = i; o_best = o; c_best = c;
@@ -69,12 +69,14 @@ namespace troy { namespace linear {
         // printf("block (%zu, %zu, %zu) -> (%zu, %zu, %zu)\n", batch_size, input_dims, output_dims, batch_block, input_block, output_block);
     }
     
-    Plaintext MatmulHelper::encode_weight_small(
-        const BatchEncoder& encoder,
-        const uint64_t* weights,
+    Plaintext CKKSMatmulHelper::encode_weight_small(
+        const CKKSEncoder& encoder,
+        const double* weights,
+        std::optional<ParmsID> parms_id,
+        double scale,
         size_t li, size_t ui, size_t lj, size_t uj
     ) const {
-        std::vector<uint64_t> vec(input_block * output_block, 0);
+        std::vector<double> vec(input_block * output_block, 0);
         for (size_t j = lj; j < uj; j++) {
             for (size_t i = li; i < ui; i++) {
                 size_t r = (j-lj) * input_block + input_block - (i-li) - 1;
@@ -83,14 +85,16 @@ namespace troy { namespace linear {
             }
         }
         Plaintext ret;
-        encoder.encode_polynomial(vec, ret);
+        encoder.encode_float64_polynomial(vec, parms_id, scale, ret);
         return ret;
     }
 
 
-    Plain2d MatmulHelper::encode_weights(
-        const BatchEncoder& encoder,
-        const uint64_t* weights
+    Plain2d CKKSMatmulHelper::encode_weights(
+        const CKKSEncoder& encoder,
+        const double* weights,
+        std::optional<ParmsID> parms_id,
+        double scale
     ) const {
         size_t height = input_dims, width = output_dims;
         size_t h = input_block, w = output_block;
@@ -103,7 +107,7 @@ namespace troy { namespace linear {
             for (size_t lj = 0; lj < width; lj += w) {
                 size_t uj = (lj + w > width) ? width : (lj + w);
                 encoded_row.push_back(
-                    encode_weight_small(encoder, weights, li, ui, lj, uj)
+                    encode_weight_small(encoder, weights, parms_id, scale, li, ui, lj, uj)
                 );
             }
             encoded_weights.data().push_back(std::move(encoded_row));
@@ -111,9 +115,11 @@ namespace troy { namespace linear {
         return encoded_weights;
     }
 
-    Plain2d MatmulHelper::encode_inputs(
-        const BatchEncoder& encoder,
-        const uint64_t* inputs
+    Plain2d CKKSMatmulHelper::encode_inputs(
+        const CKKSEncoder& encoder,
+        const double* inputs,
+        std::optional<ParmsID> parms_id,
+        double scale
     ) const {
         size_t vecsize = input_block;
         Plain2d ret;
@@ -124,12 +130,12 @@ namespace troy { namespace linear {
             encoded_row.reserve(ceil_div(input_dims, vecsize));
             for (size_t lj = 0; lj < input_dims; lj += vecsize) {
                 size_t uj = (lj + vecsize > input_dims) ? input_dims : lj + vecsize;
-                std::vector<uint64_t> vec(slot_count, 0);
+                std::vector<double> vec(slot_count, 0);
                 for (size_t i = li; i < ui; i++)
                     for (size_t j = lj; j < uj; j++)
                         vec[(i - li) * input_block * output_block + (j - lj)] = inputs[i * input_dims + j];
                 Plaintext encoded;
-                encoder.encode_polynomial(vec, encoded);
+                encoder.encode_float64_polynomial(vec, parms_id, scale, encoded);
                 encoded_row.push_back(std::move(encoded));
             }
             ret.data().push_back(std::move(encoded_row));
@@ -137,23 +143,25 @@ namespace troy { namespace linear {
         return ret;
     }
 
-    Cipher2d MatmulHelper::encrypt_inputs(
+    Cipher2d CKKSMatmulHelper::encrypt_inputs(
         const Encryptor& encryptor,
-        const BatchEncoder& encoder, 
-        const uint64_t* inputs
+        const CKKSEncoder& encoder, 
+        const double* inputs,
+        std::optional<ParmsID> parms_id,
+        double scale
     ) const {
-        Plain2d plain = encode_inputs(encoder, inputs);
+        Plain2d plain = encode_inputs(encoder, inputs, parms_id, scale);
         return plain.encrypt_symmetric(encryptor);
     }
 
-    Cipher2d MatmulHelper::matmul(const Evaluator& evaluator, const Cipher2d& a, const Plain2d& w) const {
+    Cipher2d CKKSMatmulHelper::matmul(const Evaluator& evaluator, const Cipher2d& a, const Plain2d& w) const {
         Cipher2d ret; ret.data().reserve(ceil_div(batch_size, batch_block));
         size_t outputVectorCount = ceil_div(output_dims, output_block);
         if (a.data().size() != ceil_div(batch_size, batch_block)) {
-            throw std::invalid_argument("[MatmulHelper::matmul] Input batch_size incorrect.");
+            throw std::invalid_argument("[CKKSMatmulHelper::matmul] Input batch_size incorrect.");
         }
         if (w.data().size() != ceil_div(input_dims, input_block)) {
-            throw std::invalid_argument("[MatmulHelper::matmul] Weight input dimension incorrect.");
+            throw std::invalid_argument("[CKKSMatmulHelper::matmul] Weight input dimension incorrect.");
         }
         for (size_t b = 0; b < ceil_div(batch_size, batch_block); b++) {
             std::vector<Ciphertext> outVecs(outputVectorCount);
@@ -172,14 +180,14 @@ namespace troy { namespace linear {
         return ret;
     }
 
-    Cipher2d MatmulHelper::matmul_cipher(const Evaluator& evaluator, const Cipher2d& a, const Cipher2d& w) const {
+    Cipher2d CKKSMatmulHelper::matmul_cipher(const Evaluator& evaluator, const Cipher2d& a, const Cipher2d& w) const {
         Cipher2d ret; ret.data().reserve(ceil_div(batch_size, batch_block));
         size_t outputVectorCount = ceil_div(output_dims, output_block);
         if (a.data().size() != ceil_div(batch_size, batch_block)) {
-            throw std::invalid_argument("[MatmulHelper::matmul_cipher] Input batch_size incorrect.");
+            throw std::invalid_argument("[CKKSMatmulHelper::matmul_cipher] Input batch_size incorrect.");
         }
         if (w.data().size() != ceil_div(input_dims, input_block)) {
-            throw std::invalid_argument("[MatmulHelper::matmul_cipher] Weight input dimension incorrect.");
+            throw std::invalid_argument("[CKKSMatmulHelper::matmul_cipher] Weight input dimension incorrect.");
         }
         for (size_t b = 0; b < ceil_div(batch_size, batch_block); b++) {
             std::vector<Ciphertext> outVecs(outputVectorCount);
@@ -198,14 +206,14 @@ namespace troy { namespace linear {
         return ret;
     }
 
-    Cipher2d MatmulHelper::matmul_reverse(const Evaluator& evaluator, const Plain2d& a, const Cipher2d& w) const {
+    Cipher2d CKKSMatmulHelper::matmul_reverse(const Evaluator& evaluator, const Plain2d& a, const Cipher2d& w) const {
         Cipher2d ret; ret.data().reserve(ceil_div(batch_size, batch_block));
         size_t outputVectorCount = ceil_div(output_dims, output_block);
         if (a.data().size() != ceil_div(batch_size, batch_block)) {
-            throw std::invalid_argument("[MatmulHelper::matmul_reverse] Input batch_size incorrect.");
+            throw std::invalid_argument("[CKKSMatmulHelper::matmul_reverse] Input batch_size incorrect.");
         }
         if (w.data().size() != ceil_div(input_dims, input_block)) {
-            throw std::invalid_argument("[MatmulHelper::matmul_reverse] Weight input dimension incorrect.");
+            throw std::invalid_argument("[CKKSMatmulHelper::matmul_reverse] Weight input dimension incorrect.");
         }
         for (size_t b = 0; b < ceil_div(batch_size, batch_block); b++) {
             std::vector<Ciphertext> outVecs(outputVectorCount);
@@ -224,9 +232,11 @@ namespace troy { namespace linear {
         return ret;
     }
 
-    Plain2d MatmulHelper::encode_outputs(
-        const BatchEncoder& encoder, 
-        const uint64_t* outputs
+    Plain2d CKKSMatmulHelper::encode_outputs(
+        const CKKSEncoder& encoder, 
+        const double* outputs,
+        std::optional<ParmsID> parms_id,
+        double scale
     ) const {
         size_t vecsize = output_block;
         Plaintext pt;
@@ -238,11 +248,11 @@ namespace troy { namespace linear {
                 encoded_row.reserve(ceil_div(output_dims, vecsize));
                 for (size_t lj = 0; lj < output_dims; lj += vecsize) {
                     size_t uj = (lj + vecsize > output_dims) ? output_dims : (lj + vecsize);
-                    std::vector<uint64_t> buffer(slot_count, 0);
+                    std::vector<double> buffer(slot_count, 0);
                     for (size_t i = li; i < ui; i++)
                         for (size_t j = lj; j < uj; j++) 
                             buffer[(i - li) * input_block * output_block + (j - lj) * input_block + input_block - 1] = outputs[i * output_dims + j];
-                    encoder.encode_polynomial(buffer, pt);
+                    encoder.encode_float64_polynomial(buffer, parms_id, scale, pt);
                     encoded_row.push_back(std::move(pt));
                 }
                 ret.data().push_back(std::move(encoded_row));
@@ -253,7 +263,7 @@ namespace troy { namespace linear {
             plain2d.data().push_back(std::vector<Plaintext>());
             size_t batch_blockCount = ceil_div(this->batch_size, this->batch_block);
             size_t output_blockCount = ceil_div(this->output_dims, this->output_block);
-            auto ret = std::vector<std::vector<uint64_t>>(ceil_div(batch_blockCount * output_blockCount, this->input_block), std::vector<uint64_t>(this->slot_count, 0)); 
+            auto ret = std::vector<std::vector<double>>(ceil_div(batch_blockCount * output_blockCount, this->input_block), std::vector<double>(this->slot_count, 0)); 
             size_t li = 0; size_t di = 0; while (li < this->batch_size) {
                 size_t ui = std::min(this->batch_size, li + this->batch_block);
                 size_t lj = 0; size_t dj = 0; while (lj < this->output_dims) {
@@ -275,23 +285,23 @@ namespace troy { namespace linear {
             }
             plain2d.data()[0].reserve(ret.size());
             for (size_t i = 0; i < ret.size(); i++) {
-                encoder.encode_polynomial(ret[i], pt);
+                encoder.encode_float64_polynomial(ret[i], parms_id, scale, pt);
                 plain2d.data()[0].push_back(std::move(pt));
             }
             return plain2d;
         }
     }
 
-    std::vector<uint64_t> MatmulHelper::decrypt_outputs(
-        const BatchEncoder& encoder,
+    std::vector<double> CKKSMatmulHelper::decrypt_outputs(
+        const CKKSEncoder& encoder,
         const Decryptor& decryptor,
         const Cipher2d& outputs
     ) const {
-        std::vector<uint64_t> dec(batch_size * output_dims);
+        std::vector<double> dec(batch_size * output_dims);
         size_t vecsize = output_block;
         Plaintext pt;
         if (!this->pack_lwe) {
-            std::vector<uint64_t> buffer(slot_count);
+            std::vector<double> buffer(slot_count);
             size_t di = 0;
             for (size_t li = 0; li < batch_size; li += batch_block) {
                 size_t ui = (li + batch_block > batch_size) ? batch_size : (li + batch_block);
@@ -299,7 +309,7 @@ namespace troy { namespace linear {
                 for (size_t lj = 0; lj < output_dims; lj += vecsize) {
                     size_t uj = (lj + vecsize > output_dims) ? output_dims : (lj + vecsize);
                     decryptor.decrypt(outputs[di][dj], pt);
-                    encoder.decode_polynomial(pt, buffer);
+                    encoder.decode_float64_polynomial(pt, buffer);
                     for (size_t i = li; i < ui; i++)
                         for (size_t j = lj; j < uj; j++) 
                             dec[i * output_dims + j] = buffer[(i - li) * input_block * output_block + (j - lj) * input_block + input_block - 1];
@@ -308,10 +318,10 @@ namespace troy { namespace linear {
                 di += 1;
             }
         } else {
-            std::vector<std::vector<uint64_t>> buffer(outputs[0].size(), std::vector<uint64_t>(slot_count, 0));
+            std::vector<std::vector<double>> buffer(outputs[0].size(), std::vector<double>(slot_count, 0));
             for (size_t i = 0; i < outputs.data()[0].size(); i++) {
                 decryptor.decrypt(outputs[0][i], pt);
-                encoder.decode_polynomial(pt, buffer[i]);
+                encoder.decode_float64_polynomial(pt, buffer[i]);
             }
             size_t li = 0; size_t di = 0; while (li < this->batch_size) {
                 size_t ui = std::min(this->batch_size, li + this->batch_block);
@@ -335,7 +345,7 @@ namespace troy { namespace linear {
         return dec;
     }
 
-    Cipher2d MatmulHelper::pack_outputs(const Evaluator& evaluator, const GaloisKeys& autoKey, const Cipher2d& cipher) const {
+    Cipher2d CKKSMatmulHelper::pack_outputs(const Evaluator& evaluator, const GaloisKeys& autoKey, const Cipher2d& cipher) const {
         if (!this->pack_lwe) {
             throw std::invalid_argument("[CKKSMatmulHelper::packOutputs] PackLwe not enabled");
         }
@@ -403,13 +413,13 @@ namespace troy { namespace linear {
         return ret;
     }
 
-    void MatmulHelper::serialize_encoded_weights(const Plain2d& w, std::ostream& stream) const {
+    void CKKSMatmulHelper::serialize_encoded_weights(const Plain2d& w, std::ostream& stream) const {
         size_t rows = w.data().size();
         size_t cols = w[0].size();
-        if (rows == 0) throw std::invalid_argument("[MatmulHelper::serialize_encoded_weights] No rows in weight matrix.");
-        if (cols == 0) throw std::invalid_argument("[MatmulHelper::serialize_encoded_weights] No columns in weight matrix.");
+        if (rows == 0) throw std::invalid_argument("[CKKSMatmulHelper::serialize_encoded_weights] No rows in weight matrix.");
+        if (cols == 0) throw std::invalid_argument("[CKKSMatmulHelper::serialize_encoded_weights] No columns in weight matrix.");
         for (size_t i=0; i<rows; i++) {
-            if (w[i].size() != cols) throw std::invalid_argument("[MatmulHelper::serialize_encoded_weights] Weight matrix is not rectangular.");
+            if (w[i].size() != cols) throw std::invalid_argument("[CKKSMatmulHelper::serialize_encoded_weights] Weight matrix is not rectangular.");
         }
         serialize::save_object(stream, rows);
         serialize::save_object(stream, cols);
@@ -420,7 +430,7 @@ namespace troy { namespace linear {
         }
     }
 
-    Plain2d MatmulHelper::deserialize_encoded_weights(std::istream& stream) const {
+    Plain2d CKKSMatmulHelper::deserialize_encoded_weights(std::istream& stream) const {
         size_t rows, cols;
         serialize::load_object(stream, rows);
         serialize::load_object(stream, cols);
@@ -437,7 +447,7 @@ namespace troy { namespace linear {
         return ret;
     }
 
-    void MatmulHelper::serialize_outputs(const Evaluator &evaluator, const Cipher2d& x, std::ostream& stream) const {
+    void CKKSMatmulHelper::serialize_outputs(const Evaluator &evaluator, const Cipher2d& x, std::ostream& stream) const {
         HeContextPointer context = evaluator.context();
         if (!this->pack_lwe) {
             size_t vecsize = output_block;
@@ -461,7 +471,7 @@ namespace troy { namespace linear {
             size_t count = ceil_div(batch_size, batch_block) * ceil_div(output_dims, output_block);
             count = ceil_div(count, input_block);
             if (count != x.data()[0].size()) {
-                throw std::invalid_argument("[MatmulHelper::serialize_outputs] Output ciphertext count incorrect");
+                throw std::invalid_argument("[CKKSMatmulHelper::serialize_outputs] Output ciphertext count incorrect");
             }
             for (size_t i = 0; i < x.data()[0].size(); i++) {
                 x[0][i].save(stream, context);
@@ -469,7 +479,7 @@ namespace troy { namespace linear {
         }
     }
 
-    Cipher2d MatmulHelper::deserialize_outputs(const Evaluator &evaluator, std::istream& stream) const {
+    Cipher2d CKKSMatmulHelper::deserialize_outputs(const Evaluator &evaluator, std::istream& stream) const {
         HeContextPointer context = evaluator.context();
         if (!this->pack_lwe) {
             size_t vecsize = output_block;

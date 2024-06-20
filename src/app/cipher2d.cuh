@@ -1,5 +1,4 @@
 #pragma once
-#include "../batch_encoder.cuh"
 #include "../encryptor.cuh"
 #include "../decryptor.cuh"
 #include "../evaluator.cuh"

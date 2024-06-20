@@ -1,27 +1,24 @@
 #pragma once
 #include <cassert>
-#include "../batch_encoder.cuh"
 #include "cipher2d.cuh"
+#include "matmul.cuh"
+#include "../ckks_encoder.cuh"
 
 namespace troy { namespace linear {
 
     using utils::ceil_div;
 
-    enum class MatmulObjective : uint8_t {
-        EncryptLeft = 0,
-        EncryptRight = 1,
-        Crossed = 2
-    };
-
-    class MatmulHelper {
+    class CKKSMatmulHelper {
         // 0: encrypt inputs; 1: encrypt weights
         // 2: for calculating weight gradient
 
         void determine_block();
 
         Plaintext encode_weight_small(
-            const BatchEncoder& encoder,
-            const uint64_t* weights,
+            const CKKSEncoder& encoder,
+            const double* weights,
+            std::optional<ParmsID> parms_id,
+            double scale,
             size_t li, size_t ui, size_t lj, size_t uj
         ) const;
 
@@ -33,7 +30,7 @@ namespace troy { namespace linear {
         MatmulObjective objective; 
         bool pack_lwe;
 
-        inline MatmulHelper(size_t batch_size, size_t input_dims, size_t output_dims, size_t slot_count, MatmulObjective objective = MatmulObjective::EncryptLeft, bool pack_lwe = true):
+        inline CKKSMatmulHelper(size_t batch_size, size_t input_dims, size_t output_dims, size_t slot_count, MatmulObjective objective = MatmulObjective::EncryptLeft, bool pack_lwe = true):
             batch_size(batch_size), input_dims(input_dims), output_dims(output_dims),
             slot_count(slot_count), objective(objective), pack_lwe(pack_lwe)
         {
@@ -41,19 +38,25 @@ namespace troy { namespace linear {
         }
 
         Plain2d encode_weights(
-            const BatchEncoder& encoder,
-            const uint64_t* weights
+            const CKKSEncoder& encoder,
+            const double* weights,
+            std::optional<ParmsID> parms_id,
+            double scale
         ) const;
 
         Plain2d encode_inputs(
-            const BatchEncoder& encoder,
-            const uint64_t* inputs
+            const CKKSEncoder& encoder,
+            const double* inputs,
+            std::optional<ParmsID> parms_id,
+            double scale
         ) const;
 
         Cipher2d encrypt_inputs(
             const Encryptor& encryptor,
-            const BatchEncoder& encoder, 
-            const uint64_t* inputs
+            const CKKSEncoder& encoder, 
+            const double* inputs,
+            std::optional<ParmsID> parms_id,
+            double scale
         ) const;
 
         Cipher2d matmul(const Evaluator& evaluator, const Cipher2d& a, const Plain2d& w) const;
@@ -63,12 +66,14 @@ namespace troy { namespace linear {
         Cipher2d matmul_reverse(const Evaluator& evaluator, const Plain2d& a, const Cipher2d& w) const;
 
         Plain2d encode_outputs(
-            const BatchEncoder& encoder, 
-            const uint64_t* outputs
+            const CKKSEncoder& encoder, 
+            const double* outputs,
+            std::optional<ParmsID> parms_id,
+            double scale
         ) const;
 
-        std::vector<uint64_t> decrypt_outputs(
-            const BatchEncoder& encoder,
+        std::vector<double> decrypt_outputs(
+            const CKKSEncoder& encoder,
             const Decryptor& decryptor,
             const Cipher2d& outputs
         ) const;
