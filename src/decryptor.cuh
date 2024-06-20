@@ -38,6 +38,13 @@ namespace troy {
             return destination;
         }
 
+        void bfv_decrypt_without_scaling_down(const Ciphertext& encrypted, Plaintext& destination) const;
+        inline Plaintext bfv_decrypt_without_scaling_down_new(const Ciphertext& encrypted) const {
+            Plaintext destination;
+            bfv_decrypt_without_scaling_down(encrypted, destination);
+            return destination;
+        }
+
     };
 
 }

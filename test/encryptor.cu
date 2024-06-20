@@ -148,20 +148,24 @@ namespace encryptor {
         }
 
         if (scheme == SchemeType::BFV) {
+
             // scale up
-            if (ckks) message_complex64 = random_complex64_vector(encoder.slot_count());
-            else message_uint64 = random_uint64_vector(encoder.slot_count(), t);
-            auto plain = ckks ? encoder.ckks().encode_complex64_simd_new(message_complex64, std::nullopt, scale) : encoder.batch().encode_new(message_uint64);
+            message_uint64 = random_uint64_vector(encoder.slot_count(), t);
+            auto plain = encoder.batch().encode_new(message_uint64);
             plain = encoder.batch().scale_up_new(plain);
             cipher = encryptor.encrypt_symmetric_new(plain, false);
             decrypted = decryptor.decrypt_new(cipher);
-            if (ckks) {
-                decoded_complex64 = encoder.ckks().decode_complex64_simd_new(decrypted);
-                ASSERT_TRUE(near_vector(message_complex64, decoded_complex64));
-            } else {
-                decoded_uint64 = encoder.batch().decode_new(decrypted);
-                ASSERT_TRUE(same_vector(message_uint64, decoded_uint64));
-            }
+            decoded_uint64 = encoder.batch().decode_new(decrypted);
+            ASSERT_TRUE(same_vector(message_uint64, decoded_uint64));
+
+            // scale down
+            message_uint64 = random_uint64_vector(encoder.slot_count(), t);
+            plain = encoder.batch().encode_new(message_uint64);
+            cipher = encryptor.encrypt_symmetric_new(plain, false);
+            decrypted = decryptor.bfv_decrypt_without_scaling_down_new(cipher);
+            encoder.batch().scale_down_inplace(decrypted);
+            decoded_uint64 = encoder.batch().decode_new(decrypted);
+            ASSERT_TRUE(same_vector(message_uint64, decoded_uint64));
         }
         
         // all slots, asymmetric

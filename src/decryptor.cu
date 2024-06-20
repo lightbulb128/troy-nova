@@ -107,7 +107,7 @@ namespace troy {
         }
     }
 
-    void Decryptor::bfv_decrypt(const Ciphertext& encrypted, Plaintext& destination) const {
+    void Decryptor::bfv_decrypt_without_scaling_down(const Ciphertext& encrypted, Plaintext& destination) const {
         if (encrypted.is_ntt_form()) {
             throw std::invalid_argument("[Decryptor::bfv_decrypt] Ciphertext is in NTT form.");
         }
@@ -119,19 +119,39 @@ namespace troy {
         
         // Firstly find c_0 + c_1 *s + ... + c_{count-1} * s^{count-1} mod q
         // This is equal to Delta m + v where ||v|| < Delta/2.
-        // Add Delta / 2 and now we have something which is Delta * (m + epsilon) where epsilon < 1
-        // Therefore, we can (integer) divide by Delta and the answer will round down to m.
 
         // Make a temp destination for all the arithmetic mod qi before calling FastBConverse
         bool device = encrypted.on_device();
         if (device) destination.to_device_inplace();
         else destination.to_host_inplace();
-        Array<uint64_t> tmp_dest_modq(coeff_count * coeff_modulus_size, device);
+        
+        destination.resize_rns(this->context_, encrypted.parms_id());
 
         // put < (c_1 , c_2, ... , c_{count-1}) , (s,s^2,...,s^{count-1}) > mod q in destination
         // Now do the dot product of encrypted_copy and the secret key array using NTT.
         // The secret key powers are already NTT transformed.
-        this->dot_product_ct_sk_array(encrypted, tmp_dest_modq.reference());
+        this->dot_product_ct_sk_array(encrypted, destination.reference());
+    }
+
+    void Decryptor::bfv_decrypt(const Ciphertext& encrypted, Plaintext& destination) const {
+        if (encrypted.is_ntt_form()) {
+            throw std::invalid_argument("[Decryptor::bfv_decrypt] Ciphertext is in NTT form.");
+        }
+        ContextDataPointer context_data = this->context()->get_context_data(encrypted.parms_id()).value();
+        const EncryptionParameters& parms = context_data->parms();
+        ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
+        size_t coeff_modulus_size = coeff_modulus.size();
+        size_t coeff_count = parms.poly_modulus_degree();
+
+        Plaintext temp;
+        this->bfv_decrypt_without_scaling_down(encrypted, temp);
+        
+        // Add Delta / 2 and now we have something which is Delta * (m + epsilon) where epsilon < 1
+        // Therefore, we can (integer) divide by Delta and the answer will round down to m.
+
+        bool device = encrypted.on_device();
+        if (device) destination.to_device_inplace();
+        else destination.to_host_inplace();
 
         // Allocate a full size destination to write to
         destination.parms_id() = parms_id_zero;
@@ -139,7 +159,7 @@ namespace troy {
 
         // Divide scaling variant using BEHZ FullRNS techniques
         context_data->rns_tool().decrypt_scale_and_round(
-            tmp_dest_modq.const_reference(), destination.poly()
+            temp.const_reference(), destination.poly()
         );
         destination.is_ntt_form() = false;
         destination.coeff_modulus_size() = coeff_modulus_size;
