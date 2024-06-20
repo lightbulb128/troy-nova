@@ -1,8 +1,35 @@
 #include "context_data.cuh"
+#include "he_context.cuh"
 
 namespace troy {
 
     using namespace utils;
+
+    void ContextData::set_context(std::shared_ptr<HeContext> context) {
+        this->context_ = std::optional(std::weak_ptr<HeContext>(context));
+    }
+
+    std::optional<std::shared_ptr<HeContext>> ContextData::context() const {
+        if (this->context_.has_value()) {
+            // try get a shared pointer from the weak pointer
+            std::shared_ptr<HeContext> context = this->context_.value().lock();
+            if (context) {
+                return std::optional(context);
+            } else {
+                return std::nullopt;
+            }
+        } else {
+            return std::nullopt;
+        }
+    }
+
+    std::shared_ptr<HeContext> ContextData::context_pointer() const {
+        if (this->context_.has_value()) {
+            return this->context_.value().lock();
+        } else {
+            return nullptr;
+        }
+    }
 
     void ContextData::to_device_inplace() {
 

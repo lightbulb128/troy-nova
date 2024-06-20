@@ -9,6 +9,8 @@
 
 namespace troy {
 
+    class HeContext;
+
     class ContextData {
 
         friend class HeContext;
@@ -34,9 +36,16 @@ namespace troy {
         std::optional<std::shared_ptr<const ContextData>> next_context_data_;
         size_t chain_index_;
 
+        std::optional<std::weak_ptr<HeContext>> context_;
+
         void validate(SecurityLevel sec_level);
 
+        void set_context(std::shared_ptr<HeContext> context);
+
     public:
+
+        std::optional<std::shared_ptr<HeContext>> context() const;
+        std::shared_ptr<HeContext> context_pointer() const;
 
         inline bool on_device() const noexcept {
             return device;
