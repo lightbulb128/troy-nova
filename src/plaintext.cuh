@@ -3,6 +3,7 @@
 #include "he_context.cuh"
 #include "utils/dynamic_array.cuh"
 #include "utils/serialize.h"
+#include "utils/poly_to_string.cuh"
 
 namespace troy {
 
@@ -206,6 +207,15 @@ namespace troy {
             return result;
         }
         size_t serialized_size() const;
+
+        inline std::string to_string() const {
+            if (is_ntt_form() || parms_id_ != parms_id_zero)
+            {
+                throw std::invalid_argument("cannot convert NTT or RNS plaintext to string");
+            }
+            std::vector<uint64_t> copied = data_.to_vector();
+            return utils::poly_to_hex_string(copied.data(), coeff_count_, 1);
+        }
         
     };
 

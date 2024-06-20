@@ -6,7 +6,7 @@ We also include some utilities for privacy computing, including the matrix multi
 
 # Build
 
-Build C++/CUDA. 
+### Build C++/CUDA.
 
 ```
 mkdir build
@@ -17,7 +17,7 @@ make troy
 
 Note: You could set the CUDA architecture to suit your graphic card, by setting "CMAKE_CUDA_ARCHITECTURES" variable when calling cmake. For example, `cmake .. -DCMAKE_CUDA_ARCHITECTURES="80;89"`
 
-Build python bindings.
+### Build python bindings
 
 ```
 mkdir -p build     # ensure build folder exists.
@@ -25,7 +25,19 @@ cd pybind
 bash develop.sh
 ```
 
-You will get a `pytroy*.whl` which could be installed. 
+You will get a `pytroy*.whl` which could be installed.
+
+### Building examples
+
+`cmake` with `TROY_EXAMPLES` set to true, and then make will give the examples in `build/examples`.
+
+```
+mkdir -p build
+cd build
+cmake .. -DTROY_EXAMPLES=ON
+make troyexamples
+./examples/troyexamples
+```
 
 # Testing and Benchmark
 

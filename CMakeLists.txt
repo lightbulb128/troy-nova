@@ -24,12 +24,17 @@ option(TROY_TEST "Build tests" OFF)
 option(TROY_BENCH "Build benchmarks" OFF)
 option(TROY_MEMORY_POOL "Use memory pool" ON)
 option(TROY_PYBIND "Build python encapsulation with Pybind11" ON)
+option(TROY_EXAMPLES "Build examples" OFF)
 
 add_subdirectory(src)
 
 if(TROY_PYBIND)
   add_subdirectory(extern/pybind11)
   add_subdirectory(pybind)
+endif()
+
+if(TROY_EXAMPLES)
+  add_subdirectory(examples)
 endif()
 
 add_subdirectory(test)
