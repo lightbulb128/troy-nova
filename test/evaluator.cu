@@ -787,6 +787,37 @@ namespace evaluator {
         utils::MemoryPool::Destroy();
     }
 
+    
+
+    void test_multiply_plain_scaled(const GeneralHeContext& context) {
+        uint64_t t = context.t();
+        double scale = context.scale();
+        double tolerance = context.tolerance();
+
+        GeneralVector message1 = context.random_simd_full();
+        GeneralVector message2 = context.random_simd_full();
+        Plaintext encoded1 = context.encoder().encode_simd(message1, std::nullopt, scale);
+        Plaintext encoded2 = context.encoder().encode_simd(message2, std::nullopt, scale);
+        Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1);
+        context.encoder().batch().centralize_inplace(encoded2);
+        Ciphertext multiplied = context.evaluator().multiply_plain_new(encrypted1, encoded2);
+        Plaintext decrypted = context.decryptor().decrypt_new(multiplied);
+        GeneralVector result = context.encoder().decode_simd(decrypted);
+        GeneralVector truth = message1.mul(message2, t);
+        ASSERT_TRUE(truth.near_equal(result, tolerance));
+    }
+
+    TEST(EvaluatorTest, HostBFVMultiplyPlainScaled) {
+        GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_multiply_plain_scaled(ghe);
+    }
+    TEST(EvaluatorTest, DeviceBFVMultiplyPlainScaled) {
+        GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_multiply_plain_scaled(ghe);
+        utils::MemoryPool::Destroy();
+    }
+
+
     void test_rotate(const GeneralHeContext& context) {
         uint64_t t = context.t();
         double scale = context.scale();

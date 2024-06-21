@@ -334,4 +334,28 @@ namespace troy {
         return destination;
     }
 
+    Plaintext BatchEncoder::centralize_new(const Plaintext& plain, const ParmsID& parms_id) const {
+        if (this->context_->first_context_data().value()->parms().scheme() != SchemeType::BFV) {
+            throw std::logic_error("[BatchEncoder::scale_up_new] Only BFV scheme is supported.");
+        }
+        if (plain.parms_id() != parms_id_zero) {
+            throw std::invalid_argument("[BatchEncoder::scale_up_new] Plaintext is already at the desired level.");
+        }
+        ParmsID pid = parms_id;
+        if (pid == parms_id_zero) {
+            pid = this->context_->first_parms_id();
+        }
+        ContextDataPointer context_data = this->context_->get_context_data(pid).value();
+        Plaintext destination;
+        if (plain.on_device()) {
+            destination.to_device_inplace();
+        } else {
+            destination.to_host_inplace();
+        }
+        destination.resize_rns(this->context_, pid);
+        destination.is_ntt_form() = false;
+        scaling_variant::centralize(plain, context_data, destination.reference());
+        return destination;
+    }
+
 }

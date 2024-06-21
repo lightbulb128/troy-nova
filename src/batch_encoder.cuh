@@ -91,6 +91,15 @@ namespace troy {
             plain = scale_down_new(plain);
         }
 
+        Plaintext centralize_new(const Plaintext& plain, const ParmsID& parms_id = parms_id_zero) const;
+        inline void centralize(const Plaintext& plain, Plaintext& destination, const ParmsID& parms_id = parms_id_zero) const {
+            destination = centralize_new(plain, parms_id);
+        }
+        inline void centralize_inplace(Plaintext& plain, const ParmsID& parms_id = parms_id_zero) const {
+            plain = centralize_new(plain, parms_id);
+        }
+
+
     };
 
 }

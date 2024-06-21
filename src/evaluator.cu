@@ -1,3 +1,4 @@
+#include "encryption_parameters.cuh"
 #include "evaluator.cuh"
 #include "utils/polynomial_buffer.cuh"
 
@@ -7,7 +8,6 @@ namespace troy {
     using utils::ConstSlice;
     using utils::Array;
     using utils::NTTTables;
-    using utils::Pointer;
     using utils::ConstPointer;
     using utils::RNSTool;
     using utils::Buffer;
@@ -117,6 +117,7 @@ namespace troy {
                 scale_bit_count_bound = static_cast<int>(context_data->total_coeff_modulus_bit_count());
                 break;
             }
+            default: break;
         }
         // std::cerr << static_cast<int>(std::log2(scale)) << " " << scale_bit_count_bound << std::endl;
         return !(scale <= 0.0 || static_cast<int>(std::log2(scale)) >= scale_bit_count_bound);
@@ -1626,91 +1627,6 @@ namespace troy {
         }
     }
 
-    __global__ static void kernel_multiply_plain_normal_no_fast_plain_lift(
-        size_t plain_coeff_count, size_t coeff_modulus_size,
-        ConstSlice<uint64_t> plain, 
-        Slice<uint64_t> temp, 
-        uint64_t plain_upper_half_threshold,
-        ConstSlice<uint64_t> plain_upper_half_increment
-    ) {
-        size_t i = blockIdx.x * blockDim.x + threadIdx.x;
-        if (i >= plain_coeff_count) return;
-        size_t plain_value = plain[i];
-        if (plain_value >= plain_upper_half_threshold) {
-            utils::add_uint_uint64(plain_upper_half_increment, plain_value, temp.slice(i * coeff_modulus_size, (i + 1) * coeff_modulus_size));
-        } else {
-            temp[coeff_modulus_size * i] = plain_value;
-        }
-    }
-
-    static void multiply_plain_normal_no_fast_plain_lift(
-        size_t plain_coeff_count, size_t coeff_modulus_size,
-        ConstSlice<uint64_t> plain, 
-        Slice<uint64_t> temp, 
-        uint64_t plain_upper_half_threshold,
-        ConstSlice<uint64_t> plain_upper_half_increment
-    ) {
-        bool device = temp.on_device();
-        if (!device) {
-            for (size_t i = 0; i < plain_coeff_count; i++) {
-                size_t plain_value = plain[i];
-                if (plain_value >= plain_upper_half_threshold) {
-                    utils::add_uint_uint64(plain_upper_half_increment, plain_value, temp.slice(i * coeff_modulus_size, (i + 1) * coeff_modulus_size));
-                } else {
-                    temp[coeff_modulus_size * i] = plain_value;
-                }
-            } 
-        } else {
-            size_t block_count = utils::ceil_div(plain_coeff_count, utils::KERNEL_THREAD_COUNT);
-            kernel_multiply_plain_normal_no_fast_plain_lift<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
-                plain_coeff_count, coeff_modulus_size,
-                plain, temp, plain_upper_half_threshold, plain_upper_half_increment
-            );
-        }
-    }
-
-    __global__ static void kernel_multiply_plain_normal_fast_plain_lift(
-        size_t plain_coeff_count, size_t coeff_count, size_t coeff_modulus_size,
-        ConstSlice<uint64_t> plain, 
-        Slice<uint64_t> temp, 
-        uint64_t plain_upper_half_threshold,
-        ConstSlice<uint64_t> plain_upper_half_increment
-    ) {
-        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
-        if (global_index >= plain_coeff_count * coeff_modulus_size) return;
-        size_t i = global_index / plain_coeff_count;
-        size_t j = global_index % plain_coeff_count;
-        temp[i * coeff_count + j] = (plain[j] >= plain_upper_half_threshold)
-            ? plain[j] + plain_upper_half_increment[i]
-            : plain[j];
-    }
-
-    static void multiply_plain_normal_fast_plain_lift(
-        size_t plain_coeff_count, size_t coeff_count, size_t coeff_modulus_size,
-        ConstSlice<uint64_t> plain, 
-        Slice<uint64_t> temp, 
-        uint64_t plain_upper_half_threshold,
-        ConstSlice<uint64_t> plain_upper_half_increment
-    ) {
-        bool device = temp.on_device();
-        if (!device) {
-            for (size_t i = 0; i < coeff_modulus_size; i++) {
-                for (size_t j = 0; j < plain_coeff_count; j++) {
-                    temp[i * coeff_count + j] = (plain[j] >= plain_upper_half_threshold)
-                        ? plain[j] + plain_upper_half_increment[i]
-                        : plain[j];
-                }
-            }
-        } else {
-            size_t total = plain_coeff_count * coeff_modulus_size;
-            size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
-            kernel_multiply_plain_normal_fast_plain_lift<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
-                plain_coeff_count, coeff_count, coeff_modulus_size,
-                plain, temp, plain_upper_half_threshold, plain_upper_half_increment
-            );
-        }
-    }
-
     void Evaluator::multiply_plain_normal_inplace(Ciphertext& encrypted, const Plaintext& plain) const {
         check_no_seed("[Evaluator::multiply_plain_normal_inplace]", encrypted);
         ContextDataPointer context_data = this->get_context_data("[Evaluator::multiply_plain_normal_inplace]", encrypted.parms_id());
@@ -1724,30 +1640,29 @@ namespace troy {
         ConstSlice<NTTTables> ntt_tables = context_data->small_ntt_tables();
 
         size_t encrypted_size = encrypted.polynomial_count();
-        size_t plain_coeff_count = plain.coeff_count();
-
-        // Note: the original implementation has an optimization
-        // for plaintexts with only one term.
-        // But we are reluctant to detect the number of non-zero terms
-        // in the plaintext, so we just use the general implementation.
-        
-        // Generic case: any plaintext polynomial
-        // Allocate temporary space for an entire RNS polynomial
         bool device = encrypted.on_device();
         Buffer<uint64_t> temp(coeff_modulus_size, coeff_count, device);
-        if (!context_data->qualifiers().using_fast_plain_lift) {
-            multiply_plain_normal_no_fast_plain_lift(
-                plain_coeff_count, coeff_modulus_size,
-                plain.poly(), temp.reference(), plain_upper_half_threshold, plain_upper_half_increment
-            );
-            context_data->rns_tool().base_q().decompose_array(temp.reference());
+
+        if (plain.parms_id() == parms_id_zero) {
+
+            // Note: the original implementation has an optimization
+            // for plaintexts with only one term.
+            // But we are reluctant to detect the number of non-zero terms
+            // in the plaintext, so we just use the general implementation.
+            
+            // Generic case: any plaintext polynomial
+            // Allocate temporary space for an entire RNS polynomial
+            scaling_variant::centralize(plain, context_data, temp.reference());
+        
         } else {
-            // Note that in this case plain_upper_half_increment holds its value in RNS form modulo the coeff_modulus
-            // primes.
-            multiply_plain_normal_fast_plain_lift(
-                plain_coeff_count, coeff_count, coeff_modulus_size,
-                plain.poly(), temp.reference(), plain_upper_half_threshold, plain_upper_half_increment
-            );
+
+            // The plaintext is already conveyed to modulus Q.
+            // Directly copy.
+            if (plain.data().size() != temp.size()) {
+                throw std::invalid_argument("[Evaluator::multiply_plain_normal_inplace] Invalid plain size.");
+            }
+            temp.copy_from_slice(plain.reference());
+            
         }
 
         // Need to multiply each component in encrypted with temp; first step is to transform to NTT form
@@ -1816,7 +1731,7 @@ namespace troy {
         uint64_t plain_upper_half_threshold,
         ConstSlice<uint64_t> plain_upper_half_increment
     ) {
-        multiply_plain_normal_no_fast_plain_lift(
+        scaling_variant::multiply_plain_normal_no_fast_plain_lift(
             plain_coeff_count, coeff_modulus_size,
             plain, temp, plain_upper_half_threshold, plain_upper_half_increment
         );
@@ -1985,7 +1900,7 @@ namespace troy {
             throw std::invalid_argument("[Evaluator::apply_galois_inplace] Galois key not present.");
         }
         size_t m = coeff_count * 2;
-        if (galois_element & 1 == 0 || galois_element > m) {
+        if ((galois_element & 1) == 0 || galois_element > m) {
             throw std::invalid_argument("[Evaluator::apply_galois_inplace] Galois element is not valid.");
         }
         if (encrypted_size > 2) {
@@ -2022,7 +1937,7 @@ namespace troy {
         const GaloisTool& galois_tool = key_context_data->galois_tool();
         
         size_t m = coeff_count * 2;
-        if (galois_element & 1 == 0 || galois_element > m) {
+        if ((galois_element & 1) == 0 || galois_element > m) {
             throw std::invalid_argument("[Evaluator::apply_galois_inplace] Galois element is not valid.");
         }
 
