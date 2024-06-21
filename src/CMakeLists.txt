@@ -21,6 +21,10 @@ if(TROY_MEMORY_POOL)
   target_compile_definitions(troy PUBLIC TROY_MEMORY_POOL)
 endif()
 
+if(TROY_MEMORY_POOL_UNSAFE)
+  target_compile_definitions(troy PUBLIC TROY_MEMORY_POOL_UNSAFE)
+endif()
+
 install(TARGETS troy troy_static
   EXPORT troyTargets
   LIBRARY DESTINATION lib

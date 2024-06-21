@@ -39,7 +39,7 @@ make troyexamples
 ./examples/troyexamples
 ```
 
-# Testing and Benchmark
+## Testing and Benchmark
 
 ```
 cd build
@@ -50,6 +50,12 @@ ctest
 ./troybench
 ```
 
-## Contribute
+# Memory Pool
+
+To prevent frequent allocation and freeing of device memory, we use a static MemoryPool to manage all allocated device memory (See [`memory_pool.cuh`](src/utils/memory_pool.cuh)). If you wish to disable this behavior you could provide `TROY_MEMORY_POOL=OFF` to cmake options. 
+
+Some users report unexpected exceptions complaining `"[MemoryPool::get] The singleton has been destroyed."` when using the library. One could check if `MemoryPool::Destroy()` has been called prematurely in your program to locate the problem, or one could simply provide a `TROY_MEMORY_POOL_UNSAFE=OFF` to try to avoid it. This `TROY_MEMORY_POOL_UNSAFE` is an experimental hacking solution (because I have not reproduced the error on my machine yet 😢), so if you still get the errors please file an issue.
+
+# Contribute
 Feel free to fork / pull request.
 Please cite this repository if you use it in your work.

@@ -23,8 +23,18 @@ cmake_minimum_required(VERSION 3.16)
 option(TROY_TEST "Build tests" OFF)
 option(TROY_BENCH "Build benchmarks" OFF)
 option(TROY_MEMORY_POOL "Use memory pool" ON)
+option(TROY_MEMORY_POOL_UNSAFE "Use unsafe memory pool" OFF)
 option(TROY_PYBIND "Build python encapsulation with Pybind11" ON)
 option(TROY_EXAMPLES "Build examples" OFF)
+
+if (TROY_MEMORY_POOL_UNSAFE)
+  # if TROY_MEMORY_POOL_UNSAFE is enabled, TROY_MEMORY_POOL must be enabled
+  if(NOT TROY_MEMORY_POOL)
+    message(WARNING "TROY_MEMORY_POOL_UNSAFE is enabled, but TROY_MEMORY_POOL is set to OFF.")
+    message(WARNING "Setting TROY_MEMORY_POOL to ON.")
+    set(TROY_MEMORY_POOL ON)
+  endif()
+endif()
 
 add_subdirectory(src)
 
