@@ -7,3 +7,4 @@ reports/
 binder/*.so
 gather_code.*
 .cache/
+.clangd

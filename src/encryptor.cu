@@ -1,4 +1,5 @@
 #include "encryptor.cuh"
+#include "utils/scaling_variant.cuh"
 
 namespace troy {
 
@@ -117,132 +118,7 @@ namespace troy {
             }
         }
     }
-
-    static void host_encrypt_internal_bgv_no_fast_plain_lift(
-        size_t coeff_modulus_size, size_t coeff_count, size_t plain_coeff_count,
-        uint64_t plain_upper_half_threshold,
-        ConstSlice<uint64_t> plain_upper_half_increment,
-        ConstSlice<uint64_t> target,
-        Slice<uint64_t> temp
-    ) {
-        for (size_t i = 0; i < plain_coeff_count; i++) {
-            uint64_t plain_value = target[i];
-            if (plain_value >= plain_upper_half_threshold) {
-                utils::add_uint_uint64(
-                    plain_upper_half_increment,
-                    plain_value,
-                    temp.slice(coeff_modulus_size * i, coeff_modulus_size * (i + 1))
-                );
-            } else {
-                temp[coeff_modulus_size * i] = plain_value;
-            }
-        }
-    }
-
-    __global__ static void kernel_encrypt_internal_bgv_no_fast_plain_lift(
-        size_t coeff_modulus_size, size_t coeff_count, size_t plain_coeff_count,
-        uint64_t plain_upper_half_threshold,
-        ConstSlice<uint64_t> plain_upper_half_increment,
-        ConstSlice<uint64_t> target,
-        Slice<uint64_t> temp
-    ) {
-        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
-        if (global_index >= plain_coeff_count) return;
-        size_t i = global_index;
-        uint64_t plain_value = target[i];
-        if (plain_value >= plain_upper_half_threshold) {
-            utils::add_uint_uint64(
-                plain_upper_half_increment,
-                plain_value,
-                temp.slice(coeff_modulus_size * i, coeff_modulus_size * (i + 1))
-            );
-        } else {
-            temp[coeff_modulus_size * i] = plain_value;
-        }
-    }
-
-    static void encrypt_internal_bgv_no_fast_plain_lift(
-        const Encryptor& self, 
-        ContextDataPointer context_data,
-        size_t coeff_modulus_size, size_t coeff_count, size_t plain_coeff_count,
-        uint64_t plain_upper_half_threshold,
-        ConstSlice<uint64_t> plain_upper_half_increment,
-        Slice<uint64_t> target
-    ) {
-        bool device = self.on_device();
-        utils::Array<uint64_t> temp(coeff_count * coeff_modulus_size, device);  
-        if (device) {
-            size_t block_count = utils::ceil_div(plain_coeff_count, utils::KERNEL_THREAD_COUNT);
-            kernel_encrypt_internal_bgv_no_fast_plain_lift<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
-                coeff_modulus_size, coeff_count, plain_coeff_count,
-                plain_upper_half_threshold, plain_upper_half_increment, target.as_const(), temp.reference()
-            );
-        } else { 
-            host_encrypt_internal_bgv_no_fast_plain_lift(
-                coeff_modulus_size, coeff_count, plain_coeff_count,
-                plain_upper_half_threshold, plain_upper_half_increment, target.as_const(), temp.reference()
-            );
-        }
-        context_data->rns_tool().base_q().decompose_array(temp.reference());
-        target.copy_from_slice(temp.const_reference());
-    }
-
-    static void host_encrypt_internal_bgv_fast_plain_lift(
-        size_t coeff_modulus_size, size_t coeff_count, size_t plain_coeff_count,
-        uint64_t plain_upper_half_threshold,
-        ConstSlice<uint64_t> plain_upper_half_increment,
-        Slice<uint64_t> target
-    ) {
-        for (size_t ri = 0; ri < coeff_modulus_size; ri++) {
-            size_t i = coeff_modulus_size - ri - 1;
-            for (size_t j = 0; j < plain_coeff_count; j++) {
-                target[i * coeff_count + j] = (target[j] >= plain_upper_half_threshold) ?
-                    target[j] + plain_upper_half_increment[i] : target[j];
-            }
-        }
-    }
-
-    __global__ static void kernel_encrypt_internal_bgv_fast_plain_lift(
-        size_t coeff_modulus_size, size_t coeff_count, size_t plain_coeff_count,
-        uint64_t plain_upper_half_threshold,
-        ConstSlice<uint64_t> plain_upper_half_increment,
-        Slice<uint64_t> target
-    ) {
-        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
-        if (global_index >= plain_coeff_count) return;
-        size_t j = global_index;
-        for (size_t ri = 0; ri < coeff_modulus_size; ri++) {
-            size_t i = coeff_modulus_size - ri - 1;
-            target[i * coeff_count + j] = (target[j] >= plain_upper_half_threshold) ?
-                target[j] + plain_upper_half_increment[i] : target[j];
-        }
-    }
-
-
-    static void encrypt_internal_bgv_fast_plain_lift(
-        const Encryptor& self, 
-        size_t coeff_modulus_size, size_t coeff_count, size_t plain_coeff_count,
-        uint64_t plain_upper_half_threshold,
-        ConstSlice<uint64_t> plain_upper_half_increment,
-        Slice<uint64_t> target
-    )  {
-        bool device = self.on_device();
-        if (device) {
-            size_t block_count = utils::ceil_div(plain_coeff_count, utils::KERNEL_THREAD_COUNT);
-            kernel_encrypt_internal_bgv_fast_plain_lift<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
-                coeff_modulus_size, coeff_count, plain_coeff_count,
-                plain_upper_half_threshold, plain_upper_half_increment, target
-            );
-
-        } else {
-            host_encrypt_internal_bgv_fast_plain_lift(
-                coeff_modulus_size, coeff_count, plain_coeff_count,
-                plain_upper_half_threshold, plain_upper_half_increment, target
-            );
-        }
-    }
-
-
+    
     void Encryptor::encrypt_internal(
         const Plaintext& plain,
         bool is_asymmetric, bool save_seed,
@@ -319,18 +195,9 @@ namespace troy {
                 // Resize to fit the entire NTT transformed (ciphertext size) polynomial
                 // Note that the new coefficients are automatically set to 0
                 plain_copy.resize(coeff_count * coeff_modulus_size);
+                plain_copy.data().reference().set_zero();
 
-                if (!context_data->qualifiers().using_fast_plain_lift) {
-                    encrypt_internal_bgv_no_fast_plain_lift(
-                        *this, context_data, coeff_modulus_size, coeff_count, plain_coeff_count,
-                        plain_upper_half_threshold, plain_upper_half_increment, plain_copy.poly()
-                    );
-                } else {
-                    encrypt_internal_bgv_fast_plain_lift(
-                        *this, coeff_modulus_size, coeff_count, plain_coeff_count,
-                        plain_upper_half_threshold, plain_upper_half_increment, plain_copy.poly()
-                    );
-                }
+                scaling_variant::centralize(plain, context_data, plain_copy.reference());
 
                 // Transform to NTT domain
                 utils::ntt_negacyclic_harvey_p(plain_copy.reference(), coeff_count, ntt_tables);
