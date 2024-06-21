@@ -4,7 +4,6 @@
 namespace troy {
 
     using utils::ConstSlice;
-    using utils::Slice;
     using utils::RNSTool;
 
     void Encryptor::encrypt_zero_internal(
@@ -118,7 +117,7 @@ namespace troy {
             }
         }
     }
-    
+
     void Encryptor::encrypt_internal(
         const Plaintext& plain,
         bool is_asymmetric, bool save_seed,

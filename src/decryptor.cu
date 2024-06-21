@@ -125,7 +125,7 @@ namespace troy {
         if (device) destination.to_device_inplace();
         else destination.to_host_inplace();
         
-        destination.resize_rns(this->context_, encrypted.parms_id());
+        destination.resize_rns(*this->context_, encrypted.parms_id());
 
         // put < (c_1 , c_2, ... , c_{count-1}) , (s,s^2,...,s^{count-1}) > mod q in destination
         // Now do the dot product of encrypted_copy and the secret key array using NTT.

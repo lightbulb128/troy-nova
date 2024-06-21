@@ -59,11 +59,11 @@ namespace troy {
         this->coeff_modulus_size_ = coeff_modulus_size;
     }
 
-    void Plaintext::resize_rns(HeContextPointer context, const ParmsID& parms_id) {
-        if (!context->parameters_set()) {
+    void Plaintext::resize_rns(const HeContext& context, const ParmsID& parms_id) {
+        if (!context.parameters_set()) {
             throw std::invalid_argument("[Plaintext::resize_rns] context is not set");
         }
-        std::optional<ContextDataPointer> context_data_optional = context->get_context_data(parms_id);
+        std::optional<ContextDataPointer> context_data_optional = context.get_context_data(parms_id);
         if (!context_data_optional.has_value()) {
             throw std::invalid_argument("[Plaintext::resize_rns] parms_id is not valid");
         }

@@ -189,7 +189,7 @@ namespace troy {
             return poly_modulus_degree_;
         }
 
-        void resize_rns(HeContextPointer context, const ParmsID& parms_id);
+        void resize_rns(const HeContext& context, const ParmsID& parms_id);
 
         inline bool is_ntt_form() const {
             return is_ntt_form_;

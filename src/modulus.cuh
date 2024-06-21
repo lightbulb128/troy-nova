@@ -41,13 +41,13 @@ namespace troy {
         }
 
         __host__ __device__
-        inline uint64_t reduce_uint128(utils::ConstSlice<uint64_t> input) const {
+        inline uint64_t reduce_uint128_limbs(utils::ConstSlice<uint64_t> input) const {
             using utils::Slice;
             using utils::ConstSlice;
             // Reduces input using base 2^64 Barrett reduction
             // input allocation size must be 128 bits
             uint64_t tmp1 = 0;
-            uint64_t tmp2[2];
+            uint64_t tmp2[2] = {0, 0};
             Slice<uint64_t> tmp2_slice(tmp2, 2, utils::on_device());
             uint64_t tmp3 = 0;
             uint64_t carry = 0;
@@ -79,8 +79,8 @@ namespace troy {
 
         __host__ __device__
         inline uint64_t reduce_uint128(__uint128_t value) const {
-            utils::ConstSlice<uint64_t> value_slice(reinterpret_cast<uint64_t*>(&value), 2, utils::on_device());
-            return reduce_uint128(value_slice);
+            uint64_t value_limbs[2] = {static_cast<uint64_t>(value), static_cast<uint64_t>(value >> 64)};
+            return reduce_uint128_limbs(utils::ConstSlice<uint64_t>(value_limbs, 2, utils::on_device()));
         }
 
         __host__ __device__
@@ -88,7 +88,7 @@ namespace troy {
             uint64_t tmp[2];
             utils::Slice<uint64_t> tmp_slice(tmp, 2, utils::on_device());
             utils::multiply_uint64_uint64(operand1, operand2, tmp_slice);
-            return reduce_uint128(tmp_slice.as_const());
+            return reduce_uint128_limbs(tmp_slice.as_const());
         }
 
         __host__ __device__

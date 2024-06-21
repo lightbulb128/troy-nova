@@ -73,7 +73,7 @@ namespace troy { namespace utils {
 
     __host__ __device__
     inline uint64_t barrett_reduce_uint128(ConstSlice<uint64_t> input, const Modulus& modulus) {
-        return modulus.reduce_uint128(input);
+        return modulus.reduce_uint128_limbs(input);
     }
 
     __host__ __device__
@@ -86,7 +86,7 @@ namespace troy { namespace utils {
         uint64_t temp[2];
         Slice<uint64_t> temp_slice(temp, 2, on_device());
         utils::multiply_uint64_uint64(operand1, operand2, temp_slice);
-        return modulus.reduce_uint128(temp_slice.as_const());
+        return modulus.reduce_uint128_limbs(temp_slice.as_const());
     }
 
     struct MultiplyUint64Operand {
@@ -157,7 +157,7 @@ namespace troy { namespace utils {
             }
         }
         for (int i = value.size() - 2; i >= 0; i--) {
-            value[i] = modulus.reduce_uint128(value.const_slice(i, i + 2));
+            value[i] = modulus.reduce_uint128_limbs(value.const_slice(i, i + 2));
             value[i + 1] = 0;
         }
     }
@@ -175,7 +175,7 @@ namespace troy { namespace utils {
             ConstSlice<uint64_t> temp_slice(temp, 2, on_device());
             for (int i = value.size() - 2; i >= 0; i--) {
                 temp[0] = value[i];
-                temp[1] = modulus.reduce_uint128(temp_slice);
+                temp[1] = modulus.reduce_uint128_limbs(temp_slice);
             }
             return temp[1];
         }
@@ -192,7 +192,7 @@ namespace troy { namespace utils {
         Slice<uint64_t> temp_slice(temp, 2, on_device());
         utils::multiply_uint64_uint64(operand1, operand2, temp_slice);
         temp[1] += static_cast<uint64_t>(utils::add_uint64(temp[0], operand3, temp[0]));
-        return modulus.reduce_uint128(temp_slice.as_const());
+        return modulus.reduce_uint128_limbs(temp_slice.as_const());
     }
 
     /**
@@ -257,7 +257,7 @@ namespace troy { namespace utils {
             utils::multiply_uint64_uint64(operand1[i], operand2[i], qword_slice);
             utils::add_uint128_inplace(accumulator_slice, qword_slice.as_const());
         }
-        return modulus.reduce_uint128(accumulator_slice.as_const());
+        return modulus.reduce_uint128_limbs(accumulator_slice.as_const());
     }
 
     __host__

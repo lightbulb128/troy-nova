@@ -298,7 +298,7 @@ namespace troy {
         } else {
             destination.to_host_inplace();
         }
-        destination.resize_rns(this->context_, pid);
+        destination.resize_rns(*this->context_, pid);
         destination.is_ntt_form() = false;
         scaling_variant::scale_up(plain, context_data, destination.reference(), false, false);
         return destination;
@@ -352,7 +352,7 @@ namespace troy {
         } else {
             destination.to_host_inplace();
         }
-        destination.resize_rns(this->context_, pid);
+        destination.resize_rns(*this->context_, pid);
         destination.is_ntt_form() = false;
         scaling_variant::centralize(plain, context_data, destination.reference());
         return destination;

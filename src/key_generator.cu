@@ -51,7 +51,7 @@ namespace troy {
             sk.poly(), coeff_count, ntt_tables
         );
 
-        sk.resize_rns(context, context_data->parms_id());
+        sk.resize_rns(*context, context_data->parms_id());
         sk.is_ntt_form() = true;
         this->create_secret_key_array();
     }

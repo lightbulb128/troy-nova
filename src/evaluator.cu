@@ -720,7 +720,7 @@ namespace troy {
         size_t accumulator_l_offset = k * coeff_count * 2 + 2 * i;
         Slice<uint64_t> accumulator_l = t_poly_lazy.slice(accumulator_l_offset, accumulator_l_offset + 2);
         utils::add_uint128_inplace(qword_slice, accumulator_l.as_const());
-        accumulator_l[0] = key_modulus->reduce_uint128(qword_slice.as_const());
+        accumulator_l[0] = key_modulus->reduce_uint128_limbs(qword_slice.as_const());
         accumulator_l[1] = 0;
     }
 
@@ -743,7 +743,7 @@ namespace troy {
                     size_t accumulator_l_offset = k * coeff_count * 2 + 2 * i;
                     Slice<uint64_t> accumulator_l = t_poly_lazy.slice(accumulator_l_offset, accumulator_l_offset + 2);
                     utils::add_uint128_inplace(qword_slice, accumulator_l.as_const());
-                    accumulator_l[0] = key_modulus->reduce_uint128(qword_slice.as_const());
+                    accumulator_l[0] = key_modulus->reduce_uint128_limbs(qword_slice.as_const());
                     accumulator_l[1] = 0;
                 }
             }
@@ -863,7 +863,7 @@ namespace troy {
         size_t i = global_index % coeff_count;
         size_t k = global_index / coeff_count;
         size_t accumulator_l_offset = k * coeff_count * 2 + 2 * i;
-        t_poly_prod_iter[k * coeff_count * rns_modulus_size + i] = key_modulus->reduce_uint128(
+        t_poly_prod_iter[k * coeff_count * rns_modulus_size + i] = key_modulus->reduce_uint128_limbs(
             t_poly_lazy.const_slice(accumulator_l_offset, accumulator_l_offset + 2)
         );
     }
@@ -881,7 +881,7 @@ namespace troy {
             for (size_t i = 0; i < coeff_count; i++) {
                 for (size_t k = 0; k < key_component_count; k++) {
                     size_t accumulator_l_offset = k * coeff_count * 2 + 2 * i;
-                    t_poly_prod_iter[k * coeff_count * rns_modulus_size + i] = key_modulus->reduce_uint128(
+                    t_poly_prod_iter[k * coeff_count * rns_modulus_size + i] = key_modulus->reduce_uint128_limbs(
                         t_poly_lazy.const_slice(accumulator_l_offset, accumulator_l_offset + 2)
                     );
                 }

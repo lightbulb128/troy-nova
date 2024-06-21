@@ -787,9 +787,7 @@ namespace evaluator {
         utils::MemoryPool::Destroy();
     }
 
-    
-
-    void test_multiply_plain_scaled(const GeneralHeContext& context) {
+    void test_multiply_plain_centralized(const GeneralHeContext& context) {
         uint64_t t = context.t();
         double scale = context.scale();
         double tolerance = context.tolerance();
@@ -807,13 +805,13 @@ namespace evaluator {
         ASSERT_TRUE(truth.near_equal(result, tolerance));
     }
 
-    TEST(EvaluatorTest, HostBFVMultiplyPlainScaled) {
+    TEST(EvaluatorTest, HostBFVMultiplyPlainCentralized) {
         GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
-        test_multiply_plain_scaled(ghe);
+        test_multiply_plain_centralized(ghe);
     }
-    TEST(EvaluatorTest, DeviceBFVMultiplyPlainScaled) {
+    TEST(EvaluatorTest, DeviceBFVMultiplyPlainCentralized) {
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
-        test_multiply_plain_scaled(ghe);
+        test_multiply_plain_centralized(ghe);
         utils::MemoryPool::Destroy();
     }
 

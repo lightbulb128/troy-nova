@@ -20,3 +20,4 @@
 
 #include "app/matmul.cuh"
 #include "app/conv2d.cuh"
+#include "app/bfv_ring2k.cuh"
