@@ -52,9 +52,9 @@ namespace matmul {
             automorphism_key = context.key_generator().create_automorphism_keys(false);
         }
         
-        Plain2d x_encoded = helper.encode_inputs(encoder, x.integers().data());
-        Plain2d w_encoded = helper.encode_weights(encoder, w.integers().data());
-        Plain2d s_encoded = helper.encode_outputs(encoder, s.integers().data());
+        Plain2d x_encoded = helper.encode_inputs_uint64s(encoder, x.integers().data());
+        Plain2d w_encoded = helper.encode_weights_uint64s(encoder, w.integers().data());
+        Plain2d s_encoded = helper.encode_outputs_uint64s(encoder, s.integers().data());
 
         Cipher2d x_encrypted = x_encoded.encrypt_asymmetric(encryptor);
 
@@ -76,7 +76,7 @@ namespace matmul {
         helper.serialize_outputs(evaluator, y_encrypted, y_serialized);
         y_encrypted = helper.deserialize_outputs(evaluator, y_serialized);
 
-        vector<uint64_t> y_decrypted = helper.decrypt_outputs(encoder, decryptor, y_encrypted);   
+        vector<uint64_t> y_decrypted = helper.decrypt_outputs_uint64s(encoder, decryptor, y_encrypted);   
 
         vector<uint64_t> y_truth(m * n, 0);
         for (size_t i = 0; i < m; i++) {

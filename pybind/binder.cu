@@ -829,6 +829,71 @@ PYBIND11_MODULE(pytroy_raw, m) {
         .value("Crossed", MatmulObjective::Crossed)
     ;
 
+    auto encode_weights_uint64s = [](const MatmulHelper& self, const BatchEncoder& encoder, const py::array_t<uint64_t>& weights) {
+        if (weights.ndim() != 1) 
+            throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be flattened.");
+        if (weights.strides(0) != sizeof(uint64_t))
+            throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be contiguous.");
+        if (weights.size() != self.input_dims * self.output_dims) 
+            throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be of size input_dims * output_dims.");
+        return self.encode_weights_uint64s(encoder, get_pointer_from_buffer(weights));
+    };
+    auto encode_inputs_uint64s = [](const MatmulHelper& self, const BatchEncoder& encoder, const py::array_t<uint64_t>& inputs) {
+        if (inputs.ndim() != 1) 
+            throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be flattened.");
+        if (inputs.strides(0) != sizeof(uint64_t))
+            throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be contiguous.");
+        if (inputs.size() != self.batch_size * self.input_dims)
+            throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be of size batch_size * input_dims.");
+        return self.encode_inputs_uint64s(encoder, get_pointer_from_buffer(inputs));
+    };
+    auto encode_outputs_uint64s = [](const MatmulHelper& self, const BatchEncoder& encoder, const py::array_t<uint64_t>& outputs) {
+        if (outputs.ndim() != 1) 
+            throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be flattened.");
+        if (outputs.strides(0) != sizeof(uint64_t))
+            throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be contiguous.");
+        if (outputs.size() != self.batch_size * self.output_dims)
+            throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be of size batch_size * output_dims.");
+        return self.encode_outputs_uint64s(encoder, get_pointer_from_buffer(outputs));
+    };
+    auto decrypt_outputs_uint64s = [](const MatmulHelper& self, const BatchEncoder& encoder, const Decryptor& decryptor, const Cipher2d& outputs) {
+        std::vector<uint64_t> result = self.decrypt_outputs_uint64s(encoder, decryptor, outputs);
+        return get_buffer_from_vector(result);
+    };
+
+
+    auto encode_weights_doubles = [](const MatmulHelper& self, const CKKSEncoder& encoder, const py::array_t<double>& weights, std::optional<ParmsID> parms_id, double scale) {
+        if (weights.ndim() != 1) 
+            throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be flattened.");
+        if (weights.strides(0) != sizeof(uint64_t))
+            throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be contiguous.");
+        if (weights.size() != self.input_dims * self.output_dims) 
+            throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be of size input_dims * output_dims.");
+        return self.encode_weights_doubles(encoder, get_pointer_from_buffer(weights), parms_id, scale);
+    };
+    auto encode_inputs_doubles = [](const MatmulHelper& self, const CKKSEncoder& encoder, const py::array_t<double>& inputs, std::optional<ParmsID> parms_id, double scale) {
+        if (inputs.ndim() != 1) 
+            throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be flattened.");
+        if (inputs.strides(0) != sizeof(uint64_t))
+            throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be contiguous.");
+        if (inputs.size() != self.batch_size * self.input_dims)
+            throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be of size batch_size * input_dims.");
+        return self.encode_inputs_doubles(encoder, get_pointer_from_buffer(inputs), parms_id, scale);
+    };
+    auto encode_outputs_doubles = [](const MatmulHelper& self, const CKKSEncoder& encoder, const py::array_t<double>& outputs, std::optional<ParmsID> parms_id, double scale) {
+        if (outputs.ndim() != 1) 
+            throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be flattened.");
+        if (outputs.strides(0) != sizeof(uint64_t))
+            throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be contiguous.");
+        if (outputs.size() != self.batch_size * self.output_dims)
+            throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be of size batch_size * output_dims.");
+        return self.encode_outputs_doubles(encoder, get_pointer_from_buffer(outputs), parms_id, scale);
+    };
+    auto decrypt_outputs_doubles = [](const MatmulHelper& self, const CKKSEncoder& encoder, const Decryptor& decryptor, const Cipher2d& outputs) {
+        std::vector<double> result = self.decrypt_outputs_doubles(encoder, decryptor, outputs);
+        return get_buffer_from_vector(result);
+    };
+
     py::class_<MatmulHelper>(m, "MatmulHelper")
         .def(py::init<size_t, size_t, size_t, size_t, MatmulObjective, bool>(), 
             py::arg("batch_size"), py::arg("input_dims"), py::arg("output_dims"),
@@ -844,40 +909,21 @@ PYBIND11_MODULE(pytroy_raw, m) {
         .def("batch_block", [](const MatmulHelper& self) { return self.batch_block; })
         .def("input_block", [](const MatmulHelper& self) { return self.input_block; })
         .def("output_block", [](const MatmulHelper& self) { return self.output_block; })
-        .def("encode_weights", [](const MatmulHelper& self, const BatchEncoder& encoder, const py::array_t<uint64_t>& weights) {
-            if (weights.ndim() != 1) 
-                throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be flattened.");
-            if (weights.strides(0) != sizeof(uint64_t))
-                throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be contiguous.");
-            if (weights.size() != self.input_dims * self.output_dims) 
-                throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be of size input_dims * output_dims.");
-            return self.encode_weights(encoder, get_pointer_from_buffer(weights));
-        })
-        .def("encode_inputs", [](const MatmulHelper& self, const BatchEncoder& encoder, const py::array_t<uint64_t>& inputs) {
-            if (inputs.ndim() != 1) 
-                throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be flattened.");
-            if (inputs.strides(0) != sizeof(uint64_t))
-                throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be contiguous.");
-            if (inputs.size() != self.batch_size * self.input_dims)
-                throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be of size batch_size * input_dims.");
-            return self.encode_inputs(encoder, get_pointer_from_buffer(inputs));
-        })
-        .def("encode_outputs", [](const MatmulHelper& self, const BatchEncoder& encoder, const py::array_t<uint64_t>& outputs) {
-            if (outputs.ndim() != 1) 
-                throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be flattened.");
-            if (outputs.strides(0) != sizeof(uint64_t))
-                throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be contiguous.");
-            if (outputs.size() != self.batch_size * self.output_dims)
-                throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be of size batch_size * output_dims.");
-            return self.encode_outputs(encoder, get_pointer_from_buffer(outputs));
-        })
+        .def("encode_weights", encode_weights_uint64s)
+        .def("encode_inputs", encode_inputs_uint64s)
+        .def("encode_outputs", encode_outputs_uint64s)
+        .def("encode_weights_uint64s", encode_weights_uint64s)
+        .def("encode_inputs_uint64s", encode_inputs_uint64s)
+        .def("encode_outputs_uint64s", encode_outputs_uint64s)
+        .def("encode_weights_doubles", encode_weights_doubles)
+        .def("encode_inputs_doubles", encode_inputs_doubles)
+        .def("encode_outputs_doubles", encode_outputs_doubles)
         .def("matmul", &MatmulHelper::matmul)
         .def("matmul_reverse", &MatmulHelper::matmul_reverse)
         .def("matmul_cipher", &MatmulHelper::matmul_cipher)
-        .def("decrypt_outputs", [](const MatmulHelper& self, const BatchEncoder& encoder, const Decryptor& decryptor, const Cipher2d& outputs) {
-            std::vector<uint64_t> result = self.decrypt_outputs(encoder, decryptor, outputs);
-            return get_buffer_from_vector(result);
-        })
+        .def("decrypt_outputs", decrypt_outputs_uint64s)
+        .def("decrypt_outputs_uint64s", decrypt_outputs_uint64s)
+        .def("decrypt_outputs_doubles", decrypt_outputs_doubles)
         .def("pack_outputs", &MatmulHelper::pack_outputs)
         .def("serialize_outputs", [](const MatmulHelper& self, const Evaluator &evaluator, const Cipher2d& x) {
             ostringstream ss; self.serialize_outputs(evaluator, x, ss); return py::bytes(ss.str());

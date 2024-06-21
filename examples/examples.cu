@@ -16,13 +16,15 @@ int main()
         cout << "+---------------------------------------------------------+" << endl;
         cout << "| Examples                   | Source Files               |" << endl;
         cout << "+----------------------------+----------------------------+" << endl;
-        cout << "| 1. BFV Basics              | 1_bfv_basics.cpp           |" << endl;
-        cout << "| 2. Encoders                | 2_encoders.cpp             |" << endl;
-        cout << "| 3. Levels                  | 3_levels.cpp               |" << endl;
-        cout << "| 4. BGV Basics              | 4_bgv_basics.cpp           |" << endl;
-        cout << "| 5. CKKS Basics             | 5_ckks_basics.cpp          |" << endl;
-        cout << "| 6. Rotation                | 6_rotation.cpp             |" << endl;
-        cout << "| 7. Serialization           | 7_serialization.cpp        |" << endl;
+        cout << "|  1. BFV Basics             |  1_bfv_basics.cu           |" << endl;
+        cout << "|  2. Encoders               |  2_encoders.cu             |" << endl;
+        cout << "|  3. Levels                 |  3_levels.cu               |" << endl;
+        cout << "|  4. BGV Basics             |  4_bgv_basics.cu           |" << endl;
+        cout << "|  5. CKKS Basics            |  5_ckks_basics.cu          |" << endl;
+        cout << "|  6. Rotation               |  6_rotation.cu             |" << endl;
+        cout << "|  7. Serialization          |  7_serialization.cu        |" << endl;
+        cout << "| 10. BFV MatMul             | 10_bfv_matmul.cu           |" << endl;
+        cout << "| 11. CKKS MatMul            | 11_ckks_matmul.cu          |" << endl;
         cout << "+----------------------------+----------------------------+" << endl;
 
         int selection = 0;
@@ -74,6 +76,14 @@ int main()
 
         case 7:
             example_serialization();
+            break;
+
+        case 10:
+            example_bfv_matmul();
+            break;
+
+        case 11:
+            example_ckks_matmul();
             break;
 
         case 0:

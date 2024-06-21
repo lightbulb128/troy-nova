@@ -9,6 +9,8 @@ target_sources(troyexamples PRIVATE
     5_ckks_basics.cu
     6_rotation.cu
     7_serialization.cu
+    10_bfv_matmul.cu
+    11_ckks_matmul.cu
 )
 
 target_link_libraries(troyexamples PRIVATE troy)

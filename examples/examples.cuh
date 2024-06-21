@@ -21,18 +21,14 @@
 #include <vector>
 
 void example_bfv_basics();
-
 void example_encoders();
-
 void example_levels();
-
 void example_bgv_basics();
-
 void example_ckks_basics();
-
 void example_rotation();
-
 void example_serialization();
+void example_bfv_matmul();
+void example_ckks_matmul();
 
 /*
 Helper function: Prints the name of the example in a fancy banner.

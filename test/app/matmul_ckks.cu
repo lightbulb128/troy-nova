@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 #include <sstream>
 #include "../test_adv.cuh"
-#include "../../src/app/matmul_ckks.cuh"
+#include "../../src/app/matmul.cuh"
 
 namespace matmul_ckks {
 
@@ -40,7 +40,7 @@ namespace matmul_ckks {
         GeneralVector x = context.random_polynomial(m * r);
         GeneralVector w = context.random_polynomial(r * n);
         GeneralVector s = context.random_polynomial(m * n);
-        CKKSMatmulHelper helper(m, r, n, context.params_host().poly_modulus_degree(), MatmulObjective::EncryptLeft, pack_lwe);
+        MatmulHelper helper(m, r, n, context.params_host().poly_modulus_degree(), MatmulObjective::EncryptLeft, pack_lwe);
 
         HeContextPointer he = context.context();
         const CKKSEncoder& encoder = context.encoder().ckks();
@@ -52,9 +52,9 @@ namespace matmul_ckks {
             automorphism_key = context.key_generator().create_automorphism_keys(false);
         }
         
-        Plain2d x_encoded = helper.encode_inputs(encoder, x.doubles().data(), std::nullopt, scale);
-        Plain2d w_encoded = helper.encode_weights(encoder, w.doubles().data(), std::nullopt, scale);
-        Plain2d s_encoded = helper.encode_outputs(encoder, s.doubles().data(), std::nullopt, scale * scale);
+        Plain2d x_encoded = helper.encode_inputs_doubles(encoder, x.doubles().data(), std::nullopt, scale);
+        Plain2d w_encoded = helper.encode_weights_doubles(encoder, w.doubles().data(), std::nullopt, scale);
+        Plain2d s_encoded = helper.encode_outputs_doubles(encoder, s.doubles().data(), std::nullopt, scale * scale);
 
         Cipher2d x_encrypted = x_encoded.encrypt_asymmetric(encryptor);
 
@@ -76,7 +76,7 @@ namespace matmul_ckks {
         helper.serialize_outputs(evaluator, y_encrypted, y_serialized);
         y_encrypted = helper.deserialize_outputs(evaluator, y_serialized);
 
-        vector<double> y_decrypted = helper.decrypt_outputs(encoder, decryptor, y_encrypted);   
+        vector<double> y_decrypted = helper.decrypt_outputs_doubles(encoder, decryptor, y_encrypted);   
 
         vector<double> y_truth(m * n, 0);
         for (size_t i = 0; i < m; i++) {
