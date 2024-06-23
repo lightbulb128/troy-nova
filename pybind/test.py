@@ -293,6 +293,7 @@ class GeneralHeContext:
         self.scale = scale
         self.tolerance = tolerance
         self.is_ckks = scheme == SchemeType.CKKS
+        self.is_ntt = scheme == SchemeType.CKKS or scheme == SchemeType.BGV
         self.device = device
 
     def random_simd(self, size: int) -> GeneralVector:
@@ -551,7 +552,7 @@ class HeTest:
         for term in [0, 1, 3, 7]:
             extracted = ghe.evaluator.extract_lwe_new(cipher, term)
             assembled = ghe.evaluator.assemble_lwe_new(extracted)
-            if ghe.is_ckks:
+            if ghe.is_ntt:
                 ghe.evaluator.transform_to_ntt_inplace(assembled)
             decoded = ghe.encoder.decode_polynomial(ghe.decryptor.decrypt_new(assembled))
             self.tester.assertTrue(ghe.near_equal(message.element(term), decoded.element(0)))
