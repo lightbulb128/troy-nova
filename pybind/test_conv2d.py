@@ -121,15 +121,17 @@ if __name__ == "__main__":
     else:
 
         # run host suite
-        print("Running host test suite")
+        print("===== Running host test suite =====")
         suite = HostTestSuite()
         unittest.TextTestRunner().run(suite)
-        print("")
+        print("===== Host test OK =====")
+        print()
 
         # run device suite
-        print("Running device test suite")
+        print("===== Running device test suite =====")
         suite = DeviceTestSuite()
         unittest.TextTestRunner().run(suite)
+        print("===== Device test OK =====")
         print("")
 
     pytroy.destroy_memory_pool()

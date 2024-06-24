@@ -24,6 +24,7 @@ using std::string;
 using troy::utils::ConstSlice;
 using troy::utils::Slice;
 using troy::utils::Array;
+using uint128_t = __uint128_t;
 
 template <typename T>
 vector<T> get_vector_from_buffer(const py::array_t<T>& values) {
@@ -158,6 +159,77 @@ T load_new_he(const py::bytes& str, HeContextPointer context) {
 template <typename T>
 size_t serialized_size_he(const T& object, HeContextPointer context) {
     return object.serialized_size(context);
+}
+
+template<typename T>
+void register_class_polynomial_encoder_ring2k(pybind11::module_& m, const char* name) {
+    py::class_<PolynomialEncoderRing2k<T>>(m, name)
+        .def(py::init<HeContextPointer, size_t>())
+        .def("context", &PolynomialEncoderRing2k<T>::context)
+        .def("on_device", &PolynomialEncoderRing2k<T>::on_device)
+        .def("t_bit_length", &PolynomialEncoderRing2k<T>::t_bit_length)
+        .def("get_helper", &PolynomialEncoderRing2k<T>::get_helper)
+        .def("to_device_inplace", &PolynomialEncoderRing2k<T>::to_device_inplace)
+        .def("scale_up", [](const PolynomialEncoderRing2k<T>& self, const py::array_t<T>& values, std::optional<ParmsID> parms_id, Plaintext& p) {
+            self.scale_up(get_vector_from_buffer(values), parms_id, p);
+        })
+        .def("scale_up_new", [](const PolynomialEncoderRing2k<T>& self, const py::array_t<T>& values, std::optional<ParmsID> parms_id) {
+            return self.scale_up_new(get_vector_from_buffer(values), parms_id);
+        })
+        .def("centralize", [](const PolynomialEncoderRing2k<T>& self, const py::array_t<T>& values, std::optional<ParmsID> parms_id, Plaintext& p) {
+            self.centralize(get_vector_from_buffer(values), parms_id, p);
+        })
+        .def("centralize_new", [](const PolynomialEncoderRing2k<T>& self, const py::array_t<T>& values, std::optional<ParmsID> parms_id) {
+            return self.centralize_new(get_vector_from_buffer(values), parms_id);
+        })
+        .def("scale_down_new", [](const PolynomialEncoderRing2k<T>& self, const Plaintext& p) {
+            return get_buffer_from_vector(self.scale_down_new(p));
+        })
+    ;
+}
+
+template<typename T>
+void register_methods_matmul_polynomial_encoder_ring2k(pybind11::class_<MatmulHelper>& c, const char* bitwidth_name) {
+    
+    auto encode_weights_ring2k = [](const MatmulHelper& self, const PolynomialEncoderRing2k<T>& encoder, const py::array_t<T>& weights, std::optional<ParmsID> parms_id) {
+        if (weights.ndim() != 1) 
+            throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be flattened.");
+        if (weights.strides(0) != sizeof(T))
+            throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be contiguous.");
+        if (weights.size() != self.input_dims * self.output_dims) 
+            throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be of size input_dims * output_dims.");
+        return self.encode_weights_ring2k<T>(encoder, get_pointer_from_buffer(weights), parms_id);
+    };
+    auto encode_inputs_ring2k = [](const MatmulHelper& self, const PolynomialEncoderRing2k<T>& encoder, const py::array_t<T>& inputs, std::optional<ParmsID> parms_id) {
+        if (inputs.ndim() != 1) 
+            throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be flattened.");
+        if (inputs.strides(0) != sizeof(T))
+            throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be contiguous.");
+        if (inputs.size() != self.batch_size * self.input_dims)
+            throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be of size batch_size * input_dims.");
+        return self.encode_inputs_ring2k<T>(encoder, get_pointer_from_buffer(inputs), parms_id);
+    };
+    auto encode_outputs_ring2k = [](const MatmulHelper& self, const PolynomialEncoderRing2k<T>& encoder, const py::array_t<T>& outputs, std::optional<ParmsID> parms_id) {
+        if (outputs.ndim() != 1) 
+            throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be flattened.");
+        if (outputs.strides(0) != sizeof(T))
+            throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be contiguous.");
+        if (outputs.size() != self.batch_size * self.output_dims)
+            throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be of size batch_size * output_dims.");
+        return self.encode_outputs_ring2k<T>(encoder, get_pointer_from_buffer(outputs), parms_id);
+    };
+    auto decrypt_outputs_ring2k = [](const MatmulHelper& self, const PolynomialEncoderRing2k<T>& encoder, const Decryptor& decryptor, const Cipher2d& outputs) {
+        std::vector<T> result = self.decrypt_outputs_ring2k<T>(encoder, decryptor, outputs);
+        return get_buffer_from_vector(result);
+    };
+
+    c
+        .def((std::string("encode_weights_ring2k") + bitwidth_name).c_str(), encode_weights_ring2k)
+        .def((std::string("encode_inputs_ring2k") + bitwidth_name).c_str(), encode_inputs_ring2k)
+        .def((std::string("encode_outputs_ring2k") + bitwidth_name).c_str(), encode_outputs_ring2k)
+        .def((std::string("decrypt_outputs_ring2k") + bitwidth_name).c_str(), decrypt_outputs_ring2k)
+    ;
+
 }
 
 PYBIND11_MODULE(pytroy_raw, m) {
@@ -542,6 +614,15 @@ PYBIND11_MODULE(pytroy_raw, m) {
         .def("decode_polynomial_new", [](const BatchEncoder& self, const Plaintext& p) {
             return get_buffer_from_vector(self.decode_polynomial_new(p));
         })
+        .def("scale_up", &BatchEncoder::scale_up)
+        .def("scale_up_inplace", &BatchEncoder::scale_up_inplace)
+        .def("scale_up_new", &BatchEncoder::scale_up_new)
+        .def("centralize", &BatchEncoder::centralize)
+        .def("centralize_inplace", &BatchEncoder::centralize_inplace)
+        .def("centralize_new", &BatchEncoder::centralize_new)
+        .def("scale_down", &BatchEncoder::scale_down)
+        .def("scale_down_inplace", &BatchEncoder::scale_down_inplace)
+        .def("scale_down_new", &BatchEncoder::scale_down_new)
     ;
 
     py::class_<CKKSEncoder>(m, "CKKSEncoder")
@@ -619,6 +700,10 @@ PYBIND11_MODULE(pytroy_raw, m) {
             return get_buffer_from_vector(self.decode_float64_polynomial_new(p));
         })
     ;
+
+    register_class_polynomial_encoder_ring2k<uint32_t>(m, "PolynomialEncoderRing2k32");
+    register_class_polynomial_encoder_ring2k<uint64_t>(m, "PolynomialEncoderRing2k64");
+    // register_class_polynomial_encoder_ring2k<uint128_t>(m, "PolynomialEncoderRing2k128"); // No uint128 because of lack of support in python and numpy
 
     py::class_<utils::RandomGenerator>(m, "RandomGenerator")
         .def(py::init<>())
@@ -861,7 +946,6 @@ PYBIND11_MODULE(pytroy_raw, m) {
         return get_buffer_from_vector(result);
     };
 
-
     auto encode_weights_doubles = [](const MatmulHelper& self, const CKKSEncoder& encoder, const py::array_t<double>& weights, std::optional<ParmsID> parms_id, double scale) {
         if (weights.ndim() != 1) 
             throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be flattened.");
@@ -894,7 +978,7 @@ PYBIND11_MODULE(pytroy_raw, m) {
         return get_buffer_from_vector(result);
     };
 
-    py::class_<MatmulHelper>(m, "MatmulHelper")
+    auto pythonMatmulHelperClass = py::class_<MatmulHelper>(m, "MatmulHelper")
         .def(py::init<size_t, size_t, size_t, size_t, MatmulObjective, bool>(), 
             py::arg("batch_size"), py::arg("input_dims"), py::arg("output_dims"),
             py::arg("slot_count"), py::arg_v("objective", MatmulObjective::EncryptLeft, "MatmulObjective.EncryptLeft"),
@@ -912,18 +996,18 @@ PYBIND11_MODULE(pytroy_raw, m) {
         .def("encode_weights", encode_weights_uint64s)
         .def("encode_inputs", encode_inputs_uint64s)
         .def("encode_outputs", encode_outputs_uint64s)
+        .def("decrypt_outputs", decrypt_outputs_uint64s)
         .def("encode_weights_uint64s", encode_weights_uint64s)
         .def("encode_inputs_uint64s", encode_inputs_uint64s)
         .def("encode_outputs_uint64s", encode_outputs_uint64s)
+        .def("decrypt_outputs_uint64s", decrypt_outputs_uint64s)
         .def("encode_weights_doubles", encode_weights_doubles)
         .def("encode_inputs_doubles", encode_inputs_doubles)
         .def("encode_outputs_doubles", encode_outputs_doubles)
+        .def("decrypt_outputs_doubles", decrypt_outputs_doubles)
         .def("matmul", &MatmulHelper::matmul)
         .def("matmul_reverse", &MatmulHelper::matmul_reverse)
         .def("matmul_cipher", &MatmulHelper::matmul_cipher)
-        .def("decrypt_outputs", decrypt_outputs_uint64s)
-        .def("decrypt_outputs_uint64s", decrypt_outputs_uint64s)
-        .def("decrypt_outputs_doubles", decrypt_outputs_doubles)
         .def("pack_outputs", &MatmulHelper::pack_outputs)
         .def("serialize_outputs", [](const MatmulHelper& self, const Evaluator &evaluator, const Cipher2d& x) {
             ostringstream ss; self.serialize_outputs(evaluator, x, ss); return py::bytes(ss.str());
@@ -932,6 +1016,10 @@ PYBIND11_MODULE(pytroy_raw, m) {
             istringstream ss(str); return self.deserialize_outputs(evaluator, ss);
         })
     ;
+
+    register_methods_matmul_polynomial_encoder_ring2k<uint32_t>(pythonMatmulHelperClass, "32");
+    register_methods_matmul_polynomial_encoder_ring2k<uint64_t>(pythonMatmulHelperClass, "64");
+    // register_methods_matmul_polynomial_encoder_ring2k<uint128_t>(pythonMatmulHelperClass, "128");
     
 
     py::class_<Conv2dHelper>(m, "Conv2dHelper")
