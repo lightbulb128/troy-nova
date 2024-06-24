@@ -3,6 +3,7 @@
 #include "../batch_encoder.cuh"
 #include "../ckks_encoder.cuh"
 #include "cipher2d.cuh"
+#include "encoder_adapter.cuh"
 
 namespace troy { namespace linear {
 
@@ -20,19 +21,23 @@ namespace troy { namespace linear {
 
         void determine_block();
 
-        Plaintext encode_weight_small_uint64s(
-            const BatchEncoder& encoder,
-            const uint64_t* weights,
+        template <typename E, typename T>
+        Plaintext encode_weights_small(
+            const E& encoder, const T* weights,
             size_t li, size_t ui, size_t lj, size_t uj
         ) const;
 
-        Plaintext encode_weight_small_doubles(
-            const CKKSEncoder& encoder,
-            const double* weights,
-            std::optional<ParmsID> parms_id,
-            double scale,
-            size_t li, size_t ui, size_t lj, size_t uj
-        ) const;
+        template <typename E, typename T>
+        Plain2d encode_weights(const E& encoder, const T* weights) const;
+
+        template <typename E, typename T>
+        Plain2d encode_inputs(const E& encoder, const T* inputs) const;
+
+        template <typename E, typename T>
+        Plain2d encode_outputs(const E& encoder, const T* outputs) const;
+
+        template <typename E, typename T>
+        std::vector<T> decrypt_outputs(const E& encoder, const Decryptor& decryptor, const Cipher2d& outputs) const;
 
     public:
     
@@ -49,82 +54,40 @@ namespace troy { namespace linear {
             determine_block();
         }
 
-        Plain2d encode_weights_uint64s(
-            const BatchEncoder& encoder,
-            const uint64_t* weights
-        ) const;
+        Plain2d encode_weights_uint64s(const BatchEncoder& encoder, const uint64_t* weights) const;
+        Plain2d encode_weights_doubles(const CKKSEncoder& encoder, const double* weights, std::optional<ParmsID> parms_id, double scale) const;
+        template <typename T>
+        Plain2d encode_weights_ring2k(const PolynomialEncoderRing2k<T>& encoder, const T* weights, std::optional<ParmsID> parms_id) const;
 
-        Plain2d encode_inputs_uint64s(
-            const BatchEncoder& encoder,
-            const uint64_t* inputs
-        ) const;
+        Plain2d encode_inputs_uint64s(const BatchEncoder& encoder, const uint64_t* inputs) const;
+        Plain2d encode_inputs_doubles(const CKKSEncoder& encoder, const double* inputs, std::optional<ParmsID> parms_id, double scale) const;
+        template <typename T>
+        Plain2d encode_inputs_ring2k(const PolynomialEncoderRing2k<T>& encoder, const T* inputs, std::optional<ParmsID> parms_id) const;
 
-        Cipher2d encrypt_inputs_uint64s(
-            const Encryptor& encryptor,
-            const BatchEncoder& encoder, 
-            const uint64_t* inputs
-        ) const;
-
-        Plain2d encode_weights_doubles(
-            const CKKSEncoder& encoder,
-            const double* weights,
-            std::optional<ParmsID> parms_id,
-            double scale
-        ) const;
-
-        Plain2d encode_inputs_doubles(
-            const CKKSEncoder& encoder,
-            const double* inputs,
-            std::optional<ParmsID> parms_id,
-            double scale
-        ) const;
-
-        Cipher2d encrypt_inputs_doubles(
-            const Encryptor& encryptor,
-            const CKKSEncoder& encoder, 
-            const double* inputs,
-            std::optional<ParmsID> parms_id,
-            double scale
-        ) const;
+        Cipher2d encrypt_inputs_uint64s(const Encryptor& encryptor, const BatchEncoder& encoder, const uint64_t* inputs) const;
+        Cipher2d encrypt_inputs_doubles(const Encryptor& encryptor, const CKKSEncoder& encoder,  const double* inputs, std::optional<ParmsID> parms_id, double scale) const;
+        template <typename T>
+        Cipher2d encrypt_inputs_ring2k(const Encryptor& encryptor, const PolynomialEncoderRing2k<T>& encoder, const T* inputs, std::optional<ParmsID> parms_id) const;
 
         Cipher2d matmul(const Evaluator& evaluator, const Cipher2d& a, const Plain2d& w) const;
-
         Cipher2d matmul_cipher(const Evaluator& evaluator, const Cipher2d& a, const Cipher2d& w) const;
-
         Cipher2d matmul_reverse(const Evaluator& evaluator, const Plain2d& a, const Cipher2d& w) const;
 
-        Plain2d encode_outputs_uint64s(
-            const BatchEncoder& encoder, 
-            const uint64_t* outputs
-        ) const;
+        Plain2d encode_outputs_uint64s(const BatchEncoder& encoder, const uint64_t* outputs) const;
+        Plain2d encode_outputs_doubles(const CKKSEncoder& encoder, const double* outputs, std::optional<ParmsID> parms_id, double scale) const;
+        template <typename T>
+        Plain2d encode_outputs_ring2k(const PolynomialEncoderRing2k<T>& encoder, const T* outputs, std::optional<ParmsID> parms_id) const;
 
-        Plain2d encode_outputs_doubles(
-            const CKKSEncoder& encoder, 
-            const double* outputs,
-            std::optional<ParmsID> parms_id,
-            double scale
-        ) const;
-
-        std::vector<uint64_t> decrypt_outputs_uint64s(
-            const BatchEncoder& encoder,
-            const Decryptor& decryptor,
-            const Cipher2d& outputs
-        ) const;
-
-        std::vector<double> decrypt_outputs_doubles(
-            const CKKSEncoder& encoder,
-            const Decryptor& decryptor,
-            const Cipher2d& outputs
-        ) const;
+        std::vector<uint64_t> decrypt_outputs_uint64s(const BatchEncoder& encoder, const Decryptor& decryptor, const Cipher2d& outputs) const;
+        std::vector<double> decrypt_outputs_doubles(const CKKSEncoder& encoder, const Decryptor& decryptor, const Cipher2d& outputs) const;
+        template <typename T>
+        std::vector<T> decrypt_outputs_ring2k(const PolynomialEncoderRing2k<T>& encoder, const Decryptor& decryptor, const Cipher2d& outputs) const;
 
         Cipher2d pack_outputs(const Evaluator& evaluator, const GaloisKeys& autoKey, const Cipher2d& cipher) const;
 
         void serialize_encoded_weights(const Plain2d& w, std::ostream& stream) const;
-
         Plain2d deserialize_encoded_weights(std::istream& stream) const;
-
         void serialize_outputs(const Evaluator &evaluator, const Cipher2d& x, std::ostream& stream) const;
-
         Cipher2d deserialize_outputs(const Evaluator &evaluator, std::istream& stream) const;
 
     };

@@ -36,6 +36,7 @@ if(TROY_TEST)
         app/matmul_ckks.cu
         app/conv2d.cu
         app/bfv_ring2k.cu
+        app/matmul_ring2k.cu
 
         special_prime_for_encryption.cu
 

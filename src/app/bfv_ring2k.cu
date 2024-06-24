@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <unordered_map>
 
-namespace troy::bfv_ring2k {
+namespace troy::linear {
 
     using utils::Array;
     using utils::MultiplyUint64Operand;
@@ -86,63 +86,6 @@ namespace troy::bfv_ring2k {
     modulo_from_limbs(ConstSlice<uint64_t> limbs, size_t mod_bit_length) {
         return static_cast<T>(assemble_from_limbs(limbs) & modulo_mask<T>(mod_bit_length));
     }
-
-    std::string modulus_to_string(const Modulus& modulus) {
-        std::stringstream ss;
-        ss << "Modulus(" << modulus.value() << "), constratio = [" 
-            << modulus.const_ratio()[0] << ", " << modulus.const_ratio()[1] << ", "
-            << modulus.const_ratio()[2] << "]";
-        return ss.str();
-    } 
-
-    inline uint64_t reduce_uint128(const Modulus& modulus, utils::ConstSlice<uint64_t> input) {
-        using utils::Slice;
-        using utils::ConstSlice;
-        // Reduces input using base 2^64 Barrett reduction
-        // input allocation size must be 128 bits
-        uint64_t tmp1 = 0;
-        uint64_t tmp2[2] = {0, 0};
-        Slice<uint64_t> tmp2_slice(tmp2, 2, utils::on_device());
-        uint64_t tmp3 = 0;
-        uint64_t carry = 0;
-        ConstSlice<uint64_t> const_ratio = modulus.const_ratio();
-
-        // Multiply input and const_ratio
-        // Round 1
-        utils::multiply_uint64_high_word(input[0], const_ratio[0], carry);
-        utils::multiply_uint64_uint64(input[0], const_ratio[1], tmp2_slice);
-        tmp3 = tmp2[1] + static_cast<uint64_t>(utils::add_uint64(tmp2[0], carry, tmp1));
-        
-        std::cout << "s0 tmp1 = " << tmp1 << " | tmp2 = " << tmp2[0] << ", " << tmp2[1] 
-            << " | tmp3 = " << tmp3 << " | carry = " << carry << std::endl;
-
-        // Round 2
-        utils::multiply_uint64_uint64(input[1], const_ratio[0], tmp2_slice);
-        carry = tmp2[1] + static_cast<uint64_t>(utils::add_uint64(tmp1, tmp2[0], tmp1));
-
-        std::cout << "s1 tmp1 = " << tmp1 << " | tmp2 = " << tmp2[0] << ", " << tmp2[1] 
-            << " | tmp3 = " << tmp3 << " | carry = " << carry << std::endl;
-
-        // This is all we care about
-        tmp1 = input[1] * const_ratio[1] + tmp3 + carry;
-
-        std::cout << "s2 tmp1 = " << tmp1 << " | tmp2 = " << tmp2[0] << ", " << tmp2[1] 
-            << " | tmp3 = " << tmp3 << " | carry = " << carry << std::endl;
-
-        // Barrett subtraction
-        tmp3 = input[0] - tmp1 * modulus.value();
-
-        std::cout << "s3 tmp1 = " << tmp1 << " | tmp2 = " << tmp2[0] << ", " << tmp2[1] 
-            << " | tmp3 = " << tmp3 << " | carry = " << carry << std::endl;
-
-        // One more subtraction is enough
-        if (tmp3 >= modulus.value()) {
-            return tmp3 - modulus.value();
-        } else {
-            return tmp3;
-        }
-    }
-
 
     template <typename T>
     PolynomialEncoderRNSHelper<T>::PolynomialEncoderRNSHelper(ContextDataPointer context_data, size_t t_bit_length) {
@@ -317,9 +260,15 @@ namespace troy::bfv_ring2k {
             uint128_t x = source[i];
             uint64_t x64 = modulus[mod_idx].reduce_uint128(x);
             uint64_t u = troy::utils::multiply_uint64operand_mod(x64, Q_div_t_mod_qi[mod_idx], modulus[mod_idx]);
-            ConstSlice<uint64_t> Q_mod_t(reinterpret_cast<const uint64_t *>(&Q_mod_t), 2, true);
-            ConstSlice<uint64_t> xlimbs(reinterpret_cast<const uint64_t *>(&x), 2, true);
-            ConstSlice<uint64_t> t_half(reinterpret_cast<const uint64_t *>(&t_half), 2, true);
+            
+            // ensure 8-byte alignment
+            uint64_t Q_mod_t_arr[2]; set_uint64s_with_uint128(Q_mod_t_arr, Q_mod_t);
+            uint64_t t_half_arr[2]; set_uint64s_with_uint128(t_half_arr, t_half);
+            uint64_t x_arr[2]; set_uint64s_with_uint128(x_arr, x);
+
+            ConstSlice<uint64_t> Q_mod_t(Q_mod_t_arr, 2, true);
+            ConstSlice<uint64_t> xlimbs(x_arr, 2, true);
+            ConstSlice<uint64_t> t_half(t_half_arr, 2, true);
 
             // Compute round(x * Q_mod_t / t) for 2^64 < x, t <= 2^128
             // round(x * Q_mod_t / t) = floor((x * Q_mod_t + t_half) / t)
@@ -339,6 +288,8 @@ namespace troy::bfv_ring2k {
 
     template <>
     void PolynomialEncoderRNSHelper<uint128_t>::scale_up_component(utils::ConstSlice<uint128_t> source, const HeContext& context, size_t modulus_index, utils::Slice<uint64_t> destination) const {
+        utils::Array<uint64_t> source64(source.size() * 2, false);
+        source64.copy_from_slice(ConstSlice<uint64_t>(reinterpret_cast<const uint64_t*>(source.raw_pointer()), source.size() * 2, source.on_device()));
         ContextDataPointer context_data = context.get_context_data(this->parms_id_).value();
         custom_assert(source.on_device() == destination.on_device(), "[PolynomialEncoderRNSHelper::scale_up_component] source and destination are not in the same device");
         const EncryptionParameters& parms = context_data->parms();
@@ -468,7 +419,7 @@ namespace troy::bfv_ring2k {
 
 
     template <typename T>
-    void PolynomialEncoderRNSHelper<T>::scale_down(const Plaintext& input, const HeContext& context, utils::Slice<T> destination) {
+    void PolynomialEncoderRNSHelper<T>::scale_down(const Plaintext& input, const HeContext& context, utils::Slice<T> destination) const {
         // Ref: Bajard et al. "A Full RNS Variant of FV like Somewhat Homomorphic
         // Encryption Schemes" (Section 3.2 & 3.3)
         // NOTE(juhou): Basically the same code in seal/util/rns.cpp instead we

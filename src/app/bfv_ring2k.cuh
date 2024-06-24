@@ -1,7 +1,11 @@
 #pragma once
-#include "../troy.cuh"
+#include "../utils/basics.cuh"
+#include "../modulus.cuh"
+#include "../he_context.cuh"
+#include "../plaintext.cuh"
 
-namespace troy::bfv_ring2k {
+
+namespace troy::linear {
 
     // Only available for T = uint32_t, uint64_t and uint128_t
     template<typename T>
@@ -61,7 +65,7 @@ namespace troy::bfv_ring2k {
             void scale_up_component(utils::ConstSlice<T> source, const HeContext& context, size_t modulus_index, utils::Slice<uint64_t> destination) const;
             void centralize_at_component(utils::ConstSlice<T> source, const HeContext& context, size_t modulus_index, utils::Slice<uint64_t> destination) const;
 
-            void scale_up(utils::ConstSlice<T> source, const HeContext& context, Plaintext& destination) {
+            void scale_up(utils::ConstSlice<T> source, const HeContext& context, Plaintext& destination) const {
                 if (source.on_device() != this->on_device()) {
                     throw std::invalid_argument("[PolynomialEncoderRNSHelper:scale_up] source and helper must be on the same device");
                 }
@@ -73,7 +77,7 @@ namespace troy::bfv_ring2k {
                     this->scale_up_component(source, context, i, destination.component(i));
                 }
             }
-            void centralize(utils::ConstSlice<T> source, const HeContext& context, Plaintext& destination) {
+            void centralize(utils::ConstSlice<T> source, const HeContext& context, Plaintext& destination) const {
                 if (source.on_device() != this->on_device()) {
                     throw std::invalid_argument("[PolynomialEncoderRNSHelper:scale_up] source and helper must be on the same device");
                 }
@@ -86,7 +90,7 @@ namespace troy::bfv_ring2k {
                 }
             }
             
-            void scale_down(const Plaintext& input, const HeContext& context, utils::Slice<T> destination);
+            void scale_down(const Plaintext& input, const HeContext& context, utils::Slice<T> destination) const;
 
     };
 
@@ -121,7 +125,7 @@ namespace troy::bfv_ring2k {
                 }
             }
 
-            void scale_up(utils::ConstSlice<T> source, std::optional<ParmsID> parms_id, Plaintext& destination) {
+            void scale_up(utils::ConstSlice<T> source, std::optional<ParmsID> parms_id, Plaintext& destination) const {
                 ParmsID pid = parms_id.value_or(context_->first_parms_id());
                 auto helper = get_helper(pid);
                 if (!helper.has_value()) {
@@ -129,7 +133,7 @@ namespace troy::bfv_ring2k {
                 }
                 helper.value()->scale_up(source, *context_, destination);
             }
-            void scale_up(const std::vector<T>& source, std::optional<ParmsID> parms_id, Plaintext& destination) {
+            void scale_up(const std::vector<T>& source, std::optional<ParmsID> parms_id, Plaintext& destination) const {
                 if (on_device()) {
                     utils::Array<T> source_array(source.size(), true); 
                     source_array.copy_from_slice(utils::ConstSlice<T>(source.data(), source.size(), false));
@@ -139,18 +143,18 @@ namespace troy::bfv_ring2k {
                 }
             }
 
-            Plaintext scale_up_new(utils::ConstSlice<T> source, std::optional<ParmsID> parms_id) {
+            Plaintext scale_up_new(utils::ConstSlice<T> source, std::optional<ParmsID> parms_id) const {
                 Plaintext destination;
                 this->scale_up(source, parms_id, destination);
                 return destination;
             }
-            Plaintext scale_up_new(const std::vector<T>& source, std::optional<ParmsID> parms_id) {
+            Plaintext scale_up_new(const std::vector<T>& source, std::optional<ParmsID> parms_id) const {
                 Plaintext destination;
                 this->scale_up(source, parms_id, destination);
                 return destination;
             }
 
-            void centralize(utils::ConstSlice<T> source, std::optional<ParmsID> parms_id, Plaintext& destination) {
+            void centralize(utils::ConstSlice<T> source, std::optional<ParmsID> parms_id, Plaintext& destination) const {
                 ParmsID pid = parms_id.value_or(context_->first_parms_id());
                 auto helper = get_helper(pid);
                 if (!helper.has_value()) {
@@ -158,7 +162,7 @@ namespace troy::bfv_ring2k {
                 }
                 helper.value()->centralize(source, *context_, destination);
             }
-            void centralize(const std::vector<T>& source, std::optional<ParmsID> parms_id, Plaintext& destination) {
+            void centralize(const std::vector<T>& source, std::optional<ParmsID> parms_id, Plaintext& destination) const {
                 if (on_device()) {
                     utils::Array<T> source_array(source.size(), true); 
                     source_array.copy_from_slice(utils::ConstSlice<T>(source.data(), source.size(), false));
@@ -168,18 +172,18 @@ namespace troy::bfv_ring2k {
                 }
             }
 
-            Plaintext centralize_new(utils::ConstSlice<T> source, std::optional<ParmsID> parms_id) {
+            Plaintext centralize_new(utils::ConstSlice<T> source, std::optional<ParmsID> parms_id) const {
                 Plaintext destination;
                 this->centralize(source, parms_id, destination);
                 return destination;
             }
-            Plaintext centralize_new(const std::vector<T>& source, std::optional<ParmsID> parms_id) {
+            Plaintext centralize_new(const std::vector<T>& source, std::optional<ParmsID> parms_id) const {
                 Plaintext destination;
                 this->centralize(source, parms_id, destination);
                 return destination;
             }
 
-            void scale_down(const Plaintext& input, utils::Slice<T> destination) {
+            void scale_down(const Plaintext& input, utils::Slice<T> destination) const {
                 auto helper = get_helper(input.parms_id());
                 if (!helper.has_value()) {
                     throw std::invalid_argument("[PolynomialEncoderRing2k:scale_down] No helper found for the given parms_id");
@@ -187,7 +191,7 @@ namespace troy::bfv_ring2k {
                 helper.value()->scale_down(input, *context_, destination);
             }
 
-            std::vector<T> scale_down_new(const Plaintext& input) {
+            std::vector<T> scale_down_new(const Plaintext& input) const {
                 if (input.on_device()) {
                     utils::Array<T> destination(input.poly_modulus_degree(), true);
                     this->scale_down(input, destination.reference());

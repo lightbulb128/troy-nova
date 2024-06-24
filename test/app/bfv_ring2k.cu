@@ -1,6 +1,7 @@
 #include <cstdlib>
 #include <gtest/gtest.h>
 #include "../../src/app/bfv_ring2k.cuh"
+#include "../../src/troy.cuh"
 
 namespace bfv_ring2k {
 
@@ -9,7 +10,7 @@ namespace bfv_ring2k {
     using std::stringstream;
     using std::vector;
     using uint128_t = __uint128_t;
-    using troy::bfv_ring2k::PolynomialEncoderRing2k;
+    using troy::linear::PolynomialEncoderRing2k;
 
     template<typename T>
     void print_vector(const vector<T>& vec) {
