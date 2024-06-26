@@ -91,6 +91,8 @@ void example_bgv_basics()
     print_line(__LINE__);
     cout << "Encrypt x_plain to x_encrypted." << endl;
     encryptor.encrypt_asymmetric(x_plain, x_encrypted);
+    cout << "    + noise budget in freshly encrypted x: " << decryptor.invariant_noise_budget(x_encrypted) << " bits"
+         << endl;
     cout << endl;
 
     /*
@@ -103,6 +105,7 @@ void example_bgv_basics()
     cout << "    + polynomial count of x_squared: " << x_squared.polynomial_count() << endl;
     evaluator.relinearize_inplace(x_squared, relin_keys);
     cout << "    + polynomial count of x_squared (after relinearization): " << x_squared.polynomial_count() << endl;
+    cout << "    + noise budget in x_squared: " << decryptor.invariant_noise_budget(x_squared) << " bits" << endl;
     Plaintext decrypted_result;
     decryptor.decrypt(x_squared, decrypted_result);
     vector<uint64_t> pod_result;
@@ -120,6 +123,7 @@ void example_bgv_basics()
     cout << "    + polynomial count of x_4th: " << x_4th.polynomial_count() << endl;
     evaluator.relinearize_inplace(x_4th, relin_keys);
     cout << "    + polynomial count of x_4th (after relinearization): " << x_4th.polynomial_count() << endl;
+    cout << "    + noise budget in x_4th: " << decryptor.invariant_noise_budget(x_4th) << " bits" << endl;
     decryptor.decrypt(x_4th, decrypted_result);
     batch_encoder.decode(decrypted_result, pod_result);
     cout << "    + result plaintext matrix ...... Correct." << endl;
@@ -135,6 +139,7 @@ void example_bgv_basics()
     cout << "    + polynomial count of x_8th: " << x_8th.polynomial_count() << endl;
     evaluator.relinearize_inplace(x_8th, relin_keys);
     cout << "    + polynomial count of x_8th (after relinearization): " << x_8th.polynomial_count() << endl;
+    cout << "    + noise budget in x_8th: " << decryptor.invariant_noise_budget(x_8th) << " bits" << endl;
     cout << "NOTE: Decryption can be incorrect if noise budget is zero." << endl;
 
     cout << endl;
@@ -149,6 +154,8 @@ void example_bgv_basics()
     print_line(__LINE__);
     cout << "Encrypt x_plain to x_encrypted." << endl;
     encryptor.encrypt_asymmetric(x_plain, x_encrypted);
+    cout << "    + noise budget in freshly encrypted x: " << decryptor.invariant_noise_budget(x_encrypted) << " bits"
+         << endl;
     cout << endl;
 
     /*
@@ -156,9 +163,13 @@ void example_bgv_basics()
     */
     print_line(__LINE__);
     cout << "Compute and relinearize x_squared (x^2)," << endl;
+    cout << "    + noise budget in x_squared (previously): " << decryptor.invariant_noise_budget(x_squared) << " bits"
+         << endl;
     evaluator.square(x_encrypted, x_squared);
     evaluator.relinearize_inplace(x_squared, relin_keys);
     evaluator.mod_switch_to_next_inplace(x_squared);
+    cout << "    + noise budget in x_squared (with modulus switching): " << decryptor.invariant_noise_budget(x_squared)
+         << " bits" << endl;
     decryptor.decrypt(x_squared, decrypted_result);
     batch_encoder.decode(decrypted_result, pod_result);
     cout << "    + result plaintext matrix ...... Correct." << endl;
@@ -169,9 +180,12 @@ void example_bgv_basics()
     */
     print_line(__LINE__);
     cout << "Compute and relinearize x_4th (x^4)," << endl;
+    cout << "    + noise budget in x_4th (previously): " << decryptor.invariant_noise_budget(x_4th) << " bits" << endl;
     evaluator.square(x_squared, x_4th);
     evaluator.relinearize_inplace(x_4th, relin_keys);
     evaluator.mod_switch_to_next_inplace(x_4th);
+    cout << "    + noise budget in x_4th (with modulus switching): " << decryptor.invariant_noise_budget(x_4th)
+         << " bits" << endl;
     decryptor.decrypt(x_4th, decrypted_result);
     batch_encoder.decode(decrypted_result, pod_result);
     cout << "    + result plaintext matrix ...... Correct." << endl;
@@ -182,9 +196,12 @@ void example_bgv_basics()
     */
     print_line(__LINE__);
     cout << "Compute and relinearize x_8th (x^8)," << endl;
+    cout << "    + noise budget in x_8th (previously): " << decryptor.invariant_noise_budget(x_8th) << " bits" << endl;
     evaluator.square(x_4th, x_8th);
     evaluator.relinearize_inplace(x_8th, relin_keys);
     evaluator.mod_switch_to_next_inplace(x_8th);
+    cout << "    + noise budget in x_8th (with modulus switching): " << decryptor.invariant_noise_budget(x_8th)
+         << " bits" << endl;
     decryptor.decrypt(x_8th, decrypted_result);
     batch_encoder.decode(decrypted_result, pod_result);
     cout << "    + result plaintext matrix ...... Correct." << endl;

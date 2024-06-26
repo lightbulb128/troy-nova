@@ -240,6 +240,12 @@ void example_bfv_basics()
     cout << "    + polynomial count of freshly encrypted x: " << x_encrypted.polynomial_count() << endl;
 
     /*
+    There is plenty of noise budget left in this freshly encrypted ciphertext.
+    */
+    cout << "    + noise budget in freshly encrypted x: " << decryptor.invariant_noise_budget(x_encrypted) << " bits"
+         << endl;
+
+    /*
     We decrypt the ciphertext and print the resulting plaintext in order to
     demonstrate correctness of the encryption.
     */
@@ -282,6 +288,8 @@ void example_bfv_basics()
     consumption.
     */
     cout << "    + polynomial count of x_sq_plus_one: " << x_sq_plus_one.polynomial_count() << endl;
+    cout << "    + noise budget in x_sq_plus_one: " << decryptor.invariant_noise_budget(x_sq_plus_one) << " bits"
+         << endl;
 
     /*
     Even though the size has grown, decryption works as usual as long as noise
@@ -301,6 +309,8 @@ void example_bfv_basics()
     evaluator.add_plain(x_encrypted, plain_one, x_plus_one_sq);
     evaluator.square_inplace(x_plus_one_sq);
     cout << "    + polynomial count of x_plus_one_sq: " << x_plus_one_sq.polynomial_count() << endl;
+    cout << "    + noise budget in x_plus_one_sq: " << decryptor.invariant_noise_budget(x_plus_one_sq) << " bits"
+         << endl;
     cout << "    + decryption of x_plus_one_sq: ";
     decryptor.decrypt(x_plus_one_sq, decrypted_result);
     cout << "0x" << decrypted_result.to_string() << " ...... Correct." << endl;
@@ -316,6 +326,8 @@ void example_bfv_basics()
     evaluator.multiply_plain_inplace(x_sq_plus_one, plain_four);
     evaluator.multiply(x_sq_plus_one, x_plus_one_sq, encrypted_result);
     cout << "    + polynomial count of encrypted_result: " << encrypted_result.polynomial_count() << endl;
+    cout << "    + noise budget in encrypted_result: " << decryptor.invariant_noise_budget(encrypted_result) << " bits"
+         << endl;
 
     cout << endl;
     cout << "~~~~~~ A better way to calculate 4(x^2+1)(x+1)^2. ~~~~~~" << endl;
@@ -360,6 +372,8 @@ void example_bfv_basics()
     evaluator.relinearize_inplace(x_squared, relin_keys);
     cout << "    + polynomial count of x_squared (after relinearization): " << x_squared.polynomial_count() << endl;
     evaluator.add_plain(x_squared, plain_one, x_sq_plus_one);
+    cout << "    + noise budget in x_sq_plus_one: " << decryptor.invariant_noise_budget(x_sq_plus_one) << " bits"
+         << endl;
     cout << "    + decryption of x_sq_plus_one: ";
     decryptor.decrypt(x_sq_plus_one, decrypted_result);
     cout << "0x" << decrypted_result.to_string() << " ...... Correct." << endl;
@@ -372,6 +386,8 @@ void example_bfv_basics()
     evaluator.square(x_plus_one, x_plus_one_sq);
     cout << "    + polynomial count of x_plus_one_sq: " << x_plus_one_sq.polynomial_count() << endl;
     evaluator.relinearize_inplace(x_plus_one_sq, relin_keys);
+    cout << "    + noise budget in x_plus_one_sq: " << decryptor.invariant_noise_budget(x_plus_one_sq) << " bits"
+         << endl;
     cout << "    + decryption of x_plus_one_sq: ";
     decryptor.decrypt(x_plus_one_sq, decrypted_result);
     cout << "0x" << decrypted_result.to_string() << " ...... Correct." << endl;
@@ -383,8 +399,11 @@ void example_bfv_basics()
     cout << "    + polynomial count of encrypted_result: " << encrypted_result.polynomial_count() << endl;
     evaluator.relinearize_inplace(encrypted_result, relin_keys);
     cout << "    + polynomial count of encrypted_result (after relinearization): " << encrypted_result.polynomial_count() << endl;
+    cout << "    + noise budget in encrypted_result: " << decryptor.invariant_noise_budget(encrypted_result) << " bits"
+         << endl;
 
     cout << endl;
+    cout << "NOTE: Notice the increase in remaining noise budget." << endl;
 
     /*
     Relinearization clearly improved our noise consumption. We have still plenty

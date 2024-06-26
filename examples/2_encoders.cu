@@ -143,6 +143,8 @@ void example_batch_encoder()
     print_line(__LINE__);
     cout << "Encrypt plain_matrix to encrypted_matrix." << endl;
     encryptor.encrypt_asymmetric(plain_matrix, encrypted_matrix);
+    cout << "    + Noise budget in encrypted_matrix: " << decryptor.invariant_noise_budget(encrypted_matrix) << " bits"
+         << endl;
 
     /*
     Operating on the ciphertext results in homomorphic operations being performed
@@ -174,6 +176,11 @@ void example_batch_encoder()
     evaluator.add_plain_inplace(encrypted_matrix, plain_matrix2);
     evaluator.square_inplace(encrypted_matrix);
     evaluator.relinearize_inplace(encrypted_matrix, relin_keys);
+
+    /*
+    How much noise budget do we have left?
+    */
+    cout << "    + Noise budget in result: " << decryptor.invariant_noise_budget(encrypted_matrix) << " bits" << endl;
 
     /*
     We decrypt and decompose the plaintext to recover the result as a matrix.

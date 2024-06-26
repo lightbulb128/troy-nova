@@ -22,3 +22,7 @@
     - `scale_up`, `centralize` are used for encoding, while `scale_down` is for decoding. See the evaluator unit tests for some usages.
     - Matrix multiplication support for Ring2k-BFV.
     - Pybind11 encapsulation. This only includes `uint32_t` and `uint64_t` versions, since native 128-bit support is missing in pybind11/python/numpy.
+
+## 2024-06-26
+
+- Implement `invariant_noist_budget` in `Decryptor`, available for BFV and BGV.

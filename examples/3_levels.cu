@@ -214,6 +214,7 @@ void example_levels()
     {
         cout << " Level (chain index): " << context_data->chain_index() << endl;
         cout << "      parms_id of encrypted: " << encrypted.parms_id() << endl;
+        cout << "      Noise budget at this level: " << decryptor.invariant_noise_budget(encrypted) << " bits" << endl;
         cout << "\\" << endl;
         cout << " \\-->";
         evaluator.mod_switch_to_next_inplace(encrypted);
@@ -221,6 +222,7 @@ void example_levels()
     }
     cout << " Level (chain index): " << context_data->chain_index() << endl;
     cout << "      parms_id of encrypted: " << encrypted.parms_id() << endl;
+    cout << "      Noise budget at this level: " << decryptor.invariant_noise_budget(encrypted) << " bits" << endl;
     cout << "\\" << endl;
     cout << " \\-->";
     cout << " End of chain reached" << endl << endl;
@@ -253,16 +255,24 @@ void example_levels()
     print_line(__LINE__);
     cout << "Compute the 8th power." << endl;
     encryptor.encrypt_asymmetric(plain, encrypted);
+    cout << "    + Noise budget fresh:                   " << decryptor.invariant_noise_budget(encrypted) << " bits"
+         << endl;
     evaluator.square_inplace(encrypted);
     evaluator.relinearize_inplace(encrypted, relin_keys);
+    cout << "    + Noise budget of the 2nd power:         " << decryptor.invariant_noise_budget(encrypted) << " bits"
+         << endl;
     evaluator.square_inplace(encrypted);
     evaluator.relinearize_inplace(encrypted, relin_keys);
+    cout << "    + Noise budget of the 4th power:         " << decryptor.invariant_noise_budget(encrypted) << " bits"
+         << endl;
 
     /*
     Surprisingly, in this case modulus switching has no effect at all on the
     noise budget.
     */
     evaluator.mod_switch_to_next_inplace(encrypted);
+    cout << "    + Noise budget after modulus switching:  " << decryptor.invariant_noise_budget(encrypted) << " bits"
+         << endl;
 
     /*
     This means that there is no harm at all in dropping some of the coefficient
@@ -274,7 +284,11 @@ void example_levels()
     */
     evaluator.square_inplace(encrypted);
     evaluator.relinearize_inplace(encrypted, relin_keys);
+    cout << "    + Noise budget of the 8th power:         " << decryptor.invariant_noise_budget(encrypted) << " bits"
+         << endl;
     evaluator.mod_switch_to_next_inplace(encrypted);
+    cout << "    + Noise budget after modulus switching:  " << decryptor.invariant_noise_budget(encrypted) << " bits"
+         << endl;
 
     /*
     At this point the ciphertext still decrypts correctly, has very small size,

@@ -68,6 +68,8 @@ void example_rotation_bfv()
     batch_encoder.encode(pod_matrix, plain_matrix);
     Ciphertext encrypted_matrix;
     encryptor.encrypt_asymmetric(plain_matrix, encrypted_matrix);
+    cout << "    + Noise budget in fresh encryption: " << decryptor.invariant_noise_budget(encrypted_matrix) << " bits"
+         << endl;
     cout << endl;
 
     /*
@@ -83,6 +85,8 @@ void example_rotation_bfv()
     cout << "Rotate rows 3 steps left." << endl;
     evaluator.rotate_rows_inplace(encrypted_matrix, 3, galois_keys);
     Plaintext plain_result;
+    cout << "    + Noise budget after rotation: " << decryptor.invariant_noise_budget(encrypted_matrix) << " bits"
+         << endl;
     cout << "    + Decrypt and decode ...... Correct." << endl;
     decryptor.decrypt(encrypted_matrix, plain_result);
     batch_encoder.decode(plain_result, pod_matrix);
@@ -94,6 +98,8 @@ void example_rotation_bfv()
     print_line(__LINE__);
     cout << "Rotate columns." << endl;
     evaluator.rotate_columns_inplace(encrypted_matrix, galois_keys);
+    cout << "    + Noise budget after rotation: " << decryptor.invariant_noise_budget(encrypted_matrix) << " bits"
+         << endl;
     cout << "    + Decrypt and decode ...... Correct." << endl;
     decryptor.decrypt(encrypted_matrix, plain_result);
     batch_encoder.decode(plain_result, pod_matrix);
@@ -105,6 +111,8 @@ void example_rotation_bfv()
     print_line(__LINE__);
     cout << "Rotate rows 4 steps right." << endl;
     evaluator.rotate_rows_inplace(encrypted_matrix, -4, galois_keys);
+    cout << "    + Noise budget after rotation: " << decryptor.invariant_noise_budget(encrypted_matrix) << " bits"
+         << endl;
     cout << "    + Decrypt and decode ...... Correct." << endl;
     decryptor.decrypt(encrypted_matrix, plain_result);
     batch_encoder.decode(plain_result, pod_matrix);
