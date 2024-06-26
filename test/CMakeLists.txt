@@ -40,6 +40,8 @@ if(TROY_TEST)
 
         special_prime_for_encryption.cu
 
+        multithread.cu
+
     )
 
     target_link_libraries(troytest gtest gtest_main troy)
@@ -59,10 +61,13 @@ if(TROY_BENCH)
 
     add_executable(troybench)
     target_sources(troybench PRIVATE 
+        argparse.cpp
         bench/he_operations.cu
         test_adv.cu
     )
     target_link_libraries(troybench troy)
+    
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/bench/compare.py ${CMAKE_CURRENT_BINARY_DIR}/compare.py COPYONLY)
 
     add_executable(bench_matmul)
     target_sources(bench_matmul PRIVATE 

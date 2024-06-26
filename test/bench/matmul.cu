@@ -39,15 +39,15 @@ void test_matmul(const GeneralHeContext& context, size_t m, size_t r, size_t n, 
     
     timer_total.restart();
     timer.restart();
-    Plain2d x_encoded = helper.encode_inputs(encoder, x.integers().data());
+    Plain2d x_encoded = helper.encode_inputs_uint64s(encoder, x.integers().data());
     timer.finish("Encode inputs");
 
     timer.restart();
-    Plain2d w_encoded = helper.encode_weights(encoder, w.integers().data());
+    Plain2d w_encoded = helper.encode_weights_uint64s(encoder, w.integers().data());
     timer.finish("Encode weights");
 
     timer.restart();
-    Plain2d s_encoded = helper.encode_outputs(encoder, s.integers().data());
+    Plain2d s_encoded = helper.encode_outputs_uint64s(encoder, s.integers().data());
     timer.finish("Encode bias");
 
     timer.restart();
@@ -91,7 +91,7 @@ void test_matmul(const GeneralHeContext& context, size_t m, size_t r, size_t n, 
     timer.finish("Deserialize outputs");
 
     timer.restart();
-    auto y_decrypted = helper.decrypt_outputs(encoder, decryptor, y_encrypted);
+    auto y_decrypted = helper.decrypt_outputs_uint64s(encoder, decryptor, y_encrypted);
     timer.finish("Decrypt outputs");
 
     timer_total.finish("Total");

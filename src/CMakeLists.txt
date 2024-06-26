@@ -8,6 +8,9 @@ add_library(troy SHARED ${CURRENT_HEADERS} ${CURRENT_SOURCES})
 add_library(troy_static STATIC ${CURRENT_HEADERS} ${CURRENT_SOURCES})
 set_target_properties(troy PROPERTIES CUDA_SEPERABLE_COMPILATION ON)
 
+target_link_libraries(troy PUBLIC Threads::Threads)
+target_link_libraries(troy_static PUBLIC Threads::Threads)
+
 set(gcc_like_cxx "$<COMPILE_LANG_AND_ID:CXX,ARMClang,AppleClang,Clang,GNU>")
 set(nvcc_cxx "$<COMPILE_LANG_AND_ID:CUDA,NVIDIA>")
 

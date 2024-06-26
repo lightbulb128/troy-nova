@@ -55,4 +55,4 @@ if __name__ == "__main__":
         # print key padded with spaces, right aligned
         print(key.ljust(KEY_MAX_LENGTH), end=" ")
         print(": {:6.2f}x".format(host_value / device_value), end=" ")
-        print("({:6.2f} vs {:6.2f} us)".format(host_value, device_value))
+        print("({:8.2f} vs {:8.2f} us)".format(host_value, device_value))

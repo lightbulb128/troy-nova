@@ -6,7 +6,8 @@ namespace troy {
 
 #ifdef TROY_MEMORY_POOL
 
-        MemoryPool MemoryPool::singleton;
+        std::shared_ptr<MemoryPool> MemoryPool::global_pool = nullptr;
+        std::mutex MemoryPool::global_pool_mutex = std::mutex();
 
 #endif
 

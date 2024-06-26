@@ -42,6 +42,8 @@ if (TROY_MEMORY_POOL_UNSAFE)
   endif()
 endif()
 
+find_package(Threads REQUIRED)
+
 add_subdirectory(src)
 
 if(TROY_PYBIND)
