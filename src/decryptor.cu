@@ -1,4 +1,6 @@
 #include "decryptor.cuh"
+#include "encryption_parameters.cuh"
+#include "utils/constants.h"
 
 namespace troy {
 
@@ -244,6 +246,93 @@ namespace troy {
         destination.is_ntt_form() = false;
         destination.coeff_modulus_size() = coeff_modulus_size;
         destination.poly_modulus_degree() = coeff_count;
+    }
+
+    static void poly_infty_norm(ConstSlice<uint64_t> poly, size_t coeff_uint64_count, ConstSlice<uint64_t> modulus, utils::Slice<uint64_t> result) {
+        if (modulus.size() != coeff_uint64_count) {
+            throw std::invalid_argument("[poly_infty_norm] Modulus is not valid.");
+        }
+        bool device = poly.on_device();
+        // Construct negative threshold: (modulus + 1) / 2
+        Array<uint64_t> modulus_neg_threshold(modulus.size(), device);
+        utils::half_round_up_uint(modulus, modulus_neg_threshold.reference());
+        // Mod out the poly coefficients and choose a symmetric representative from [-modulus,modulus)
+        result.set_zero();
+        Array<uint64_t> coeff_abs_value(coeff_uint64_count, device);
+        coeff_abs_value.set_zero();
+        size_t coeff_count = poly.size() / coeff_uint64_count;
+        for (size_t i = 0; i < coeff_count; i++) {
+            ConstSlice<uint64_t> poly_i = poly.const_slice(i * coeff_uint64_count, (i + 1) * coeff_uint64_count);
+            if (utils::is_greater_or_equal_uint(poly_i, modulus_neg_threshold.const_reference())) {
+                utils::sub_uint(modulus, poly_i, coeff_abs_value.reference());
+            } else {
+                coeff_abs_value.copy_from_slice(poly_i);
+            }
+            if (utils::is_greater_than_uint(coeff_abs_value.const_reference(), result.as_const())) {
+                result.copy_from_slice(coeff_abs_value.const_reference());
+            }
+        }
+    }
+
+    size_t Decryptor::invariant_noise_budget(const Ciphertext& encrypted) const {
+        if (encrypted.polynomial_count() < utils::HE_CIPHERTEXT_SIZE_MIN) {
+            throw std::invalid_argument("[Decryptor::invariant_noise_budget] Ciphertext is invalid.");
+        }
+        SchemeType scheme = this->context()->first_context_data().value()->parms().scheme();
+        if (scheme != SchemeType::BFV && scheme != SchemeType::BGV) {
+            throw std::invalid_argument("[Decryptor::invariant_noise_budget] Unsupported scheme.");
+        }
+        ContextDataPointer context_data = this->context()->get_context_data(encrypted.parms_id()).value();
+        const EncryptionParameters& parms = context_data->parms();
+        ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
+        size_t coeff_modulus_size = coeff_modulus.size();
+        size_t coeff_count = parms.poly_modulus_degree();
+        const Modulus& plain_modulus = parms.plain_modulus_host();
+
+        // Now need to compute c(s) - Delta*m (mod q)
+        // Firstly find c_0 + c_1 *s + ... + c_{count-1} * s^{count-1} mod q
+        // This is equal to Delta m + v where ||v|| < Delta/2.
+        // put < (c_1 , c_2, ... , c_{count-1}) , (s,s^2,...,s^{count-1}) > mod q
+        // in destination_poly.
+        // Now do the dot product of encrypted_copy and the secret key array using NTT.
+        // The secret key powers are already NTT transformed.
+        Array<uint64_t> noise_poly(coeff_count * coeff_modulus_size, encrypted.on_device());
+        this->dot_product_ct_sk_array(encrypted, noise_poly.reference());
+
+        if (encrypted.is_ntt_form()) {
+            // In the case of NTT form, we need to transform the noise to normal form
+            utils::inverse_ntt_negacyclic_harvey_p(noise_poly.reference(), coeff_count, context_data->small_ntt_tables());
+        }
+
+        // Multiply by plain_modulus and reduce mod coeff_modulus to get
+        // coeffModulus()*noise.
+        if (scheme == SchemeType::BFV) {
+            utils::multiply_scalar_inplace_p(
+                noise_poly.reference(), plain_modulus.value(), coeff_count, coeff_modulus
+            );
+        }
+
+        // CRT-compose the noise
+        context_data->rns_tool().base_q().compose_array(noise_poly.reference());
+
+        // Next we compute the infinity norm mod parms.coeffModulus()
+        Array<uint64_t> norm(coeff_modulus_size, false);
+        noise_poly.to_host_inplace();
+        Array<uint64_t> total_coeff_modulus = Array<uint64_t>::create_and_copy_from_slice(context_data->total_coeff_modulus(), false);
+        poly_infty_norm(noise_poly.const_reference(), coeff_modulus_size, total_coeff_modulus.const_reference(), norm.reference());
+
+        // The -1 accounts for scaling the invariant noise by 2;
+        // note that we already took plain_modulus into account in compose
+        // so no need to subtract log(plain_modulus) from this
+        int64_t bit_count_diff = 
+            static_cast<int64_t>(context_data->total_coeff_modulus_bit_count()) 
+            - static_cast<int64_t>(utils::get_significant_bit_count_uint(norm.const_reference())) 
+            - 1;
+        if (bit_count_diff < 0) {
+            return 0;
+        } else {
+            return static_cast<size_t>(bit_count_diff);
+        }
     }
 
 }

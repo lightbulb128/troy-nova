@@ -102,6 +102,9 @@ namespace troy {namespace utils {
         if (value.size() != base_.size()) {
             throw std::runtime_error("[RNSBase::decompose_single] Invalid size of value.");
         }
+        if (value.on_device() || this->on_device()) {
+            throw std::invalid_argument("[RNSBase::decompose_single] Value and RNSBase must be on host memory. If you wish to conduct on device, use decompose_array instead.");
+        }
         if (this->size() > 1) {
             Array<uint64_t> copied = Array<uint64_t>::create_and_copy_from_slice(value.as_const());
             for (size_t i = 0; i < base_.size(); ++i) {
@@ -164,6 +167,9 @@ namespace troy {namespace utils {
     void RNSBase::compose_single(Slice<uint64_t> value) const {
         if (value.size() != base_.size()) {
             throw std::runtime_error("[RNSBase::compose_single] Invalid size of value.");
+        }
+        if (value.on_device() || this->on_device()) {
+            throw std::invalid_argument("[RNSBase::compose_single] Value and RNSBase must be on host memory. If you wish to conduct on device, use compose_array instead.");
         }
         if (this->size() > 1) {
             Array<uint64_t> copied = Array<uint64_t>::create_and_copy_from_slice(value.as_const());

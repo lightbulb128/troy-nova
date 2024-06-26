@@ -45,6 +45,8 @@ namespace troy {
             return destination;
         }
 
+        size_t invariant_noise_budget(const Ciphertext& encrypted) const;
+
     };
 
 }

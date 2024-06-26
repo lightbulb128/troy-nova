@@ -4,6 +4,7 @@
 #include "../src/ckks_encoder.cuh"
 #include "../src/encryptor.cuh"
 #include "../src/decryptor.cuh"
+#include "../src/evaluator.cuh"
 
 namespace encryptor {
 
@@ -284,6 +285,61 @@ namespace encryptor {
 
     TEST(EncryptorTest, DeviceCKKS) {
         test_ckks(true);
+        utils::MemoryPool::Destroy();
+    }
+
+    void test_invariant_noise_budget(bool device, bool is_bgv) {
+        size_t n = 4096;
+        size_t log_t = 20;
+        vector<size_t> log_qi = {35, 30, 35};
+        EncryptionParameters parms(is_bgv ? SchemeType::BGV : SchemeType::BFV);
+        parms.set_poly_modulus_degree(n);
+        parms.set_plain_modulus(PlainModulus::batching(n, log_t));
+        parms.set_coeff_modulus(CoeffModulus::create(n, log_qi));
+
+        auto context = HeContext::create(parms, true, SecurityLevel::Nil);
+        auto encoder = BatchEncoder(context);
+        if (device) {
+            context->to_device_inplace();
+            encoder.to_device_inplace();
+        }
+        auto key_generator = KeyGenerator(context);
+        auto public_key = key_generator.create_public_key(false);
+        auto encryptor = Encryptor(context);
+        encryptor.set_public_key(public_key);
+        encryptor.set_secret_key(key_generator.secret_key());
+        auto decryptor = Decryptor(context, key_generator.secret_key());
+        auto evaluator = Evaluator(context);
+
+        auto ciphertext = encryptor.encrypt_zero_asymmetric_new();
+        size_t budget = decryptor.invariant_noise_budget(ciphertext);
+        ASSERT_TRUE(budget >= 30 && budget <= 40);
+        ASSERT_EQ(encoder.decode_new(decryptor.decrypt_new(ciphertext)), vector<uint64_t>(4096, 0));
+        
+        evaluator.square_inplace(ciphertext);
+        budget = decryptor.invariant_noise_budget(ciphertext);
+        ASSERT_TRUE(budget <= 10);
+        ASSERT_EQ(encoder.decode_new(decryptor.decrypt_new(ciphertext)), vector<uint64_t>(4096, 0));
+        
+        evaluator.square_inplace(ciphertext);
+        budget = decryptor.invariant_noise_budget(ciphertext);
+        ASSERT_TRUE(budget == 0);
+        auto wrong = encoder.decode_new(decryptor.decrypt_new(ciphertext));
+        size_t non_zero_count = 0;
+        for (size_t i = 0; i < n; i++) {
+            if (wrong[i] != 0) non_zero_count++;
+        }
+        ASSERT_TRUE(non_zero_count > 4000);
+    }
+
+    TEST(EncryptorTest, HostInvariantNoiseBudget) {
+        test_invariant_noise_budget(false, false);
+        test_invariant_noise_budget(false, true);
+    }
+
+    TEST(EncryptorTest, DeviceInvariantNoiseBudget) {
+        test_invariant_noise_budget(true, false);
+        test_invariant_noise_budget(true, true);
         utils::MemoryPool::Destroy();
     }
 }
