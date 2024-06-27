@@ -32,7 +32,7 @@ namespace troy {namespace scaling_variant {
 
     static void translate_plain(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, bool subtract) {
         bool device = plain.on_device();
-        if (!utils::same(device, context_data->on_device(), destination.on_device())) {
+        if (!utils::device_compatible(*context_data, plain, destination)) {
             throw std::invalid_argument("[scaling_variant::translate_plain] Arguments are not on the same device.");
         }
         const EncryptionParameters& parms = context_data->parms();
@@ -98,11 +98,11 @@ namespace troy {namespace scaling_variant {
         uint64_t numerator[2]{0, 0};
         uint64_t fix[2]{0, 0};
         // Compute numerator = (q mod t) * m[i] + (t+1)/2
-        utils::multiply_uint64_uint64(plain_data[i], q_mod_t, Slice(prod, 2, true));
+        utils::multiply_uint64_uint64(plain_data[i], q_mod_t, Slice(prod, 2, true, nullptr));
         uint8_t carry = utils::add_uint64(prod[0], plain_upper_half_threshold, numerator[0]);
         numerator[1] = prod[1] + static_cast<uint64_t>(carry);
         // Compute fix[0] = floor(numerator / t)
-        utils::divide_uint128_uint64_inplace(Slice(numerator, 2, true), plain_modulus_value, Slice(fix, 2, true));
+        utils::divide_uint128_uint64_inplace(Slice(numerator, 2, true, nullptr), plain_modulus_value, Slice(fix, 2, true, nullptr));
         uint64_t scaled_rounded_coeff = utils::multiply_uint64operand_add_uint64_mod(
             plain_data[i], coeff_div_plain_modulus[j], fix[0], coeff_modulus[j]
         );
@@ -120,7 +120,7 @@ namespace troy {namespace scaling_variant {
 
     void scale_up(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, bool add_to_destination, bool subtract) {
         bool device = plain.on_device();
-        if (!utils::same(device, context_data->on_device(), destination.on_device())) {
+        if (!utils::device_compatible(*context_data, plain, destination)) {
             throw std::invalid_argument("[scaling_variant::scale_up] Arguments are not on the same device.");
         }
         const EncryptionParameters& parms = context_data->parms();
@@ -140,9 +140,9 @@ namespace troy {namespace scaling_variant {
         // and rounded to the nearest integer (rounded up in case of a tie). Equivalent to
         // floor((q * m + floor((t+1) / 2)) / t).
         if (!device) {
-            Array<uint64_t> prod(2, false);
-            Array<uint64_t> numerator(2, false);
-            Array<uint64_t> fix(2, false);
+            Array<uint64_t> prod(2, false, nullptr);
+            Array<uint64_t> numerator(2, false, nullptr);
+            Array<uint64_t> fix(2, false, nullptr);
             uint64_t plain_modulus_value = parms.plain_modulus_host().value();
             for (size_t i = 0; i < plain_coeff_count; i++) {
                 // Compute numerator = (q mod t) * m[i] + (t+1)/2
@@ -282,9 +282,9 @@ namespace troy {namespace scaling_variant {
         }
     }
 
-    void centralize(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination) {
+    void centralize(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, MemoryPoolHandle pool) {
         bool device = plain.on_device();
-        if (!utils::same(device, context_data->on_device(), destination.on_device())) {
+        if (!utils::device_compatible(*context_data, plain, destination)) {
             throw std::invalid_argument("[scaling_variant::centralize] Arguments are not on the same device.");
         }
         const EncryptionParameters& parms = context_data->parms();
@@ -308,7 +308,7 @@ namespace troy {namespace scaling_variant {
                 plain_coeff_count, coeff_modulus_size,
                 plain.poly(), destination, plain_upper_half_threshold, plain_upper_half_increment
             );
-            context_data->rns_tool().base_q().decompose_array(destination);
+            context_data->rns_tool().base_q().decompose_array(destination, pool);
         } else {
             // Note that in this case plain_upper_half_increment holds its value in RNS form modulo the coeff_modulus
             // primes.

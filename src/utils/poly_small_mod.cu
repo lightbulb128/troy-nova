@@ -25,7 +25,7 @@ namespace troy {namespace utils {
 
     void modulo_ps(ConstSlice<uint64_t> polys, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         bool device = result.on_device();
-        if (!same(device, polys.on_device(), moduli.on_device())) {
+        if (!device_compatible(polys, moduli, result)) {
             throw std::runtime_error("[modulo_ps] All inputs must be on the same device");
         }
         if (device) {
@@ -54,7 +54,7 @@ namespace troy {namespace utils {
 
     void negate_ps(ConstSlice<uint64_t> polys, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         bool device = result.on_device();
-        if (!same(device, polys.on_device(), moduli.on_device())) {
+        if (!device_compatible(polys, moduli, result)) {
             throw std::runtime_error("[negate_ps] All inputs must be on the same device");
         }
         if (device) {
@@ -124,7 +124,7 @@ namespace troy {namespace utils {
 
     void sub_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         bool device = result.on_device();
-        if (!same(device, polys1.on_device(), polys2.on_device(), moduli.on_device())) {
+        if (!device_compatible(polys1, polys2, moduli, result)) {
             throw std::runtime_error("[sub_ps] All inputs must be on the same device");
         }
         if (device) {
@@ -159,7 +159,7 @@ namespace troy {namespace utils {
 
     void add_scalar_ps(ConstSlice<uint64_t> polys, uint64_t scalar, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         bool device = result.on_device();
-        if (!same(device, polys.on_device(), moduli.on_device())) {
+        if (!device_compatible(polys, moduli, result)) {
             throw std::runtime_error("[add_scalar_ps] All inputs must be on the same device");
         }
         if (device) {
@@ -192,7 +192,7 @@ namespace troy {namespace utils {
 
     void sub_scalar_ps(ConstSlice<uint64_t> polys, uint64_t scalar, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         bool device = result.on_device();
-        if (!same(device, polys.on_device(), moduli.on_device())) {
+        if (!device_compatible(polys, moduli, result)) {
             throw std::runtime_error("[sub_scalar_ps] All inputs must be on the same device");
         }
         if (device) {
@@ -225,7 +225,7 @@ namespace troy {namespace utils {
 
     void multiply_scalar_ps(ConstSlice<uint64_t> polys, uint64_t scalar, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         bool device = result.on_device();
-        if (!same(device, polys.on_device(), moduli.on_device())) {
+        if (!device_compatible(polys, moduli, result)) {
             throw std::runtime_error("[multiply_scalar_ps] All inputs must be on the same device");
         }
         if (device) {
@@ -261,7 +261,7 @@ namespace troy {namespace utils {
 
     void multiply_scalars_ps(ConstSlice<uint64_t> polys, ConstSlice<uint64_t> scalars, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         bool device = result.on_device();
-        if (!same(device, polys.on_device(), moduli.on_device())) {
+        if (!device_compatible(polys, scalars, moduli, result)) {
             throw std::runtime_error("[multiply_scalars_ps] All inputs must be on the same device");
         }
         if (device) {
@@ -296,7 +296,7 @@ namespace troy {namespace utils {
 
     void multiply_uint64operand_ps(ConstSlice<uint64_t> polys, ConstSlice<MultiplyUint64Operand> operand, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         bool device = result.on_device();
-        if (!same(device, polys.on_device(), operand.on_device(), moduli.on_device())) {
+        if (!device_compatible(polys, operand, moduli, result)) {
             throw std::runtime_error("[multiply_uint64operand_ps] All inputs must be on the same device");
         }
         if (device) {
@@ -314,9 +314,9 @@ namespace troy {namespace utils {
                 uint64_t modulus_value = moduli[j].value();
                 uint64_t cr0 = moduli[j].const_ratio()[0];
                 uint64_t cr1 = moduli[j].const_ratio()[1];
-                uint64_t z[2]{0, 0}; Slice<uint64_t> z_slice(z, 2, false);
+                uint64_t z[2]{0, 0}; Slice<uint64_t> z_slice(z, 2, false, nullptr);
                 uint64_t tmp1 = 0;
-                uint64_t tmp2[2]{0, 0}; Slice<uint64_t> tmp2_slice(tmp2, 2, false);
+                uint64_t tmp2[2]{0, 0}; Slice<uint64_t> tmp2_slice(tmp2, 2, false, nullptr);
                 uint64_t tmp3;
                 uint64_t carry = 0;
                 for (size_t k = 0; k < degree; k++) {
@@ -352,7 +352,7 @@ namespace troy {namespace utils {
 
     void dyadic_product_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         bool device = result.on_device();
-        if (!same(device, polys1.on_device(), polys2.on_device(), moduli.on_device())) {
+        if (!device_compatible(polys1, polys2, moduli, result)) {
             throw std::runtime_error("[dyadic_product_ps] All inputs must be on the same device");
         }
         if (device) {
@@ -410,7 +410,7 @@ namespace troy {namespace utils {
 
     void negacyclic_shift_ps(ConstSlice<uint64_t> polys, size_t shift, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         bool device = result.on_device();
-        if (!same(device, polys.on_device(), moduli.on_device())) {
+        if (!device_compatible(polys, moduli, result)) {
             throw std::runtime_error("[negacyclic_shift_ps] All inputs must be on the same device");
         }
         if (device) {

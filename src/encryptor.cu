@@ -10,7 +10,8 @@ namespace troy {
         const ParmsID& parms_id, 
         bool is_asymmetric, bool save_seed, 
         utils::RandomGenerator* u_prng, 
-        Ciphertext& destination
+        Ciphertext& destination,
+        MemoryPoolHandle pool
     ) const {
         // sanity check
         if (is_asymmetric && !this->public_key_.has_value()) {
@@ -57,11 +58,11 @@ namespace troy {
                 Ciphertext temp;
                 if (u_prng == nullptr) {
                     rlwe::asymmetric(
-                        this->public_key(), this->context(), prev_parms_id, is_ntt_form, temp
+                        this->public_key(), this->context(), prev_parms_id, is_ntt_form, temp, pool
                     );
                 } else {
                     rlwe::asymmetric_with_u_prng(
-                        this->public_key(), this->context(), prev_parms_id, is_ntt_form, *u_prng, temp
+                        this->public_key(), this->context(), prev_parms_id, is_ntt_form, *u_prng, temp, pool
                     );
                 }
                 
@@ -69,7 +70,7 @@ namespace troy {
                 for (size_t i = 0; i < temp.polynomial_count(); i++) {
                     switch (parms.scheme()) {
                         case SchemeType::CKKS: {
-                            rns_tool.divide_and_round_q_last_ntt_inplace(temp.poly(i), prev_context_data->small_ntt_tables());
+                            rns_tool.divide_and_round_q_last_ntt_inplace(temp.poly(i), prev_context_data->small_ntt_tables(), pool);
                             break;
                         }
                         case SchemeType::BFV: {
@@ -77,7 +78,7 @@ namespace troy {
                             break;
                         }
                         case SchemeType::BGV: {
-                            rns_tool.mod_t_and_divide_q_last_ntt_inplace(temp.poly(i), prev_context_data->small_ntt_tables());
+                            rns_tool.mod_t_and_divide_q_last_ntt_inplace(temp.poly(i), prev_context_data->small_ntt_tables(), pool);
                             break;
                         }
                         default:
@@ -96,11 +97,11 @@ namespace troy {
                 // Does not require modulus switching
                 if (u_prng == nullptr) {
                     rlwe::asymmetric(
-                        this->public_key(), this->context(), parms_id, is_ntt_form, destination
+                        this->public_key(), this->context(), parms_id, is_ntt_form, destination, pool
                     );
                 } else {
                     rlwe::asymmetric_with_u_prng(
-                        this->public_key(), this->context(), parms_id, is_ntt_form, *u_prng, destination
+                        this->public_key(), this->context(), parms_id, is_ntt_form, *u_prng, destination, pool
                     );
                 }
             }
@@ -108,11 +109,11 @@ namespace troy {
             // Does not require modulus switching
             if (u_prng == nullptr) {
                 rlwe::symmetric(
-                    this->secret_key(), this->context(), parms_id, is_ntt_form, save_seed, destination
+                    this->secret_key(), this->context(), parms_id, is_ntt_form, save_seed, destination, pool
                 );
             } else {
                 rlwe::symmetric_with_c1_prng(
-                    this->secret_key(), this->context(), parms_id, is_ntt_form, *u_prng, save_seed, destination
+                    this->secret_key(), this->context(), parms_id, is_ntt_form, *u_prng, save_seed, destination, pool
                 );
             }
         }
@@ -122,7 +123,8 @@ namespace troy {
         const Plaintext& plain,
         bool is_asymmetric, bool save_seed,
         utils::RandomGenerator* u_prng,
-        Ciphertext& destination
+        Ciphertext& destination,
+        MemoryPoolHandle pool
     ) const {
         if (!utils::same(plain.on_device(), this->on_device(), this->context()->on_device())) {
             throw std::invalid_argument("[Encryptor::encrypt_internal] The arguments are not on the same device.");
@@ -134,7 +136,7 @@ namespace troy {
                     throw std::invalid_argument("[Encryptor::encrypt_internal] BFV - Plaintext is in NTT form.");
                 }
                 if (plain.parms_id() == parms_id_zero) {
-                    this->encrypt_zero_internal(this->context()->first_parms_id(), is_asymmetric, save_seed, u_prng, destination);
+                    this->encrypt_zero_internal(this->context()->first_parms_id(), is_asymmetric, save_seed, u_prng, destination, pool);
                     // Multiply plain by scalar coeff_div_plaintext and reposition if in upper-half.
                     // Result gets added into the c_0 term of ciphertext (c_0,c_1).
                     scaling_variant::multiply_add_plain(plain, this->context()->first_context_data().value(), destination.poly(0));
@@ -146,7 +148,7 @@ namespace troy {
                     }
                     ContextDataPointer context_data = context_data_optional.value();
                     const EncryptionParameters& parms = context_data->parms();
-                    this->encrypt_zero_internal(parms_id, is_asymmetric, save_seed, u_prng, destination);
+                    this->encrypt_zero_internal(parms_id, is_asymmetric, save_seed, u_prng, destination, pool);
                     utils::add_inplace_p(
                         destination.poly(0), plain.poly(), parms.poly_modulus_degree(), parms.coeff_modulus()
                     );
@@ -162,7 +164,7 @@ namespace troy {
                     throw std::invalid_argument("[Encryptor::encrypt_internal] CKKS - Plaintext parms_id is not valid.");
                 }
                 ContextDataPointer context_data = context_data_optional.value();
-                this->encrypt_zero_internal(plain.parms_id(), is_asymmetric, save_seed, u_prng, destination);
+                this->encrypt_zero_internal(plain.parms_id(), is_asymmetric, save_seed, u_prng, destination, pool);
                 const EncryptionParameters& parms = context_data->parms();
                 ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
                 size_t coeff_count = parms.poly_modulus_degree();
@@ -177,7 +179,7 @@ namespace troy {
                 if (plain.is_ntt_form()) {
                     throw std::invalid_argument("[Encryptor::encrypt_internal] BGV - Plaintext is in NTT form.");
                 }
-                this->encrypt_zero_internal(this->context()->first_parms_id(), is_asymmetric, save_seed, u_prng, destination);
+                this->encrypt_zero_internal(this->context()->first_parms_id(), is_asymmetric, save_seed, u_prng, destination, pool);
                 
                 ContextDataPointer context_data = this->context()->first_context_data().value();
                 const EncryptionParameters& parms = context_data->parms();
@@ -196,7 +198,7 @@ namespace troy {
                 plain_copy.resize(coeff_count * coeff_modulus_size);
                 plain_copy.data().reference().set_zero();
 
-                scaling_variant::centralize(plain, context_data, plain_copy.reference());
+                scaling_variant::centralize(plain, context_data, plain_copy.reference(), pool);
 
                 // Transform to NTT domain
                 utils::ntt_negacyclic_harvey_p(plain_copy.reference(), coeff_count, ntt_tables);

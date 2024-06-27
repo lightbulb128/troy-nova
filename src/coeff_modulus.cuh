@@ -24,7 +24,7 @@ namespace troy {
 
         inline static utils::Array<Modulus> bfv_default(size_t poly_modulus_degree, SecurityLevel sec_level) {
             std::vector<uint64_t> vec = bfv_default_vector(poly_modulus_degree, sec_level);
-            utils::Array<Modulus> result(vec.size(), false);
+            utils::Array<Modulus> result(vec.size(), false, nullptr);
             for (size_t i = 0; i < vec.size(); i++) {
                 result[i] = Modulus(vec[i]);
             }

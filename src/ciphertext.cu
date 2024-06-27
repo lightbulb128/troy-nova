@@ -32,7 +32,7 @@ namespace troy {
     bool Ciphertext::is_transparent() const {
         if (this->data().size() == 0) return true;
         if (this->polynomial_count() < utils::HE_CIPHERTEXT_SIZE_MIN) return true;
-        return reduction::nonzero_count(this->data().const_reference()) == 0;
+        return reduction::nonzero_count(this->data().const_reference(), pool()) == 0;
     }
     
     void Ciphertext::expand_seed(HeContextPointer context) {
@@ -78,7 +78,7 @@ namespace troy {
             size_t poly_size = this->poly_modulus_degree() * this->coeff_modulus_size();
             // only save c0
             if (this->on_device()) {
-                utils::Array<uint64_t> c0(poly_size, false);
+                utils::Array<uint64_t> c0(poly_size, false, nullptr);
                 c0.copy_from_slice(this->poly(0));
                 serialize::save_array(stream, c0.raw_pointer(), poly_size);
             } else {
@@ -87,7 +87,7 @@ namespace troy {
         } else {
             // save all data
             if (this->on_device()) {
-                utils::Array<uint64_t> data(this->data().size(), false);
+                utils::Array<uint64_t> data(this->data().size(), false, nullptr);
                 data.copy_from_slice(this->data().const_reference());
                 serialize::save_array(stream, data.raw_pointer(), data.size());
             } else {
@@ -96,7 +96,7 @@ namespace troy {
         }
     }
 
-    void Ciphertext::load(std::istream& stream, HeContextPointer context) {
+    void Ciphertext::load(std::istream& stream, HeContextPointer context, MemoryPoolHandle pool) {
         serialize::load_object(stream, this->parms_id());
         serialize::load_object(stream, this->polynomial_count_);
         serialize::load_object(stream, this->coeff_modulus_size_);
@@ -132,7 +132,7 @@ namespace troy {
             size_t poly_size = this->poly_modulus_degree_ * this->coeff_modulus_size_;
             // load c0
             serialize::load_array(stream, this->poly(0).raw_pointer(), poly_size);
-            if (device) this->data().to_device_inplace();
+            if (device) this->data().to_device_inplace(pool);
             // expand seed
             this->expand_seed(context);
         } else {
@@ -140,7 +140,7 @@ namespace troy {
             this->data().resize(this->poly_modulus_degree_ * this->coeff_modulus_size_ * this->polynomial_count_);
             // load all data
             serialize::load_array(stream, this->data().raw_pointer(), this->data().size());
-            if (device) this->data().to_device_inplace();
+            if (device) this->data().to_device_inplace(pool);
         }
 
     }
@@ -168,7 +168,7 @@ namespace troy {
         return size;
     }
 
-    void Ciphertext::save_terms(std::ostream& stream, HeContextPointer context, const std::vector<size_t>& terms) const {
+    void Ciphertext::save_terms(std::ostream& stream, HeContextPointer context, const std::vector<size_t>& terms, MemoryPoolHandle pool) const {
         serialize::save_object(stream, this->parms_id());
         serialize::save_object(stream, this->polynomial_count());
         serialize::save_object(stream, this->coeff_modulus_size());
@@ -198,18 +198,18 @@ namespace troy {
             serialize::save_object(stream, this->seed());
         }
 
-        utils::ConstSlice<uint64_t> c0(nullptr, 0, false);
-        utils::Array<uint64_t> temp_buffer(0, false);
+        utils::ConstSlice<uint64_t> c0(nullptr, 0, false, nullptr);
+        utils::Array<uint64_t> temp_buffer(0, false, nullptr);
         bool device = this->on_device();
         if (is_ntt_form_) {
             utils::ConstSlice<utils::NTTTables> ntt_tables = context->get_context_data(this->parms_id()).value()->small_ntt_tables();
-            temp_buffer = utils::Array<uint64_t>::create_and_copy_from_slice(this->poly(0));
+            temp_buffer = utils::Array<uint64_t>::create_and_copy_from_slice(this->poly(0), pool);
             utils::inverse_ntt_negacyclic_harvey_p(temp_buffer.reference(), this->poly_modulus_degree(), ntt_tables);
             temp_buffer.to_host_inplace();
             c0 = temp_buffer.const_reference();
         } else {
             if (device) {
-                temp_buffer = utils::Array<uint64_t>::create_and_copy_from_slice(this->poly(0));
+                temp_buffer = utils::Array<uint64_t>::create_and_copy_from_slice(this->poly(0), pool);
                 temp_buffer.to_host_inplace();
                 c0 = temp_buffer.const_reference();
             } else {
@@ -225,7 +225,7 @@ namespace troy {
         // save remaining polys
         size_t start_polynomial = contains_seed() ? 2 : 1;
         if (this->on_device()) {
-            utils::Array<uint64_t> data(this->data().size() - poly_size * start_polynomial, false);
+            utils::Array<uint64_t> data(this->data().size() - poly_size * start_polynomial, false, nullptr);
             data.copy_from_slice(this->polys(start_polynomial, this->polynomial_count_));
             serialize::save_array(stream, data.raw_pointer(), data.size());
         } else {
@@ -235,7 +235,7 @@ namespace troy {
     }
 
     
-    void Ciphertext::load_terms(std::istream& stream, HeContextPointer context, const std::vector<size_t>& terms) {
+    void Ciphertext::load_terms(std::istream& stream, HeContextPointer context, const std::vector<size_t>& terms, MemoryPoolHandle pool) {
         serialize::load_object(stream, this->parms_id());
         serialize::load_object(stream, this->polynomial_count_);
         serialize::load_object(stream, this->coeff_modulus_size_);
@@ -280,11 +280,12 @@ namespace troy {
                 serialize::load_object(stream, c0[j * this->poly_modulus_degree() + terms[i]]);
             }
         }
+
         // load remaining polys
         size_t start_polynomial = contains_seed ? 2 : 1;
         utils::Slice<uint64_t> polys = this->polys(start_polynomial, this->polynomial_count_);
         serialize::load_array(stream, polys.raw_pointer(), polys.size());
-        if (device) this->data().to_device_inplace();
+        if (device) this->data().to_device_inplace(pool);
         if (is_ntt_form_) {
             utils::ConstSlice<utils::NTTTables> ntt_tables = context->get_context_data(this->parms_id()).value()->small_ntt_tables();
             utils::ntt_negacyclic_harvey_p(this->poly(0), this->poly_modulus_degree(), ntt_tables);

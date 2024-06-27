@@ -25,7 +25,7 @@ namespace troy {
         }
     }
 
-    void KSwitchKeys::load(std::istream& stream, HeContextPointer context) {
+    void KSwitchKeys::load(std::istream& stream, HeContextPointer context, MemoryPoolHandle pool) {
         serialize::load_object(stream, this->parms_id());
         size_t size1d;
         serialize::load_object(stream, size1d);
@@ -40,7 +40,7 @@ namespace troy {
             serialize::load_object(stream, size2d);
             this->data()[id].resize(size2d);
             for (size_t j = 0; j < size2d; j++) {
-                this->data()[id][j].load(stream, context);
+                this->data()[id][j].load(stream, context, pool);
             }
         }
     }

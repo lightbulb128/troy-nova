@@ -13,14 +13,14 @@ namespace troy {
 
     public:
 
-        BatchEncoder(HeContextPointer context);
+        BatchEncoder(HeContextPointer context, MemoryPoolHandle pool = MemoryPool::GlobalPool());
 
         inline bool on_device() const noexcept {
             return matrix_reps_index_map.on_device();
         }
 
-        inline void to_device_inplace() {
-            matrix_reps_index_map.to_device_inplace();
+        inline void to_device_inplace(MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+            matrix_reps_index_map.to_device_inplace(pool);
         }
 
         inline size_t slot_count() const noexcept {
@@ -47,56 +47,56 @@ namespace troy {
         /// The length of the vector must be a power of 2.
         static void reverse_bits(utils::Slice<uint64_t> input);
 
-        void encode(const std::vector<uint64_t>& values, Plaintext& destination) const;
-        inline Plaintext encode_new(const std::vector<uint64_t>& values) const {
+        void encode(const std::vector<uint64_t>& values, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        inline Plaintext encode_new(const std::vector<uint64_t>& values, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Plaintext destination;
-            encode(values, destination);
+            encode(values, destination, pool);
             return destination;
         }
 
-        void encode_polynomial(const std::vector<uint64_t>& values, Plaintext& destination) const;
-        inline Plaintext encode_polynomial_new(const std::vector<uint64_t>& values) const {
+        void encode_polynomial(const std::vector<uint64_t>& values, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        inline Plaintext encode_polynomial_new(const std::vector<uint64_t>& values, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Plaintext destination;
-            encode_polynomial(values, destination);
+            encode_polynomial(values, destination, pool);
             return destination;
         }
 
-        void decode(const Plaintext& plaintext, std::vector<uint64_t>& destination) const;
-        inline std::vector<uint64_t> decode_new(const Plaintext& plaintext) const {
+        void decode(const Plaintext& plaintext, std::vector<uint64_t>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        inline std::vector<uint64_t> decode_new(const Plaintext& plaintext, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             std::vector<uint64_t> destination(slot_count());
-            decode(plaintext, destination);
+            decode(plaintext, destination, pool);
             return destination;
         }
 
-        void decode_polynomial(const Plaintext& plaintext, std::vector<uint64_t>& destination) const;
-        inline std::vector<uint64_t> decode_polynomial_new(const Plaintext& plaintext) const {
+        void decode_polynomial(const Plaintext& plaintext, std::vector<uint64_t>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        inline std::vector<uint64_t> decode_polynomial_new(const Plaintext& plaintext, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             std::vector<uint64_t> destination(slot_count());
-            decode_polynomial(plaintext, destination);
+            decode_polynomial(plaintext, destination, pool);
             return destination;
         }
 
-        Plaintext scale_up_new(const Plaintext& plain, const ParmsID& parms_id = parms_id_zero) const;
-        inline void scale_up(const Plaintext& plain, Plaintext& destination, const ParmsID& parms_id = parms_id_zero) const {
-            destination = scale_up_new(plain, parms_id);
+        Plaintext scale_up_new(const Plaintext& plain, std::optional<ParmsID> parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        inline void scale_up(const Plaintext& plain, Plaintext& destination, std::optional<ParmsID> parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            destination = scale_up_new(plain, parms_id, pool);
         }
-        inline void scale_up_inplace(Plaintext& plain, const ParmsID& parms_id = parms_id_zero) const {
-            plain = scale_up_new(plain, parms_id);
-        }
-
-        Plaintext scale_down_new(const Plaintext& plain) const;
-        inline void scale_down(const Plaintext& plain, Plaintext& destination) const {
-            destination = scale_down_new(plain);
-        }
-        inline void scale_down_inplace(Plaintext& plain) const {
-            plain = scale_down_new(plain);
+        inline void scale_up_inplace(Plaintext& plain, std::optional<ParmsID> parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            plain = scale_up_new(plain, parms_id, pool);
         }
 
-        Plaintext centralize_new(const Plaintext& plain, const ParmsID& parms_id = parms_id_zero) const;
-        inline void centralize(const Plaintext& plain, Plaintext& destination, const ParmsID& parms_id = parms_id_zero) const {
-            destination = centralize_new(plain, parms_id);
+        Plaintext scale_down_new(const Plaintext& plain, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        inline void scale_down(const Plaintext& plain, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            destination = scale_down_new(plain, pool);
         }
-        inline void centralize_inplace(Plaintext& plain, const ParmsID& parms_id = parms_id_zero) const {
-            plain = centralize_new(plain, parms_id);
+        inline void scale_down_inplace(Plaintext& plain, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            plain = scale_down_new(plain, pool);
+        }
+
+        Plaintext centralize_new(const Plaintext& plain, std::optional<ParmsID> parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        inline void centralize(const Plaintext& plain, Plaintext& destination, std::optional<ParmsID> parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            destination = centralize_new(plain, parms_id, pool);
+        }
+        inline void centralize_inplace(Plaintext& plain, std::optional<ParmsID> parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            plain = centralize_new(plain, parms_id, pool);
         }
 
 

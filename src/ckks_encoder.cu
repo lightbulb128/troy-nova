@@ -54,13 +54,13 @@ namespace troy {
 
         static ConstSlice<CustomComplex> slice(ConstSlice<complex<double>> r) {
             return ConstSlice<CustomComplex>(
-                reinterpret_cast<const CustomComplex*>(r.raw_pointer()), r.size(), r.on_device()
+                reinterpret_cast<const CustomComplex*>(r.raw_pointer()), r.size(), r.on_device(), r.pool()
             );
         }
 
         static Slice<CustomComplex> slice(Slice<complex<double>> r) {
             return Slice<CustomComplex>(
-                reinterpret_cast<CustomComplex*>(r.raw_pointer()), r.size(), r.on_device()
+                reinterpret_cast<CustomComplex*>(r.raw_pointer()), r.size(), r.on_device(), r.pool()
             );
         }
     };
@@ -143,7 +143,7 @@ namespace troy {
             throw std::invalid_argument("[CKKSEncoder::CKKSEncoder] Slots must be a power of two.");
         }
         size_t logn = static_cast<size_t>(logn_int);
-        matrix_reps_index_map = Array<size_t>(coeff_count, false);
+        matrix_reps_index_map = Array<size_t>(coeff_count, false, nullptr);
         size_t m = coeff_count << 1;
         size_t gen = utils::GALOIS_GENERATOR; size_t pos = 1;
         for (size_t i = 0; i < slots; i++) {
@@ -155,8 +155,8 @@ namespace troy {
         }
 
         // We need 1~(n-1)-th powers of the primitive 2n-th root, m = 2n
-        Array<complex<double>> root_powers(coeff_count, false);
-        Array<complex<double>> inv_root_powers(coeff_count, false);
+        Array<complex<double>> root_powers(coeff_count, false, nullptr);
+        Array<complex<double>> inv_root_powers(coeff_count, false, nullptr);
 
         // Powers of the primitive 2n-th root have 4-fold symmetry
         if (m >= 8) {
@@ -638,15 +638,16 @@ namespace troy {
     static void set_plaintext_value_array_general(
         ContextDataPointer context_data,
         size_t coeff_count, ConstSlice<double> real_values, 
-        ConstSlice<Modulus> coeff_modulus, Slice<uint64_t> destination
+        ConstSlice<Modulus> coeff_modulus, Slice<uint64_t> destination,
+        MemoryPoolHandle pool
     ) {
         bool device = real_values.on_device();
         size_t coeff_modulus_size = coeff_modulus.size();
-        Array<uint64_t> coeffu_array(coeff_modulus_size * coeff_count, device);
+        Array<uint64_t> coeffu_array(coeff_modulus_size * coeff_count, device, pool);
         decompose_double_absolute_array(
             real_values, coeff_count, coeff_modulus_size, coeffu_array.reference()
         );
-        context_data->rns_tool().base_q().decompose_array(coeffu_array.reference());
+        context_data->rns_tool().base_q().decompose_array(coeffu_array.reference(), pool);
         set_decomposed_value_array(
             real_values, coeffu_array.const_reference(), coeff_count,
             coeff_modulus, destination
@@ -654,7 +655,7 @@ namespace troy {
     }
     
 
-    static void set_plaintext_value_array(ContextDataPointer context_data, size_t coeff_count, ConstSlice<double> real_values, ConstSlice<Modulus> coeff_modulus, Plaintext& destination) {
+    static void set_plaintext_value_array(ContextDataPointer context_data, size_t coeff_count, ConstSlice<double> real_values, ConstSlice<Modulus> coeff_modulus, Plaintext& destination, MemoryPoolHandle pool) {
         size_t n = coeff_count;
         size_t logn = utils::get_power_of_two(n);
         size_t coeff_modulus_size = coeff_modulus.size();
@@ -680,11 +681,11 @@ namespace troy {
         } else if (max_coeff_bit_count <= 128) {
             set_plaintext_value_array_128bits(coeff_count, real_values, coeff_modulus, destination.poly());
         } else {
-            set_plaintext_value_array_general(context_data, coeff_count, real_values, coeff_modulus, destination.poly());
+            set_plaintext_value_array_general(context_data, coeff_count, real_values, coeff_modulus, destination.poly(), pool);
         }
     }
     
-    void CKKSEncoder::encode_internal_complex_simd(const std::vector<std::complex<double>>& values, ParmsID parms_id, double scale, Plaintext& destination) const {
+    void CKKSEncoder::encode_internal_complex_simd(const std::vector<std::complex<double>>& values, ParmsID parms_id, double scale, Plaintext& destination, MemoryPoolHandle pool) const {
         std::optional<ContextDataPointer> context_data_optional = this->context()->get_context_data(parms_id);
         if (!context_data_optional.has_value()) {
             throw std::invalid_argument("[CKKSEncoder::encode_internal_complex_array] parms_id not valid for context.");
@@ -710,23 +711,23 @@ namespace troy {
         }
 
         bool device = this->on_device();
-        if (device) destination.to_device_inplace();
+        if (device) destination.to_device_inplace(pool);
         else destination.to_host_inplace();
         if (device != context_data->on_device()) {
             throw std::invalid_argument("[CKKSEncoder::encode_internal_complex_array] destination and context_data must be on the same device.");
         }
 
         size_t n = slots * 2;
-        Array<complex<double>> conj_values(n, device);
+        Array<complex<double>> conj_values(n, device, pool);
         if (!device) {
             set_conjugate_values(
-                ConstSlice<complex<double>>(values.data(), values.size(), false),
+                ConstSlice<complex<double>>(values.data(), values.size(), false, nullptr),
                 this->matrix_reps_index_map.const_reference(),
                 conj_values.reference()
             );
         } else {
-            Array<complex<double>> values_device(values.size(), true);
-            values_device.copy_from_slice(ConstSlice<complex<double>>(values.data(), values.size(), false));
+            Array<complex<double>> values_device(values.size(), true, pool);
+            values_device.copy_from_slice(ConstSlice<complex<double>>(values.data(), values.size(), false, nullptr));
             set_conjugate_values(
                 values_device.const_reference(),
                 this->matrix_reps_index_map.const_reference(),
@@ -741,10 +742,10 @@ namespace troy {
             this->inv_root_powers_.const_reference(), fix
         );
 
-        Array<double> real_values(n, device);
+        Array<double> real_values(n, device, pool);
         gather_real(conj_values.const_reference(), real_values.reference());
 
-        set_plaintext_value_array(context_data, coeff_count, real_values.const_reference(), coeff_modulus, destination);
+        set_plaintext_value_array(context_data, coeff_count, real_values.const_reference(), coeff_modulus, destination, pool);
         
         // Transform to NTT domain
         utils::ntt_negacyclic_harvey_p(destination.poly(), coeff_count, ntt_tables);
@@ -756,7 +757,7 @@ namespace troy {
         destination.poly_modulus_degree() = coeff_count;
     }
 
-    void CKKSEncoder::encode_internal_double_polynomial(const std::vector<double>& values, ParmsID parms_id, double scale, Plaintext& destination) const {
+    void CKKSEncoder::encode_internal_double_polynomial(const std::vector<double>& values, ParmsID parms_id, double scale, Plaintext& destination, MemoryPoolHandle pool) const {
         std::optional<ContextDataPointer> context_data_optional = this->context()->get_context_data(parms_id);
         if (!context_data_optional.has_value()) {
             throw std::invalid_argument("[CKKSEncoder::encode_internal_double_polynomial] parms_id not valid for context.");
@@ -782,7 +783,7 @@ namespace troy {
         }
 
         bool device = this->on_device();
-        if (device) destination.to_device_inplace();
+        if (device) destination.to_device_inplace(pool);
         else destination.to_host_inplace();
         if (device != context_data->on_device()) {
             throw std::invalid_argument("[CKKSEncoder::encode_internal_double_polynomial] destination and context_data must be on the same device.");
@@ -792,11 +793,11 @@ namespace troy {
         destination.poly().set_zero();
         
         size_t n = slots * 2;
-        Array<double> real_values(n, device);
-        real_values.slice(0, values.size()).copy_from_slice(ConstSlice<double>(values.data(), values.size(), false));
+        Array<double> real_values(n, device, pool);
+        real_values.slice(0, values.size()).copy_from_slice(ConstSlice<double>(values.data(), values.size(), false, nullptr));
         multiply_double_scalar(real_values.reference(), scale);
 
-        set_plaintext_value_array(context_data, coeff_count, real_values.const_reference(), coeff_modulus, destination);
+        set_plaintext_value_array(context_data, coeff_count, real_values.const_reference(), coeff_modulus, destination, pool);
 
         // Transform to NTT domain
         utils::ntt_negacyclic_harvey_p(destination.poly(), coeff_count, ntt_tables);
@@ -853,7 +854,7 @@ namespace troy {
     }
     */
 
-    void CKKSEncoder::encode_internal_double_single(double value, ParmsID parms_id, double scale, Plaintext& destination) const {
+    void CKKSEncoder::encode_internal_double_single(double value, ParmsID parms_id, double scale, Plaintext& destination, MemoryPoolHandle pool) const {
         
         std::optional<ContextDataPointer> context_data_optional = this->context()->get_context_data(parms_id);
         if (!context_data_optional.has_value()) {
@@ -877,7 +878,7 @@ namespace troy {
         }
 
         bool device = this->on_device();
-        if (device) destination.to_device_inplace();
+        if (device) destination.to_device_inplace(pool);
         else destination.to_host_inplace();
         if (device != context_data->on_device()) {
             throw std::invalid_argument("[CKKSEncoder::encode_internal_double_single] destination and context_data must be on the same device.");
@@ -889,10 +890,10 @@ namespace troy {
         value *= scale;
         
         size_t n = slots * 2;
-        Array<double> real_values(n, device);
+        Array<double> real_values(n, device, pool);
         broadcast_double(value, real_values.reference());
 
-        set_plaintext_value_array(context_data, coeff_count, real_values.const_reference(), coeff_modulus, destination);
+        set_plaintext_value_array(context_data, coeff_count, real_values.const_reference(), coeff_modulus, destination, pool);
 
         destination.parms_id() = parms_id;
         destination.scale() = scale;
@@ -936,7 +937,7 @@ namespace troy {
 
     }
     
-    void CKKSEncoder::encode_internal_integer_polynomial(const std::vector<int64_t>& values, ParmsID parms_id, Plaintext& destination) const {
+    void CKKSEncoder::encode_internal_integer_polynomial(const std::vector<int64_t>& values, ParmsID parms_id, Plaintext& destination, MemoryPoolHandle pool) const {
         std::optional<ContextDataPointer> context_data_optional = this->context()->get_context_data(parms_id);
         if (!context_data_optional.has_value()) {
             throw std::invalid_argument("[CKKSEncoder::encode_internal_integer_polynomial] parms_id not valid for context.");
@@ -954,7 +955,7 @@ namespace troy {
         }
 
         bool device = this->on_device();
-        if (device) destination.to_device_inplace();
+        if (device) destination.to_device_inplace(pool);
         else destination.to_host_inplace();
         if (device != context_data->on_device()) {
             throw std::invalid_argument("[CKKSEncoder::encode_internal_integer_polynomial] destination and context_data must be on the same device.");
@@ -965,12 +966,12 @@ namespace troy {
 
         if (!device) {
             reduce_values(
-                ConstSlice<int64_t>(values.data(), values.size(), false),
+                ConstSlice<int64_t>(values.data(), values.size(), false, nullptr),
                 coeff_count, coeff_modulus, destination.poly()
             );
         } else {
-            Array<int64_t> values_device(values.size(), true);
-            values_device.copy_from_slice(ConstSlice<int64_t>(values.data(), values.size(), false));
+            Array<int64_t> values_device(values.size(), true, pool);
+            values_device.copy_from_slice(ConstSlice<int64_t>(values.data(), values.size(), false, nullptr));
             reduce_values(
                 values_device.const_reference(),
                 coeff_count, coeff_modulus, destination.poly()
@@ -987,7 +988,7 @@ namespace troy {
         destination.poly_modulus_degree() = coeff_count;
     }
 
-    void CKKSEncoder::encode_internal_integer_single(int64_t value, ParmsID parms_id, Plaintext& destination) const {
+    void CKKSEncoder::encode_internal_integer_single(int64_t value, ParmsID parms_id, Plaintext& destination, MemoryPoolHandle pool) const {
         std::optional<ContextDataPointer> context_data_optional = this->context()->get_context_data(parms_id);
         if (!context_data_optional.has_value()) {
             throw std::invalid_argument("[CKKSEncoder::encode_internal_integer_single] parms_id not valid for context.");
@@ -1005,7 +1006,7 @@ namespace troy {
         }
 
         bool device = this->on_device();
-        if (device) destination.to_device_inplace();
+        if (device) destination.to_device_inplace(pool);
         else destination.to_host_inplace();
         if (device != context_data->on_device()) {
             throw std::invalid_argument("[CKKSEncoder::encode_internal_integer_single] destination and context_data must be on the same device.");
@@ -1015,8 +1016,8 @@ namespace troy {
         destination.poly().set_zero();
         
         size_t n = slots * 2;
-        Array<int64_t> values(n, false); values[0] = value;
-        if (device) values.to_device_inplace();
+        Array<int64_t> values(n, false, nullptr); values[0] = value;
+        if (device) values.to_device_inplace(pool);
         reduce_values(
             values.const_reference(),
             coeff_count, coeff_modulus, destination.poly()
@@ -1107,7 +1108,7 @@ namespace troy {
         }
     }
     
-    void CKKSEncoder::decode_internal_simd(const Plaintext& plain, std::vector<std::complex<double>>& destination) const {
+    void CKKSEncoder::decode_internal_simd(const Plaintext& plain, std::vector<std::complex<double>>& destination, MemoryPoolHandle pool) const {
         if (!plain.is_ntt_form()) {
             throw std::invalid_argument("[CKKSEncoder::decode_internal_simd] Plaintext is not in NTT form.");
         }
@@ -1137,17 +1138,17 @@ namespace troy {
         if (plain.data().size() != coeff_count * coeff_modulus_size) {
             throw std::invalid_argument("[CKKSEncoder::decode_internal_simd] Plaintext data length is not correct.");
         }
-        Array<uint64_t> plain_copy = plain.data().get_inner().clone();
+        Array<uint64_t> plain_copy = plain.data().get_inner().clone(pool);
 
         // Transform each polynomial from NTT domain
         ConstSlice<utils::NTTTables> ntt_tables = context_data->small_ntt_tables();
         utils::inverse_ntt_negacyclic_harvey_p(plain_copy.reference(), coeff_count, ntt_tables);
 
         // CRT-compose the polynomial
-        context_data->rns_tool().base_q().compose_array(plain_copy.reference());
+        context_data->rns_tool().base_q().compose_array(plain_copy.reference(), pool);
 
         // Create floating-point representations of the multi-precision integer coefficients
-        Array<complex<double>> res(coeff_count, device);
+        Array<complex<double>> res(coeff_count, device, pool);
         accumulate_complex(
             plain_copy.const_reference(), coeff_count, decryption_modulus,
             coeff_modulus_size, upper_half_threshold, res.reference(), inv_scale
@@ -1162,23 +1163,23 @@ namespace troy {
             retrieve_conjugate_values(
                 res.const_reference(),
                 this->matrix_reps_index_map.const_reference(),
-                Slice<complex<double>>(destination.data(), destination.size(), false)
+                Slice<complex<double>>(destination.data(), destination.size(), false, nullptr)
             );
         } else {
-            Array<complex<double>> destination_device(destination.size(), true);
+            Array<complex<double>> destination_device(destination.size(), true, pool);
             retrieve_conjugate_values(
                 res.const_reference(),
                 this->matrix_reps_index_map.const_reference(),
                 destination_device.reference()
             );
             destination_device.to_host_inplace();
-            Slice<complex<double>>(destination.data(), destination.size(), false).copy_from_slice(
+            Slice<complex<double>>(destination.data(), destination.size(), false, nullptr).copy_from_slice(
                 destination_device.const_reference()
             );
         }
     }
 
-    void CKKSEncoder::decode_internal_polynomial(const Plaintext& plain, std::vector<double>& destination) const {
+    void CKKSEncoder::decode_internal_polynomial(const Plaintext& plain, std::vector<double>& destination, MemoryPoolHandle pool) const {
         if (!plain.is_ntt_form()) {
             throw std::invalid_argument("[CKKSEncoder::decode_internal_polynomial] Plaintext is not in NTT form.");
         }
@@ -1208,26 +1209,26 @@ namespace troy {
         if (plain.data().size() != coeff_count * coeff_modulus_size) {
             throw std::invalid_argument("[CKKSEncoder::decode_internal_polynomial] Plaintext data length is not correct.");
         }
-        Array<uint64_t> plain_copy = plain.data().get_inner().clone();
+        Array<uint64_t> plain_copy = plain.data().get_inner().clone(pool);
 
         // Transform each polynomial from NTT domain
         ConstSlice<utils::NTTTables> ntt_tables = context_data->small_ntt_tables();
         utils::inverse_ntt_negacyclic_harvey_p(plain_copy.reference(), coeff_count, ntt_tables);
 
         // CRT-compose the polynomial
-        context_data->rns_tool().base_q().compose_array(plain_copy.reference());
+        context_data->rns_tool().base_q().compose_array(plain_copy.reference(), pool);
 
         // Create floating-point representations of the multi-precision integer coefficients
-        Array<complex<double>> res(coeff_count, device);
+        Array<complex<double>> res(coeff_count, device, pool);
         accumulate_complex(
             plain_copy.const_reference(), coeff_count, decryption_modulus,
             coeff_modulus_size, upper_half_threshold, res.reference(), inv_scale
         );
 
-        Array<double> real_values(coeff_count, device);
+        Array<double> real_values(coeff_count, device, pool);
         gather_real(res.const_reference(), real_values.reference());
 
-        Slice<double>(destination.data(), destination.size(), false).copy_from_slice(
+        Slice<double>(destination.data(), destination.size(), false, nullptr).copy_from_slice(
             real_values.const_reference()
         );
     }

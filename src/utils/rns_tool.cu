@@ -5,8 +5,7 @@ namespace troy {namespace utils {
 
     static void print_array(ConstSlice<uint64_t> array, bool end_line = true) {
         if (array.on_device()) {
-            Array<uint64_t> host = Array<uint64_t>::create_and_copy_from_slice(array);
-            host.to_host_inplace();
+            Array<uint64_t> host = Array<uint64_t>::create_and_copy_from_slice(array, false, nullptr);
             print_array(host.const_reference(), end_line);
             return;
         }
@@ -81,8 +80,8 @@ namespace troy {namespace utils {
         uint64_t m_tilde_value = m_tilde.value();
         
         // Populate the base arrays
-        RNSBase base_q = q.clone();
-        RNSBase base_B(ConstSlice(base_B_primes.data(), base_B_primes.size(), false));
+        RNSBase base_q = q.clone(nullptr);
+        RNSBase base_B(ConstSlice(base_B_primes.data(), base_B_primes.size(), false, nullptr));
         RNSBase base_Bsk = base_B.extend_modulus(m_sk);
         RNSBase base_Bsk_m_tilde = base_Bsk.extend_modulus(m_tilde);
 
@@ -91,8 +90,8 @@ namespace troy {namespace utils {
         std::optional<BaseConverter> base_q_to_t_conv = std::nullopt;
         if (!t.is_zero()) {
             Modulus t_gamma[2]{ t, gamma };
-            base_t_gamma = std::optional(RNSBase(ConstSlice(t_gamma, 2, false)));
-            base_q_to_t_conv = std::optional(BaseConverter(base_q, RNSBase(ConstSlice(&t, 1, false))));
+            base_t_gamma = std::optional(RNSBase(ConstSlice(t_gamma, 2, false, nullptr)));
+            base_q_to_t_conv = std::optional(BaseConverter(base_q, RNSBase(ConstSlice(&t, 1, false, nullptr))));
         }
         
         // Generate the Bsk NTTTables; these are used for NTT after base extension to Bsk
@@ -102,22 +101,22 @@ namespace troy {namespace utils {
         );
 
         BaseConverter base_q_to_Bsk_conv = BaseConverter(base_q, base_Bsk);
-        BaseConverter base_q_to_m_tilde_conv = BaseConverter(base_q, RNSBase(ConstSlice(&m_tilde, 1, false)));
+        BaseConverter base_q_to_m_tilde_conv = BaseConverter(base_q, RNSBase(ConstSlice(&m_tilde, 1, false, nullptr)));
         BaseConverter base_B_to_q_conv = BaseConverter(base_B, base_q);
-        BaseConverter base_B_to_m_sk_conv = BaseConverter(base_B, RNSBase(ConstSlice(&m_sk, 1, false)));
+        BaseConverter base_B_to_m_sk_conv = BaseConverter(base_B, RNSBase(ConstSlice(&m_sk, 1, false, nullptr)));
         std::optional<BaseConverter> base_q_to_t_gamma_conv = std::nullopt;
         if (base_q_to_t_conv.has_value()) {
             base_q_to_t_gamma_conv = std::optional(BaseConverter(base_q, base_t_gamma.value()));
         }
 
         // Compute prod(B) mod q
-        Array<uint64_t> prod_B_mod_q(base_q.size(), false);
+        Array<uint64_t> prod_B_mod_q(base_q.size(), false, nullptr);
         for (size_t i = 0; i < base_q.size(); i++) {
             prod_B_mod_q[i] = utils::modulo_uint(base_B.base_product(), base_q.base()[i]);
         }
 
         // Compute prod(q)^(-1) mod Bsk
-        Array<MultiplyUint64Operand> inv_prod_q_mod_Bsk(base_Bsk.size(), false);
+        Array<MultiplyUint64Operand> inv_prod_q_mod_Bsk(base_Bsk.size(), false, nullptr);
         for (size_t i = 0; i < base_Bsk.size(); i++) {
             const Modulus& modulus = base_Bsk.base()[i];
             uint64_t temp = utils::modulo_uint(base_q.base_product(), modulus);
@@ -137,7 +136,7 @@ namespace troy {namespace utils {
         MultiplyUint64Operand inv_prod_B_mod_m_sk(temp, m_sk);
 
         // Compute m_tilde^(-1) mod Bsk
-        Array<MultiplyUint64Operand> inv_m_tilde_mod_Bsk(base_Bsk.size(), false);
+        Array<MultiplyUint64Operand> inv_m_tilde_mod_Bsk(base_Bsk.size(), false, nullptr);
         for (size_t i = 0; i < base_Bsk.size(); i++) {
             const Modulus& modulus = base_Bsk.base()[i];
             try_invert = utils::try_invert_uint64_mod(modulus.reduce(m_tilde.value()), modulus, temp);
@@ -157,7 +156,7 @@ namespace troy {namespace utils {
             utils::negate_uint64_mod(temp, m_tilde), m_tilde
         );
 
-        Array<uint64_t> prod_q_mod_Bsk(base_Bsk.size(), false);
+        Array<uint64_t> prod_q_mod_Bsk(base_Bsk.size(), false, nullptr);
         for (size_t i = 0; i < base_Bsk.size(); i++) {
             prod_q_mod_Bsk[i] = utils::modulo_uint(base_q.base_product(), base_Bsk.base()[i]);
         }
@@ -177,7 +176,7 @@ namespace troy {namespace utils {
             inv_gamma_mod_t = std::optional(MultiplyUint64Operand(temp, t));
             
             // Compute prod({t, gamma}) mod q
-            prod_t_gamma_mod_q = std::optional(Array<MultiplyUint64Operand>(base_q.size(), false));
+            prod_t_gamma_mod_q = std::optional(Array<MultiplyUint64Operand>(base_q.size(), false, nullptr));
             for (size_t i = 0; i < base_q.size(); i++) {
                 const Modulus& modulus = base_q.base()[i];
                 prod_t_gamma_mod_q.value()[i] = MultiplyUint64Operand(
@@ -191,7 +190,7 @@ namespace troy {namespace utils {
             }
 
             // Compute -prod(q)^(-1) mod {t, gamma}
-            neg_inv_q_mod_t_gamma = std::optional(Array<MultiplyUint64Operand>(2, false));
+            neg_inv_q_mod_t_gamma = std::optional(Array<MultiplyUint64Operand>(2, false, nullptr));
             for (size_t i = 0; i < 2; i++) {
                 const Modulus& modulus = base_t_gamma.value().base()[i];
                 temp = utils::modulo_uint(base_q.base_product(), modulus);
@@ -208,7 +207,7 @@ namespace troy {namespace utils {
 
         // Compute q[last]^(-1) mod q[i] for i = 0..last-1
         // This is used by modulus switching and rescaling
-        Array<MultiplyUint64Operand> inv_q_last_mod_q(base_q.size() - 1, false);
+        Array<MultiplyUint64Operand> inv_q_last_mod_q(base_q.size() - 1, false, nullptr);
         const Modulus& last_q = base_q.base()[base_q.size() - 1];
         for (size_t i = 0; i < base_q.size() - 1; i++) {
             const Modulus& modulus = base_q.base()[i];
@@ -257,10 +256,10 @@ namespace troy {namespace utils {
         this->inv_q_last_mod_q_ = std::move(inv_q_last_mod_q);
         this->base_Bsk_ntt_tables_ = std::move(base_Bsk_ntt_tables);
 
-        this->m_tilde_ = Box(new Modulus(m_tilde), false);
-        this->m_sk_ = Box(new Modulus(m_sk), false);
-        this->t_ = Box(new Modulus(t), false);
-        this->gamma_ = Box(new Modulus(gamma), false);
+        this->m_tilde_ = Box(new Modulus(m_tilde), false, nullptr);
+        this->m_sk_ = Box(new Modulus(m_sk), false, nullptr);
+        this->t_ = Box(new Modulus(t), false, nullptr);
+        this->gamma_ = Box(new Modulus(gamma), false, nullptr);
 
         this->m_tilde_value_ = m_tilde_value;
         this->inv_q_last_mod_t_ = inv_q_last_mod_t;
@@ -272,47 +271,47 @@ namespace troy {namespace utils {
     }
 
     template <typename T>
-    static std::optional<T> optional_clone(const std::optional<T>& opt) {
+    static std::optional<T> optional_clone(const std::optional<T>& opt, MemoryPoolHandle pool) {
         if (opt.has_value()) {
-            return std::optional<T>(opt.value().clone());
+            return std::optional<T>(opt.value().clone(pool));
         }
         return std::nullopt;
     }
 
-    RNSTool RNSTool::clone() const {
+    RNSTool RNSTool::clone(MemoryPoolHandle pool) const {
         RNSTool cloned;
 
         cloned.coeff_count_ = this->coeff_count_;
 
-        cloned.base_q_ = this->base_q_.clone();
-        cloned.base_B_ = this->base_B_.clone();
-        cloned.base_Bsk_ = this->base_Bsk_.clone();
-        cloned.base_Bsk_m_tilde_ = this->base_Bsk_m_tilde_.clone();
-        cloned.base_t_gamma_ = optional_clone(this->base_t_gamma_);
+        cloned.base_q_ = this->base_q_.clone(pool);
+        cloned.base_B_ = this->base_B_.clone(pool);
+        cloned.base_Bsk_ = this->base_Bsk_.clone(pool);
+        cloned.base_Bsk_m_tilde_ = this->base_Bsk_m_tilde_.clone(pool);
+        cloned.base_t_gamma_ = optional_clone(this->base_t_gamma_, pool);
 
-        cloned.base_q_to_Bsk_conv_ = this->base_q_to_Bsk_conv_.clone();
-        cloned.base_q_to_m_tilde_conv_ = this->base_q_to_m_tilde_conv_.clone();
-        cloned.base_B_to_q_conv_ = this->base_B_to_q_conv_.clone();
-        cloned.base_B_to_m_sk_conv_ = this->base_B_to_m_sk_conv_.clone();
-        cloned.base_q_to_t_gamma_conv_ = optional_clone(this->base_q_to_t_gamma_conv_);
-        cloned.base_q_to_t_conv_ = optional_clone(this->base_q_to_t_conv_);
+        cloned.base_q_to_Bsk_conv_ = this->base_q_to_Bsk_conv_.clone(pool);
+        cloned.base_q_to_m_tilde_conv_ = this->base_q_to_m_tilde_conv_.clone(pool);
+        cloned.base_B_to_q_conv_ = this->base_B_to_q_conv_.clone(pool);
+        cloned.base_B_to_m_sk_conv_ = this->base_B_to_m_sk_conv_.clone(pool);
+        cloned.base_q_to_t_gamma_conv_ = optional_clone(this->base_q_to_t_gamma_conv_, pool);
+        cloned.base_q_to_t_conv_ = optional_clone(this->base_q_to_t_conv_, pool);
 
-        cloned.inv_prod_q_mod_Bsk_ = this->inv_prod_q_mod_Bsk_.clone();
+        cloned.inv_prod_q_mod_Bsk_ = this->inv_prod_q_mod_Bsk_.clone(pool);
         cloned.neg_inv_prod_q_mod_m_tilde_ = this->neg_inv_prod_q_mod_m_tilde_;
         cloned.inv_prod_B_mod_m_sk_ = this->inv_prod_B_mod_m_sk_;
         cloned.inv_gamma_mod_t_ = this->inv_gamma_mod_t_;
-        cloned.prod_B_mod_q_ = this->prod_B_mod_q_.clone();
-        cloned.inv_m_tilde_mod_Bsk_ = this->inv_m_tilde_mod_Bsk_.clone();
-        cloned.prod_q_mod_Bsk_ = this->prod_q_mod_Bsk_.clone();
-        cloned.neg_inv_q_mod_t_gamma_ = optional_clone(this->neg_inv_q_mod_t_gamma_);
-        cloned.prod_t_gamma_mod_q_ = optional_clone(this->prod_t_gamma_mod_q_);
-        cloned.inv_q_last_mod_q_ = this->inv_q_last_mod_q_.clone();
-        cloned.base_Bsk_ntt_tables_ = this->base_Bsk_ntt_tables_.clone();
-        cloned.m_tilde_ = this->m_tilde_.clone();
-        cloned.m_sk_ = this->m_sk_.clone();
+        cloned.prod_B_mod_q_ = this->prod_B_mod_q_.clone(pool);
+        cloned.inv_m_tilde_mod_Bsk_ = this->inv_m_tilde_mod_Bsk_.clone(pool);
+        cloned.prod_q_mod_Bsk_ = this->prod_q_mod_Bsk_.clone(pool);
+        cloned.neg_inv_q_mod_t_gamma_ = optional_clone(this->neg_inv_q_mod_t_gamma_, pool);
+        cloned.prod_t_gamma_mod_q_ = optional_clone(this->prod_t_gamma_mod_q_, pool);
+        cloned.inv_q_last_mod_q_ = this->inv_q_last_mod_q_.clone(pool);
+        cloned.base_Bsk_ntt_tables_ = this->base_Bsk_ntt_tables_.clone(pool);
+        cloned.m_tilde_ = this->m_tilde_.clone(pool);
+        cloned.m_sk_ = this->m_sk_.clone(pool);
 
-        cloned.t_ = this->t_.clone();
-        cloned.gamma_ = this->gamma_.clone();
+        cloned.t_ = this->t_.clone(pool);
+        cloned.gamma_ = this->gamma_.clone(pool);
         cloned.m_tilde_value_ = this->m_tilde_value_;
         cloned.inv_q_last_mod_t_ = this->inv_q_last_mod_t_;
         cloned.q_last_mod_t_ = this->q_last_mod_t_;
@@ -324,46 +323,46 @@ namespace troy {namespace utils {
     }
 
     template <typename T>
-    static void optional_to_device_inplace(std::optional<T>& opt) {
+    static void optional_to_device_inplace(std::optional<T>& opt, MemoryPoolHandle pool) {
         if (opt.has_value()) {
-            opt.value().to_device_inplace();
+            opt.value().to_device_inplace(pool);
         }
     }
 
-    void RNSTool::to_device_inplace() {
+    void RNSTool::to_device_inplace(MemoryPoolHandle pool) {
         if (this->on_device()) {
             return;
         }
         
-        this->base_q_.to_device_inplace();
-        this->base_B_.to_device_inplace();
-        this->base_Bsk_.to_device_inplace();
-        this->base_Bsk_m_tilde_.to_device_inplace();
-        optional_to_device_inplace(this->base_t_gamma_);
+        this->base_q_.to_device_inplace(pool);
+        this->base_B_.to_device_inplace(pool);
+        this->base_Bsk_.to_device_inplace(pool);
+        this->base_Bsk_m_tilde_.to_device_inplace(pool);
+        optional_to_device_inplace(this->base_t_gamma_, pool);
 
-        this->base_q_to_Bsk_conv_.to_device_inplace();
-        this->base_q_to_m_tilde_conv_.to_device_inplace();
-        this->base_B_to_q_conv_.to_device_inplace();
-        this->base_B_to_m_sk_conv_.to_device_inplace();
-        optional_to_device_inplace(this->base_q_to_t_gamma_conv_);
-        optional_to_device_inplace(this->base_q_to_t_conv_);
+        this->base_q_to_Bsk_conv_.to_device_inplace(pool);
+        this->base_q_to_m_tilde_conv_.to_device_inplace(pool);
+        this->base_B_to_q_conv_.to_device_inplace(pool);
+        this->base_B_to_m_sk_conv_.to_device_inplace(pool);
+        optional_to_device_inplace(this->base_q_to_t_gamma_conv_, pool);
+        optional_to_device_inplace(this->base_q_to_t_conv_, pool);
 
-        this->inv_prod_q_mod_Bsk_.to_device_inplace();
-        this->prod_B_mod_q_.to_device_inplace();
-        this->inv_m_tilde_mod_Bsk_.to_device_inplace();
-        this->prod_q_mod_Bsk_.to_device_inplace();
-        optional_to_device_inplace(this->neg_inv_q_mod_t_gamma_);
-        optional_to_device_inplace(this->prod_t_gamma_mod_q_);
-        this->inv_q_last_mod_q_.to_device_inplace();
+        this->inv_prod_q_mod_Bsk_.to_device_inplace(pool);
+        this->prod_B_mod_q_.to_device_inplace(pool);
+        this->inv_m_tilde_mod_Bsk_.to_device_inplace(pool);
+        this->prod_q_mod_Bsk_.to_device_inplace(pool);
+        optional_to_device_inplace(this->neg_inv_q_mod_t_gamma_, pool);
+        optional_to_device_inplace(this->prod_t_gamma_mod_q_, pool);
+        this->inv_q_last_mod_q_.to_device_inplace(pool);
         for (size_t i = 0; i < base_Bsk_ntt_tables_.size(); i++) {
-            this->base_Bsk_ntt_tables_[i].to_device_inplace();
+            this->base_Bsk_ntt_tables_[i].to_device_inplace(pool);
         }
-        this->base_Bsk_ntt_tables_.to_device_inplace();
+        this->base_Bsk_ntt_tables_.to_device_inplace(pool);
 
-        this->m_tilde_.to_device_inplace();
-        this->m_sk_.to_device_inplace();
-        this->t_.to_device_inplace();
-        this->gamma_.to_device_inplace();
+        this->m_tilde_.to_device_inplace(pool);
+        this->m_sk_.to_device_inplace(pool);
+        this->t_.to_device_inplace(pool);
+        this->gamma_.to_device_inplace(pool);
 
         this->device = true;
     }
@@ -377,7 +376,7 @@ namespace troy {namespace utils {
         size_t half = self.q_last_half();
 
         Slice<uint64_t> input_last = input.slice(last_input_offset, last_input_offset + coeff_count);
-        Array<uint64_t> temp(coeff_count, false);
+        Array<uint64_t> temp(coeff_count, false, nullptr);
         for (size_t i = 0; i < base_q_size - 1; i++) {
             ConstPointer<Modulus> modulus = self.base_q().base().at(i);
             Slice<uint64_t> input_i = input.slice(i * coeff_count, (i + 1) * coeff_count);
@@ -424,7 +423,7 @@ namespace troy {namespace utils {
 
     void RNSTool::divide_and_round_q_last_inplace(Slice<uint64_t> input) const {
         bool device = this->on_device();
-        if (device != input.on_device()) {
+        if (!utils::device_compatible(*this, input)) {
             throw std::invalid_argument("[RNSTool::divide_and_round_q_last_inplace] RNSTool and input must be on the same device.");
         }
         size_t base_q_size = this->base_q().size();
@@ -578,9 +577,9 @@ namespace troy {namespace utils {
         }
     }
     
-    void RNSTool::divide_and_round_q_last_ntt_inplace(Slice<uint64_t> input, ConstSlice<NTTTables> rns_ntt_tables) const {
+    void RNSTool::divide_and_round_q_last_ntt_inplace(Slice<uint64_t> input, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool) const {
         bool device = this->on_device();
-        if (!utils::same(device, input.on_device(), rns_ntt_tables.on_device())) {
+        if (!utils::device_compatible(*this, input, rns_ntt_tables)) {
             throw std::invalid_argument("[RNSTool::divide_and_round_q_last_ntt_inplace] RNSTool, input and ntt_tables must be on the same device.");
         }
 
@@ -593,7 +592,7 @@ namespace troy {namespace utils {
         // Add (qi-1)/2 to change from flooring to rounding
         utils::add_scalar_inplace(input_last, this->q_last_half(), this->base_q().base().at(base_q_size - 1));
 
-        Array<uint64_t> temp(coeff_count * (base_q_size - 1), device);
+        Array<uint64_t> temp(coeff_count * (base_q_size - 1), device, pool);
         divide_and_round_q_last_ntt_inplace_step1(*this, input, temp.reference());
         
         utils::ntt_negacyclic_harvey_lazy_p(temp.reference(), coeff_count, rns_ntt_tables.const_slice(0, base_q_size - 1));
@@ -670,9 +669,9 @@ namespace troy {namespace utils {
         }
     }
     
-    void RNSTool::fast_b_conv_sk(ConstSlice<uint64_t> input, Slice<uint64_t> destination) const {
+    void RNSTool::fast_b_conv_sk(ConstSlice<uint64_t> input, Slice<uint64_t> destination, MemoryPoolHandle pool) const {
         bool device = this->on_device();
-        if (!utils::same(device, input.on_device(), destination.on_device())) {
+        if (!utils::device_compatible(*this, input, destination)) {
             throw std::invalid_argument("[RNSTool::fast_b_conv_sk] RNSTool, input and destination must be on the same device.");
         }
         size_t coeff_count = this->coeff_count();
@@ -680,12 +679,12 @@ namespace troy {namespace utils {
         size_t base_B_size = base_B.size();
 
         // Fast convert B -> q; input is in Bsk but we only use B
-        this->base_B_to_q_conv().fast_convert_array(input.const_slice(0, base_B_size * coeff_count), destination);
+        this->base_B_to_q_conv().fast_convert_array(input.const_slice(0, base_B_size * coeff_count), destination, pool);
         
         // Compute alpha_sk
         // Fast convert B -> {m_sk}; input is in Bsk but we only use B
-        Array<uint64_t> temp(coeff_count, device);
-        this->base_B_to_m_sk_conv().fast_convert_array(input.const_slice(0, base_B_size * coeff_count), temp.reference());
+        Array<uint64_t> temp(coeff_count, device, pool);
+        this->base_B_to_m_sk_conv().fast_convert_array(input.const_slice(0, base_B_size * coeff_count), temp.reference(), pool);
 
         if (device) {
             size_t base_q_size = this->base_q().size();
@@ -714,7 +713,7 @@ namespace troy {namespace utils {
         size_t coeff_count = self.coeff_count();
         ConstSlice<uint64_t> input_m_tilde = input.const_slice(base_Bsk_size * coeff_count, (base_Bsk_size + 1) * coeff_count);
         uint64_t m_tilde_div_2 = self.m_tilde()->value() >> 1;
-        Array<MultiplyUint64Operand> prod_q_mod_Bsk_elt(base_Bsk_size, false);
+        Array<MultiplyUint64Operand> prod_q_mod_Bsk_elt(base_Bsk_size, false, nullptr);
         for (size_t i = 0; i < base_Bsk_size; i++) {
             const Modulus& modulus = *base_Bsk.at(i);
             prod_q_mod_Bsk_elt[i] = MultiplyUint64Operand(self.prod_q_mod_Bsk()[i], modulus);
@@ -786,7 +785,7 @@ namespace troy {namespace utils {
     
     void RNSTool::sm_mrq(ConstSlice<uint64_t> input, Slice<uint64_t> destination) const {
         bool device = this->on_device();
-        if (!utils::same(device, input.on_device(), destination.on_device())) {
+        if (!utils::device_compatible(*this, input, destination)) {
             throw std::invalid_argument("[RNSTool::sm_mrq] RNSTool, input and destination must be on the same device.");
         }
         size_t coeff_count = this->coeff_count();
@@ -848,14 +847,14 @@ namespace troy {namespace utils {
         );
     }
 
-    void RNSTool::fast_floor(ConstSlice<uint64_t> input, Slice<uint64_t> destination) const {
+    void RNSTool::fast_floor(ConstSlice<uint64_t> input, Slice<uint64_t> destination, MemoryPoolHandle pool) const {
         size_t base_q_size = this->base_q().size();
         size_t base_Bsk_size = this->base_Bsk().size();
         size_t coeff_count = this->coeff_count();
 
         this->base_q_to_Bsk_conv().fast_convert_array(
             input.const_slice(0, base_q_size * coeff_count),
-            destination
+            destination, pool
         );
 
         if (this->on_device()) {
@@ -875,17 +874,17 @@ namespace troy {namespace utils {
 
     }
     
-    void RNSTool::fast_b_conv_m_tilde(ConstSlice<uint64_t> input, Slice<uint64_t> destination) const {
+    void RNSTool::fast_b_conv_m_tilde(ConstSlice<uint64_t> input, Slice<uint64_t> destination, MemoryPoolHandle pool) const {
         bool device = this->on_device();
         size_t base_q_size = this->base_q().size();
         size_t base_Bsk_size = this->base_Bsk().size();
         size_t coeff_count = this->coeff_count();
-        Array<uint64_t> temp(coeff_count * base_q_size, device);
+        Array<uint64_t> temp(coeff_count * base_q_size, device, pool);
         utils::multiply_scalar_p(input, this->m_tilde_value(), coeff_count, this->base_q().base(), temp.reference());
         this->base_q_to_Bsk_conv().fast_convert_array(temp.const_reference(),
-            destination.slice(0, base_Bsk_size * coeff_count));
+            destination.slice(0, base_Bsk_size * coeff_count), pool);
         this->base_q_to_m_tilde_conv().fast_convert_array(temp.const_reference(),
-            destination.slice(base_Bsk_size * coeff_count, (base_Bsk_size + 1) * coeff_count));
+            destination.slice(base_Bsk_size * coeff_count, (base_Bsk_size + 1) * coeff_count), pool);
     }
 
     static void host_decrypt_scale_and_round_step1(const RNSTool& self, Slice<uint64_t> destination, ConstSlice<uint64_t> temp_t_gamma) {
@@ -958,9 +957,9 @@ namespace troy {namespace utils {
         }
     }
     
-    void RNSTool::decrypt_scale_and_round(ConstSlice<uint64_t> phase, Slice<uint64_t> destination) const {
+    void RNSTool::decrypt_scale_and_round(ConstSlice<uint64_t> phase, Slice<uint64_t> destination, MemoryPoolHandle pool) const {
         bool device = this->on_device();
-        if (!utils::same(device, phase.on_device(), destination.on_device())) {
+        if (!utils::device_compatible(*this, phase, destination)) {
             throw std::invalid_argument("[RNSTool::decrypt_scale_and_round] RNSTool, phase and destination must be on the same device.");
         }
         size_t base_q_size = this->base_q().size();
@@ -968,7 +967,7 @@ namespace troy {namespace utils {
         size_t coeff_count = this->coeff_count();
 
         // Compute |gamma * t|_qi * ct(s)
-        Array<uint64_t> temp(coeff_count * base_q_size, device);
+        Array<uint64_t> temp(coeff_count * base_q_size, device, pool);
         utils::multiply_uint64operand_p(
             phase.const_slice(0, base_q_size * coeff_count),
             this->prod_t_gamma_mod_q(),
@@ -978,9 +977,9 @@ namespace troy {namespace utils {
         );
 
         // Make another temp destination to get the poly in mod {t, gamma}
-        Array<uint64_t> temp_t_gamma(coeff_count * base_t_gamma_size, device);
+        Array<uint64_t> temp_t_gamma(coeff_count * base_t_gamma_size, device, pool);
         this->base_q_to_t_gamma_conv()
-            .fast_convert_array(temp.const_reference(), temp_t_gamma.reference());
+            .fast_convert_array(temp.const_reference(), temp_t_gamma.reference(), pool);
         
         // Multiply by -prod(q)^(-1) mod {t, gamma}
         utils::multiply_uint64operand_inplace_p(
@@ -996,10 +995,12 @@ namespace troy {namespace utils {
     }
 
     static void host_mod_t_and_divide_q_last_inplace_step1(const RNSTool& self, Slice<uint64_t> input, ConstSlice<uint64_t> neg_c_last_mod_t) {
-        bool device = self.on_device();
+        if (self.on_device()) {
+            throw std::logic_error("[host_mod_t_and_divide_q_last_inplace_step1] Unreachable.");
+        }
         size_t base_q_size = self.base_q().size();
         size_t coeff_count = self.coeff_count();
-        Array<uint64_t> delta_mod_q_i(coeff_count, device);
+        Array<uint64_t> delta_mod_q_i(coeff_count, false, nullptr);
         uint64_t last_modulus_value = self.base_q().base().at(base_q_size - 1)->value();
         for (size_t i = 0; i < base_q_size - 1; i++) {
 
@@ -1077,16 +1078,16 @@ namespace troy {namespace utils {
         }
     }
 
-    void RNSTool::mod_t_and_divide_q_last_inplace(Slice<uint64_t> input) const {
+    void RNSTool::mod_t_and_divide_q_last_inplace(Slice<uint64_t> input, MemoryPoolHandle pool) const {
         bool device = this->on_device();
-        if (device != input.on_device()) {
+        if (!utils::device_compatible(*this, input)) {
             throw std::invalid_argument("[RNSTool::mod_t_and_divide_q_last_inplace] RNSTool and input must be on the same device.");
         }
         size_t modulus_size = this->base_q().size();
         size_t coeff_count = this->coeff_count();
 
         // neg_c_last_mod_t = - c_last (mod t)
-        Array<uint64_t> neg_c_last_mod_t(coeff_count, device);
+        Array<uint64_t> neg_c_last_mod_t(coeff_count, device, pool);
         utils::modulo(
             input.const_slice((modulus_size - 1) * coeff_count, modulus_size * coeff_count),
             this->t(),
@@ -1102,11 +1103,11 @@ namespace troy {namespace utils {
 
     }
 
-    static void host_mod_t_and_divide_q_last_ntt_inplace_step1(const RNSTool& self, Slice<uint64_t> input, ConstSlice<uint64_t> neg_c_last_mod_t, ConstSlice<NTTTables> rns_ntt_tables) {
+    static void host_mod_t_and_divide_q_last_ntt_inplace_step1(const RNSTool& self, Slice<uint64_t> input, ConstSlice<uint64_t> neg_c_last_mod_t, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool) {
         bool device = self.on_device();
         size_t base_q_size = self.base_q().size();
         size_t coeff_count = self.coeff_count();
-        Array<uint64_t> delta_mod_q_i(coeff_count, device);
+        Array<uint64_t> delta_mod_q_i(coeff_count, device, pool);
         uint64_t last_modulus_value = self.base_q().base().at(base_q_size - 1)->value();
         for (size_t i = 0; i < base_q_size - 1; i++) {
 
@@ -1190,13 +1191,13 @@ namespace troy {namespace utils {
         dest = utils::multiply_uint64operand_mod(dest, inv_q_last_mod_q[i], modulus);
     }
 
-    static void mod_t_and_divide_q_last_ntt_inplace_step1(const RNSTool& self, Slice<uint64_t> input, ConstSlice<uint64_t> neg_c_last_mod_t, ConstSlice<NTTTables> rns_ntt_tables) {
+    static void mod_t_and_divide_q_last_ntt_inplace_step1(const RNSTool& self, Slice<uint64_t> input, ConstSlice<uint64_t> neg_c_last_mod_t, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool) {
         bool device = self.on_device();
         size_t base_q_size = self.base_q().size();
         size_t coeff_count = self.coeff_count();
         if (device) {
             size_t block_count = utils::ceil_div(coeff_count * (base_q_size - 1), utils::KERNEL_THREAD_COUNT);
-            Array<uint64_t> delta_mod_q_i(coeff_count * (base_q_size - 1), device);
+            Array<uint64_t> delta_mod_q_i(coeff_count * (base_q_size - 1), device, pool);
             kernel_mod_t_and_divide_q_last_ntt_inplace_step1_inner1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 self.base_q().base(),
                 coeff_count,
@@ -1215,13 +1216,13 @@ namespace troy {namespace utils {
             );
             cudaStreamSynchronize(0);
         } else {
-            host_mod_t_and_divide_q_last_ntt_inplace_step1(self, input, neg_c_last_mod_t, rns_ntt_tables);
+            host_mod_t_and_divide_q_last_ntt_inplace_step1(self, input, neg_c_last_mod_t, rns_ntt_tables, pool);
         }
     }
 
-    void RNSTool::mod_t_and_divide_q_last_ntt_inplace(Slice<uint64_t> input, ConstSlice<NTTTables> rns_ntt_tables) const {
+    void RNSTool::mod_t_and_divide_q_last_ntt_inplace(Slice<uint64_t> input, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool) const {
         bool device = this->on_device();
-        if (!utils::same(device, input.on_device(), rns_ntt_tables.on_device())) {
+        if (!utils::device_compatible(input, rns_ntt_tables, *this)) {
             throw std::invalid_argument("[RNSTool::mod_t_and_divide_q_last_ntt_inplace] RNSTool, input, rns_ntt_tables must be on the same device.");
         }
         
@@ -1232,7 +1233,7 @@ namespace troy {namespace utils {
         utils::inverse_ntt_negacyclic_harvey(c_last, coeff_count, rns_ntt_tables.at(modulus_size - 1));
         
         // neg_c_last_mod_t = - c_last (mod t)
-        Array<uint64_t> neg_c_last_mod_t(coeff_count, device);
+        Array<uint64_t> neg_c_last_mod_t(coeff_count, device, pool);
         utils::modulo(c_last.as_const(), this->t(), neg_c_last_mod_t.reference());
         utils::negate_inplace(neg_c_last_mod_t.reference(), this->t());
         if (this->inv_q_last_mod_t() != 1) {
@@ -1240,7 +1241,7 @@ namespace troy {namespace utils {
             utils::multiply_scalar_inplace(neg_c_last_mod_t.reference(), this->inv_q_last_mod_t(), this->t());
         }
 
-        mod_t_and_divide_q_last_ntt_inplace_step1(*this, input, neg_c_last_mod_t.const_reference(), rns_ntt_tables);
+        mod_t_and_divide_q_last_ntt_inplace_step1(*this, input, neg_c_last_mod_t.const_reference(), rns_ntt_tables, pool);
 
     }
 

@@ -269,56 +269,51 @@ namespace troy {namespace utils {
 
 
 
-    inline void negacyclic_multiply_mononomial_ps(ConstSlice<uint64_t> polys, uint64_t mono_coeff, uint64_t mono_exponent, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
-        // FIXME:  Frequent allocation
-        Array<uint64_t> temp(result.size(), result.on_device());
+    inline void negacyclic_multiply_mononomial_ps(ConstSlice<uint64_t> polys, uint64_t mono_coeff, uint64_t mono_exponent, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+        Array<uint64_t> temp(result.size(), result.on_device(), pool);
         multiply_scalar_ps(polys, mono_coeff, pcount, degree, moduli, temp.reference());
         negacyclic_shift_ps(temp.const_reference(), mono_exponent, pcount, degree, moduli, result);
     }
 
-    inline void negacyclic_multiply_mononomial_p(ConstSlice<uint64_t> poly, uint64_t mono_coeff, uint64_t mono_exponent, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
-        negacyclic_multiply_mononomial_ps(poly, mono_coeff, mono_exponent, 1, degree, moduli, result);
+    inline void negacyclic_multiply_mononomial_p(ConstSlice<uint64_t> poly, uint64_t mono_coeff, uint64_t mono_exponent, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+        negacyclic_multiply_mononomial_ps(poly, mono_coeff, mono_exponent, 1, degree, moduli, result, pool);
     }
 
-    inline void negacyclic_multiply_mononomial(ConstSlice<uint64_t> poly, uint64_t mono_coeff, uint64_t mono_exponent, ConstPointer<Modulus> modulus, Slice<uint64_t> result) {
-        negacyclic_multiply_mononomial_ps(poly, mono_coeff, mono_exponent, 1, poly.size(), ConstSlice<Modulus>::from_pointer(modulus), result);
-    }
-
-
-
-    inline void negacyclic_multiply_mononomial_inplace_ps(Slice<uint64_t> polys, uint64_t mono_coeff, uint64_t mono_exponent, size_t pcount, size_t degree, ConstSlice<Modulus> moduli) {
-        negacyclic_multiply_mononomial_ps(polys.as_const(), mono_coeff, mono_exponent, pcount, degree, moduli, polys);
-    }
-
-    inline void negacyclic_multiply_mononomial_inplace_p(Slice<uint64_t> poly, uint64_t mono_coeff, uint64_t mono_exponent, size_t degree, ConstSlice<Modulus> moduli) {
-        negacyclic_multiply_mononomial_inplace_ps(poly, mono_coeff, mono_exponent, 1, degree, moduli);
-    }
-
-    inline void negacyclic_multiply_mononomial_inplace(Slice<uint64_t> poly, uint64_t mono_coeff, uint64_t mono_exponent, ConstPointer<Modulus> modulus) {
-        negacyclic_multiply_mononomial_inplace_ps(poly, mono_coeff, mono_exponent, 1, poly.size(), ConstSlice<Modulus>::from_pointer(modulus));
+    inline void negacyclic_multiply_mononomial(ConstSlice<uint64_t> poly, uint64_t mono_coeff, uint64_t mono_exponent, ConstPointer<Modulus> modulus, Slice<uint64_t> result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+        negacyclic_multiply_mononomial_ps(poly, mono_coeff, mono_exponent, 1, poly.size(), ConstSlice<Modulus>::from_pointer(modulus), result, pool);
     }
 
 
 
-    inline void negacyclic_multiply_mononomials_ps(ConstSlice<uint64_t> polys, ConstSlice<uint64_t> mono_coeffs, uint64_t mono_exponent, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
-        // FIXME:  Frequent allocation
-        Array<uint64_t> temp(result.size(), result.on_device());
+    inline void negacyclic_multiply_mononomial_inplace_ps(Slice<uint64_t> polys, uint64_t mono_coeff, uint64_t mono_exponent, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+        negacyclic_multiply_mononomial_ps(polys.as_const(), mono_coeff, mono_exponent, pcount, degree, moduli, polys, pool);
+    }
+
+    inline void negacyclic_multiply_mononomial_inplace_p(Slice<uint64_t> poly, uint64_t mono_coeff, uint64_t mono_exponent, size_t degree, ConstSlice<Modulus> moduli, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+        negacyclic_multiply_mononomial_inplace_ps(poly, mono_coeff, mono_exponent, 1, degree, moduli, pool);
+    }
+
+    inline void negacyclic_multiply_mononomial_inplace(Slice<uint64_t> poly, uint64_t mono_coeff, uint64_t mono_exponent, ConstPointer<Modulus> modulus, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+        negacyclic_multiply_mononomial_inplace_ps(poly, mono_coeff, mono_exponent, 1, poly.size(), ConstSlice<Modulus>::from_pointer(modulus), pool);
+    }
+
+
+    inline void negacyclic_multiply_mononomials_ps(ConstSlice<uint64_t> polys, ConstSlice<uint64_t> mono_coeffs, uint64_t mono_exponent, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+        Array<uint64_t> temp(result.size(), result.on_device(), pool);
         multiply_scalars_ps(polys, mono_coeffs, pcount, degree, moduli, temp.reference());
         negacyclic_shift_ps(temp.const_reference(), mono_exponent, pcount, degree, moduli, result);
     }
 
-    inline void negacyclic_multiply_mononomials_p(ConstSlice<uint64_t> poly, ConstSlice<uint64_t> mono_coeffs, uint64_t mono_exponent, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
-        negacyclic_multiply_mononomials_ps(poly, mono_coeffs, mono_exponent, 1, degree, moduli, result);
+    inline void negacyclic_multiply_mononomials_p(ConstSlice<uint64_t> poly, ConstSlice<uint64_t> mono_coeffs, uint64_t mono_exponent, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+        negacyclic_multiply_mononomials_ps(poly, mono_coeffs, mono_exponent, 1, degree, moduli, result, pool);
     }
 
-
-
-    inline void negacyclic_multiply_mononomials_inplace_ps(Slice<uint64_t> polys, ConstSlice<uint64_t> mono_coeffs, uint64_t mono_exponent, size_t pcount, size_t degree, ConstSlice<Modulus> moduli) {
-        negacyclic_multiply_mononomials_ps(polys.as_const(), mono_coeffs, mono_exponent, pcount, degree, moduli, polys);
+    inline void negacyclic_multiply_mononomials_inplace_ps(Slice<uint64_t> polys, ConstSlice<uint64_t> mono_coeffs, uint64_t mono_exponent, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+        negacyclic_multiply_mononomials_ps(polys.as_const(), mono_coeffs, mono_exponent, pcount, degree, moduli, polys, pool);
     }
 
-    inline void negacyclic_multiply_mononomials_inplace_p(Slice<uint64_t> poly, ConstSlice<uint64_t> mono_coeffs, uint64_t mono_exponent, size_t degree, ConstSlice<Modulus> moduli) {
-        negacyclic_multiply_mononomials_inplace_ps(poly, mono_coeffs, mono_exponent, 1, degree, moduli);
+    inline void negacyclic_multiply_mononomials_inplace_p(Slice<uint64_t> poly, ConstSlice<uint64_t> mono_coeffs, uint64_t mono_exponent, size_t degree, ConstSlice<Modulus> moduli, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+        negacyclic_multiply_mononomials_inplace_ps(poly, mono_coeffs, mono_exponent, 1, degree, moduli, pool);
     }
 
 }}

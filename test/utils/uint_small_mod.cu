@@ -27,7 +27,7 @@ namespace uint_small_mod {
     }
 
     TEST(UintSmallMod, HostIncrementUint64Mod) {
-        Array<Modulus> modulus(3, false);
+        Array<Modulus> modulus(3, false, nullptr);
         modulus[0] = Modulus(2);
         modulus[1] = Modulus(0x10000);
         modulus[2] = Modulus(2305843009211596801ULL);
@@ -44,13 +44,13 @@ namespace uint_small_mod {
     }
     
     TEST(UintSmallMod, DeviceIncrementUint64Mod) {
-        Array<Modulus> modulus(3, false);
+        Array<Modulus> modulus(3, false, nullptr);
         modulus[0] = Modulus(2);
         modulus[1] = Modulus(0x10000);
         modulus[2] = Modulus(2305843009211596801ULL);
-        Array<Modulus> device_modulus = modulus.to_device();
+        Array<Modulus> device_modulus = modulus.to_device(MemoryPool::GlobalPool());
 
-        Array<bool> r(16, true); 
+        Array<bool> r(16, true, MemoryPool::GlobalPool()); 
         kernel_increment_uint64_mod<<<4, 4>>>(device_modulus.const_reference(), r.reference());
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
@@ -78,7 +78,7 @@ namespace uint_small_mod {
     }
 
     TEST(UintSmallMod, HostDecrementUint64Mod) {
-        Array<Modulus> modulus(3, false);
+        Array<Modulus> modulus(3, false, nullptr);
         modulus[0] = Modulus(2);
         modulus[1] = Modulus(0x10000);
         modulus[2] = Modulus(2305843009211596801ULL);
@@ -95,13 +95,13 @@ namespace uint_small_mod {
     }
     
     TEST(UintSmallMod, DeviceDecrementUint64Mod) {
-        Array<Modulus> modulus(3, false);
+        Array<Modulus> modulus(3, false, nullptr);
         modulus[0] = Modulus(2);
         modulus[1] = Modulus(0x10000);
         modulus[2] = Modulus(2305843009211596801ULL);
-        Array<Modulus> device_modulus = modulus.to_device();
+        Array<Modulus> device_modulus = modulus.to_device(MemoryPool::GlobalPool());
 
-        Array<bool> r(16, true); 
+        Array<bool> r(16, true, MemoryPool::GlobalPool()); 
         kernel_decrement_uint64_mod<<<4, 4>>>(device_modulus.const_reference(), r.reference());
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
@@ -134,7 +134,7 @@ namespace uint_small_mod {
     }
     
     TEST(UintSmallMod, HostNegateUint64Mod) {
-        Array<Modulus> modulus(4, false);
+        Array<Modulus> modulus(4, false, nullptr);
         modulus[0] = Modulus(2);
         modulus[1] = Modulus(0xFFFFULL);
         modulus[2] = Modulus(0x10000);
@@ -152,14 +152,14 @@ namespace uint_small_mod {
     }
     
     TEST(UintSmallMod, DeviceNegateUint64Mod) {
-        Array<Modulus> modulus(4, false);
+        Array<Modulus> modulus(4, false, nullptr);
         modulus[0] = Modulus(2);
         modulus[1] = Modulus(0xFFFFULL);
         modulus[2] = Modulus(0x10000);
         modulus[3] = Modulus(2305843009211596801ULL);
-        Array<Modulus> device_modulus = modulus.to_device();
+        Array<Modulus> device_modulus = modulus.to_device(MemoryPool::GlobalPool());
 
-        Array<bool> r(16, true); 
+        Array<bool> r(16, true, MemoryPool::GlobalPool()); 
         kernel_negate_uint64_mod<<<4, 4>>>(device_modulus.const_reference(), r.reference());
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
@@ -186,7 +186,7 @@ namespace uint_small_mod {
     }
 
     TEST(UintSmallMod, HostDivide2Uint64Mod) {
-        Array<Modulus> modulus(3, false);
+        Array<Modulus> modulus(3, false, nullptr);
         modulus[0] = Modulus(3);
         modulus[1] = Modulus(17);
         modulus[2] = Modulus(0xFFFFFFFFFFFFFFFULL);
@@ -203,13 +203,13 @@ namespace uint_small_mod {
     }
     
     TEST(UintSmallMod, DeviceDivide2Uint64Mod) {
-        Array<Modulus> modulus(3, false);
+        Array<Modulus> modulus(3, false, nullptr);
         modulus[0] = Modulus(3);
         modulus[1] = Modulus(17);
         modulus[2] = Modulus(0xFFFFFFFFFFFFFFFULL);
-        Array<Modulus> device_modulus = modulus.to_device();
+        Array<Modulus> device_modulus = modulus.to_device(MemoryPool::GlobalPool());
 
-        Array<bool> r(16, true); 
+        Array<bool> r(16, true, MemoryPool::GlobalPool()); 
         kernel_divide2_uint64_mod<<<4, 4>>>(device_modulus.const_reference(), r.reference());
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
@@ -247,7 +247,7 @@ namespace uint_small_mod {
     }
 
     TEST(UintSmallMod, HostAddUint64Mod) {
-        Array<Modulus> modulus(3, false);
+        Array<Modulus> modulus(3, false, nullptr);
         modulus[0] = Modulus(2);
         modulus[1] = Modulus(10);
         modulus[2] = Modulus(2305843009211596801ULL);
@@ -264,13 +264,13 @@ namespace uint_small_mod {
     }
     
     TEST(UintSmallMod, DeviceAddUint64Mod) {
-        Array<Modulus> modulus(3, false);
+        Array<Modulus> modulus(3, false, nullptr);
         modulus[0] = Modulus(2);
         modulus[1] = Modulus(10);
         modulus[2] = Modulus(2305843009211596801ULL);
-        Array<Modulus> device_modulus = modulus.to_device();
+        Array<Modulus> device_modulus = modulus.to_device(MemoryPool::GlobalPool());
 
-        Array<bool> r(16, true); 
+        Array<bool> r(16, true, MemoryPool::GlobalPool()); 
         kernel_add_uint64_mod<<<4, 4>>>(device_modulus.const_reference(), r.reference());
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
@@ -310,7 +310,7 @@ namespace uint_small_mod {
     }
 
     TEST(UintSmallMod, HostSubUint64Mod) {
-        Array<Modulus> modulus(3, false);
+        Array<Modulus> modulus(3, false, nullptr);
         modulus[0] = Modulus(2);
         modulus[1] = Modulus(10);
         modulus[2] = Modulus(2305843009211596801ULL);
@@ -327,13 +327,13 @@ namespace uint_small_mod {
     }
     
     TEST(UintSmallMod, DeviceSubUint64Mod) {
-        Array<Modulus> modulus(3, false);
+        Array<Modulus> modulus(3, false, nullptr);
         modulus[0] = Modulus(2);
         modulus[1] = Modulus(10);
         modulus[2] = Modulus(2305843009211596801ULL);
-        Array<Modulus> device_modulus = modulus.to_device();
+        Array<Modulus> device_modulus = modulus.to_device(MemoryPool::GlobalPool());
 
-        Array<bool> r(16, true); 
+        Array<bool> r(16, true, MemoryPool::GlobalPool()); 
         kernel_sub_uint64_mod<<<4, 4>>>(device_modulus.const_reference(), r.reference());
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
@@ -343,7 +343,7 @@ namespace uint_small_mod {
 
     __host__ __device__
     bool test_barrett_reduce_uint128_mod(ConstSlice<Modulus> moduli) {
-        uint64_t input[2]; ConstSlice<uint64_t> input_slice(input, 2, on_device());
+        uint64_t input[2]; ConstSlice<uint64_t> input_slice(input, 2, on_device(), nullptr);
         {
             const Modulus& mod = moduli[0];
             input[0] = 0;
@@ -389,7 +389,7 @@ namespace uint_small_mod {
 
 
     TEST(UintSmallMod, HostBarrettReduceUint128Mod) {
-        Array<Modulus> modulus(3, false);
+        Array<Modulus> modulus(3, false, nullptr);
         modulus[0] = Modulus(2);
         modulus[1] = Modulus(3);
         modulus[2] = Modulus(13131313131313ULL);
@@ -406,13 +406,13 @@ namespace uint_small_mod {
     }
     
     TEST(UintSmallMod, DeviceBarrettReduceUint128Mod) {
-        Array<Modulus> modulus(3, false);
+        Array<Modulus> modulus(3, false, nullptr);
         modulus[0] = Modulus(2);
         modulus[1] = Modulus(3);
         modulus[2] = Modulus(13131313131313ULL);
-        Array<Modulus> device_modulus = modulus.to_device();
+        Array<Modulus> device_modulus = modulus.to_device(MemoryPool::GlobalPool());
 
-        Array<bool> r(16, true); 
+        Array<bool> r(16, true, MemoryPool::GlobalPool()); 
         kernel_barrett_reduce_uint128_mod<<<4, 4>>>(device_modulus.const_reference(), r.reference());
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
@@ -452,7 +452,7 @@ namespace uint_small_mod {
     }
 
     TEST(UintSmallMod, HostMultiplyUint64Mod) {
-        Array<Modulus> modulus(3, false);
+        Array<Modulus> modulus(3, false, nullptr);
         modulus[0] = Modulus(2);
         modulus[1] = Modulus(10);
         modulus[2] = Modulus(2305843009211596801ULL);
@@ -469,13 +469,13 @@ namespace uint_small_mod {
     }
     
     TEST(UintSmallMod, DeviceMultiplyUint64Mod) {
-        Array<Modulus> modulus(3, false);
+        Array<Modulus> modulus(3, false, nullptr);
         modulus[0] = Modulus(2);
         modulus[1] = Modulus(10);
         modulus[2] = Modulus(2305843009211596801ULL);
-        Array<Modulus> device_modulus = modulus.to_device();
+        Array<Modulus> device_modulus = modulus.to_device(MemoryPool::GlobalPool());
 
-        Array<bool> r(16, true); 
+        Array<bool> r(16, true, MemoryPool::GlobalPool()); 
         kernel_multiply_uint64_mod<<<4, 4>>>(device_modulus.const_reference(), r.reference());
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
@@ -506,7 +506,7 @@ namespace uint_small_mod {
     }
 
     TEST(UintSmallMod, HostMultiplyAddUint64Mod) {
-        Array<Modulus> modulus(2, false);
+        Array<Modulus> modulus(2, false, nullptr);
         modulus[0] = Modulus(7);
         modulus[1] = Modulus(0x1FFFFFFFFFFFFFFFULL);
         EXPECT_TRUE(test_multiply_add_uint64_mod(modulus.const_reference()));
@@ -522,12 +522,12 @@ namespace uint_small_mod {
     }
     
     TEST(UintSmallMod, DeviceMultiplyAddUint64Mod) {
-        Array<Modulus> modulus(2, false);
+        Array<Modulus> modulus(2, false, nullptr);
         modulus[0] = Modulus(7);
         modulus[1] = Modulus(0x1FFFFFFFFFFFFFFFULL);
-        Array<Modulus> device_modulus = modulus.to_device();
+        Array<Modulus> device_modulus = modulus.to_device(MemoryPool::GlobalPool());
 
-        Array<bool> r(16, true); 
+        Array<bool> r(16, true, MemoryPool::GlobalPool()); 
         kernel_multiply_add_uint64_mod<<<4, 4>>>(device_modulus.const_reference(), r.reference());
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
@@ -538,7 +538,7 @@ namespace uint_small_mod {
     __host__ __device__
     bool test_modulo_uint(ConstSlice<Modulus> moduli) {
         {
-            uint64_t value[3]; Slice<uint64_t> value_slice(value, 3, on_device());
+            uint64_t value[3]; Slice<uint64_t> value_slice(value, 3, on_device(), nullptr);
             const Modulus& mod = moduli[0];
             value[0] = 0;
             value[1] = 0;
@@ -569,7 +569,7 @@ namespace uint_small_mod {
             RETURN_EQ(0ULL, value[1]);
             RETURN_EQ(0ULL, value[2]);
         } {
-            uint64_t value[3]; Slice<uint64_t> value_slice(value, 3, on_device());
+            uint64_t value[3]; Slice<uint64_t> value_slice(value, 3, on_device(), nullptr);
             const Modulus& mod = moduli[1];
             value[0] = 9585656442714717620ul;
             value[1] = 1817697005049051848;
@@ -579,7 +579,7 @@ namespace uint_small_mod {
             RETURN_EQ(0ULL, value[1]);
             RETURN_EQ(0ULL, value[2]);
         } {
-            uint64_t value[3]; Slice<uint64_t> value_slice(value, 3, on_device());
+            uint64_t value[3]; Slice<uint64_t> value_slice(value, 3, on_device(), nullptr);
             const Modulus& mod = moduli[2];
             value[0] = 9585656442714717620ul;
             value[1] = 1817697005049051848;
@@ -589,7 +589,7 @@ namespace uint_small_mod {
             RETURN_EQ(0ULL, value[1]);
             RETURN_EQ(0ULL, value[2]);
         } {
-            uint64_t value[4]; Slice<uint64_t> value_slice(value, 4, on_device());
+            uint64_t value[4]; Slice<uint64_t> value_slice(value, 4, on_device(), nullptr);
             const Modulus& mod = moduli[3];
             value[0] = 9585656442714717620ul;
             value[1] = 1817697005049051848;
@@ -606,7 +606,7 @@ namespace uint_small_mod {
 
 
     TEST(UintSmallMod, HostModuloUintMod) {
-        Array<Modulus> modulus(4, false);
+        Array<Modulus> modulus(4, false, nullptr);
         modulus[0] = Modulus(2);
         modulus[1] = Modulus(0xFFFF);
         modulus[2] = Modulus(0x1000);
@@ -624,14 +624,14 @@ namespace uint_small_mod {
     }
     
     TEST(UintSmallMod, DeviceModuloUintMod) {
-        Array<Modulus> modulus(4, false);
+        Array<Modulus> modulus(4, false, nullptr);
         modulus[0] = Modulus(2);
         modulus[1] = Modulus(0xFFFF);
         modulus[2] = Modulus(0x1000);
         modulus[3] = Modulus(0xFFFFFFFFC001ULL);
-        Array<Modulus> device_modulus = modulus.to_device();
+        Array<Modulus> device_modulus = modulus.to_device(MemoryPool::GlobalPool());
 
-        Array<bool> r(16, true); 
+        Array<bool> r(16, true, MemoryPool::GlobalPool()); 
         kernel_modulo_uint_mod<<<4, 4>>>(device_modulus.const_reference(), r.reference());
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
@@ -659,7 +659,7 @@ namespace uint_small_mod {
     }
 
     TEST(UintSmallMod, HostExponentiateUint64Mod) {
-        Array<Modulus> modulus(3, false);
+        Array<Modulus> modulus(3, false, nullptr);
         modulus[0] = Modulus(5);
         modulus[1] = Modulus(0x1000000000000000ULL);
         modulus[2] = Modulus(131313131313);
@@ -676,13 +676,13 @@ namespace uint_small_mod {
     }
     
     TEST(UintSmallMod, DeviceExponentiateUint64Mod) {
-        Array<Modulus> modulus(3, false);
+        Array<Modulus> modulus(3, false, nullptr);
         modulus[0] = Modulus(5);
         modulus[1] = Modulus(0x1000000000000000ULL);
         modulus[2] = Modulus(131313131313);
-        Array<Modulus> device_modulus = modulus.to_device();
+        Array<Modulus> device_modulus = modulus.to_device(MemoryPool::GlobalPool());
 
-        Array<bool> r(16, true); 
+        Array<bool> r(16, true, MemoryPool::GlobalPool()); 
         kernel_exponentiate_uint64_mod<<<4, 4>>>(device_modulus.const_reference(), r.reference());
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));

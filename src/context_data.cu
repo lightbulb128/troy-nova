@@ -31,38 +31,38 @@ namespace troy {
         }
     }
 
-    void ContextData::to_device_inplace() {
+    void ContextData::to_device_inplace(MemoryPoolHandle pool) {
 
         if (this->on_device()) {
             return;
         }
 
-        this->parms_.to_device_inplace();
+        this->parms_.to_device_inplace(pool);
 
         if (this->rns_tool_.has_value()) {
-            this->rns_tool_->to_device_inplace();
+            this->rns_tool_->to_device_inplace(pool);
         }
 
         for (size_t i = 0; i < small_ntt_tables_.size(); i++) {
-            this->small_ntt_tables_[i].to_device_inplace();
+            this->small_ntt_tables_[i].to_device_inplace(pool);
         }
-        this->small_ntt_tables_.to_device_inplace();
+        this->small_ntt_tables_.to_device_inplace(pool);
 
         if (this->plain_ntt_tables_.has_value()) {
-            this->plain_ntt_tables_.value()->to_device_inplace();
-            this->plain_ntt_tables_.value().to_device_inplace();
+            this->plain_ntt_tables_.value()->to_device_inplace(pool);
+            this->plain_ntt_tables_.value().to_device_inplace(pool);
         }
 
         if (this->galois_tool_.has_value()) {
-            this->galois_tool_.value().to_device_inplace();
+            this->galois_tool_.value().to_device_inplace(pool);
         }
 
-        this->total_coeff_modulus_.to_device_inplace();
-        this->coeff_div_plain_modulus_.to_device_inplace();
+        this->total_coeff_modulus_.to_device_inplace(pool);
+        this->coeff_div_plain_modulus_.to_device_inplace(pool);
 
-        this->plain_upper_half_increment_.to_device_inplace();
-        this->upper_half_threshold_.to_device_inplace();
-        this->upper_half_increment_.to_device_inplace();
+        this->plain_upper_half_increment_.to_device_inplace(pool);
+        this->upper_half_threshold_.to_device_inplace(pool);
+        this->upper_half_increment_.to_device_inplace(pool);
 
         this->device = true;
         
@@ -106,12 +106,12 @@ namespace troy {
         }
 
         // Compute the product of all coeff moduli
-        this->total_coeff_modulus_ = Array<uint64_t>(coeff_modulus_size, false);
-        Array<uint64_t> coeff_modulus_values(coeff_modulus_size, false);
+        this->total_coeff_modulus_ = Array<uint64_t>(coeff_modulus_size, false, nullptr);
+        Array<uint64_t> coeff_modulus_values(coeff_modulus_size, false, nullptr);
         for (size_t i = 0; i < coeff_modulus_size; i++) {
             coeff_modulus_values[i] = coeff_modulus[i].value();
         }
-        utils::multiply_many_uint64(coeff_modulus_values.const_reference(), this->total_coeff_modulus_.reference());
+        utils::multiply_many_uint64(coeff_modulus_values.const_reference(), this->total_coeff_modulus_.reference(), nullptr);
         this->total_coeff_modulus_bit_count_ = utils::get_significant_bit_count_uint(
             this->total_coeff_modulus_.const_reference());
 
@@ -193,7 +193,7 @@ namespace troy {
                 // Check that plain_modulus is smaller than total coeff modulus
                 uint64_t plain_modulus_value = plain_modulus->value();
                 if (!utils::is_less_than_uint(
-                    ConstSlice<uint64_t>(&plain_modulus_value, 1, false),
+                    ConstSlice<uint64_t>(&plain_modulus_value, 1, false, nullptr),
                     this->total_coeff_modulus_.const_reference()
                 )) {
                     qualifiers.parameter_error = EncryptionParameterErrorType::InvalidPlainModulusTooLarge;
@@ -203,7 +203,7 @@ namespace troy {
                 // Can we use batching? (NTT with plain_modulus)
                 qualifiers.using_batching = true;
                 try {
-                    Box<NTTTables> y = utils::Box(new NTTTables(coeff_count_power, *plain_modulus), false);
+                    Box<NTTTables> y = utils::Box(new NTTTables(coeff_count_power, *plain_modulus), false, nullptr);
                     this->plain_ntt_tables_ = std::optional(std::move(y));
                 } catch (const std::exception& e) {
                     qualifiers.using_batching = false;
@@ -221,15 +221,16 @@ namespace troy {
                 }
                 
                 // Calculate coeff_div_plain_modulus (BFV-"Delta") and the remainder upper_half_increment
-                Array<uint64_t> temp_coeff_div_plain_modulus(coeff_modulus_size, false);
-                this->upper_half_increment_ = Array<uint64_t>(coeff_modulus_size, false);
-                Array<uint64_t> wide_plain_modulus = Array<uint64_t>(coeff_modulus_size, false);
+                Array<uint64_t> temp_coeff_div_plain_modulus(coeff_modulus_size, false, nullptr);
+                this->upper_half_increment_ = Array<uint64_t>(coeff_modulus_size, false, nullptr);
+                Array<uint64_t> wide_plain_modulus = Array<uint64_t>(coeff_modulus_size, false, nullptr);
                 wide_plain_modulus[0] = plain_modulus->value();
                 utils::divide_uint(
                     this->total_coeff_modulus_.const_reference(),
                     wide_plain_modulus.const_reference(),
                     temp_coeff_div_plain_modulus.reference(),
-                    this->upper_half_increment_.reference()
+                    this->upper_half_increment_.reference(),
+                    nullptr
                 );
                 
                 // Store the non-RNS form of upper_half_increment for BFV encryption
@@ -237,7 +238,7 @@ namespace troy {
 
                 // Decompose coeff_div_plain_modulus into RNS factors
                 coeff_modulus_base.decompose_single(temp_coeff_div_plain_modulus.reference());
-                this->coeff_div_plain_modulus_ = Array<MultiplyUint64Operand>(coeff_modulus_size, false);
+                this->coeff_div_plain_modulus_ = Array<MultiplyUint64Operand>(coeff_modulus_size, false, nullptr);
                 for (size_t i = 0; i < coeff_modulus_size; i++) {
                     this->coeff_div_plain_modulus_[i] = MultiplyUint64Operand(temp_coeff_div_plain_modulus[i], coeff_modulus[i]);
                 }
@@ -249,7 +250,7 @@ namespace troy {
                 this->plain_upper_half_threshold_ = (plain_modulus->value() + 1) >> 1;
                 
                 // Calculate coeff_modulus - plain_modulus.
-                this->plain_upper_half_increment_ = Array<uint64_t>(coeff_modulus_size, false);
+                this->plain_upper_half_increment_ = Array<uint64_t>(coeff_modulus_size, false, nullptr);
                 if (qualifiers.using_fast_plain_lift) {
                     // Calculate coeff_modulus[i] - plain_modulus if using_fast_plain_lift
                     for (size_t i = 0; i < coeff_modulus_size; i++) {
@@ -283,7 +284,7 @@ namespace troy {
                 this->plain_upper_half_threshold_ = 1ull << 63;
                 
                 // Calculate plain_upper_half_increment = 2^64 mod coeff_modulus for CKKS plaintexts
-                this->plain_upper_half_increment_ = Array<uint64_t>(coeff_modulus_size, false);
+                this->plain_upper_half_increment_ = Array<uint64_t>(coeff_modulus_size, false, nullptr);
                 for (size_t i = 0; i < coeff_modulus_size; i++) {
                     uint64_t tmp = coeff_modulus[i].reduce(1ull<<63);
                     this->plain_upper_half_increment_[i] = utils::multiply_uint64_mod(
@@ -292,7 +293,7 @@ namespace troy {
                 }
 
                 // Compute the upper_half_threshold for this modulus.
-                this->upper_half_threshold_ = Array<uint64_t>(coeff_modulus_size, false);
+                this->upper_half_threshold_ = Array<uint64_t>(coeff_modulus_size, false, nullptr);
                 utils::increment_uint(
                     this->total_coeff_modulus_.const_reference(),
                     this->upper_half_threshold_.reference()

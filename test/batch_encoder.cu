@@ -50,8 +50,8 @@ namespace batch_encoder {
         }
         plain = encoder.encode_new(plain_vec);
         decoded_vec = encoder.decode_new(plain);
-        ASSERT_TRUE(same_vector(plain_vec, utils::ConstSlice(decoded_vec.data(), 20, false)));
-        ASSERT_TRUE(same_vector(utils::ConstSlice(decoded_vec.data() + 20, 44, false), std::vector<uint64_t>(44, 0)));
+        ASSERT_TRUE(same_vector(plain_vec, utils::ConstSlice(decoded_vec.data(), 20, false, nullptr)));
+        ASSERT_TRUE(same_vector(utils::ConstSlice(decoded_vec.data() + 20, 44, false, nullptr), std::vector<uint64_t>(44, 0)));
     }
 
     TEST(BatchEncoderTest, HostUnbatchUintVector) {
@@ -139,7 +139,7 @@ namespace batch_encoder {
             plain_vec[i] = i % t.value();
         }
         Plaintext plain = encoder.encode_new(plain_vec);
-        Plaintext scale_up = encoder.scale_up_new(plain);
+        Plaintext scale_up = encoder.scale_up_new(plain, std::nullopt);
         Plaintext scale_down = encoder.scale_down_new(scale_up);
 
         auto original_vec = plain.data().to_vector();

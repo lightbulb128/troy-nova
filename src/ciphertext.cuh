@@ -25,6 +25,9 @@ namespace troy {
 
     public:
     
+        inline MemoryPoolHandle pool() const { return data_.pool(); }
+        inline bool device_index() const { return data_.device_index(); }
+
         inline static Ciphertext from_members(
             size_t polynomial_count, size_t coeff_modulus_size, size_t poly_modulus_degree, 
             const ParmsID& parms_id, double scale, bool is_ntt_form, uint64_t correction_factor, uint64_t seed, 
@@ -54,29 +57,29 @@ namespace troy {
             correction_factor_(1),
             seed_(0) {}
 
-        inline Ciphertext clone() const {
+        inline Ciphertext clone(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext result;
             result.polynomial_count_ = polynomial_count_;
             result.coeff_modulus_size_ = coeff_modulus_size_;
             result.poly_modulus_degree_ = poly_modulus_degree_;
-            result.data_ = data_.clone();
+            result.data_ = data_.clone(pool);
             result.parms_id_ = parms_id_;
             result.scale_ = scale_;
             result.is_ntt_form_ = is_ntt_form_;
             result.correction_factor_ = correction_factor_;
             result.seed_ = seed_;
-            return result;
+            return std::move(result);
         }
 
         inline Ciphertext(Ciphertext&& source) = default;
-        inline Ciphertext(const Ciphertext& copy): Ciphertext(copy.clone()) {}
+        inline Ciphertext(const Ciphertext& copy): Ciphertext(copy.clone(copy.pool())) {}
 
         inline Ciphertext& operator =(Ciphertext&& source) = default;
         inline Ciphertext& operator =(const Ciphertext& assign) {
             if (this == &assign) {
                 return *this;
             }
-            *this = assign.clone();
+            *this = assign.clone(assign.pool());
             return *this;
         }
 
@@ -140,11 +143,11 @@ namespace troy {
             return data_.on_device();
         }
 
-        inline void to_device_inplace() {
+        inline void to_device_inplace(MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
             if (this->contains_seed()) {
                 throw std::logic_error("[Ciphertext::to_device_inplace] Cannot copy ciphertext with seed to device");
             }
-            data_.to_device_inplace();
+            data_.to_device_inplace(pool);
         }
 
         inline void to_host_inplace() {
@@ -154,14 +157,14 @@ namespace troy {
             data_.to_host_inplace();
         }
 
-        inline Ciphertext to_device() {
-            Ciphertext result = clone();
-            result.to_device_inplace();
+        inline Ciphertext to_device(MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+            Ciphertext result = clone(pool);
+            result.to_device_inplace(pool);
             return result;
         }
 
         inline Ciphertext to_host() {
-            Ciphertext result = clone();
+            Ciphertext result = clone(pool());
             result.to_host_inplace();
             return result;
         }
@@ -235,19 +238,19 @@ namespace troy {
         void expand_seed(HeContextPointer context);
 
         void save(std::ostream& stream, HeContextPointer context) const;
-        void load(std::istream& stream, HeContextPointer context);
-        inline static Ciphertext load_new(std::istream& stream, HeContextPointer context) {
+        void load(std::istream& stream, HeContextPointer context, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+        inline static Ciphertext load_new(std::istream& stream, HeContextPointer context, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
             Ciphertext result;
-            result.load(stream, context);
+            result.load(stream, context, pool);
             return result;
         }
         size_t serialized_size(HeContextPointer context) const;
 
-        void save_terms(std::ostream& stream, HeContextPointer context, const std::vector<size_t>& terms) const;
-        void load_terms(std::istream& stream, HeContextPointer context, const std::vector<size_t>& terms);
-        inline static Ciphertext load_terms_new(std::istream& stream, HeContextPointer context, const std::vector<size_t>& terms) {
+        void save_terms(std::ostream& stream, HeContextPointer context, const std::vector<size_t>& terms, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        void load_terms(std::istream& stream, HeContextPointer context, const std::vector<size_t>& terms, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+        inline static Ciphertext load_terms_new(std::istream& stream, HeContextPointer context, const std::vector<size_t>& terms, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
             Ciphertext result;
-            result.load_terms(stream, context, terms);
+            result.load_terms(stream, context, terms, pool);
             return result;
         }
         size_t serialized_terms_size(HeContextPointer context, const std::vector<size_t>& terms) const;

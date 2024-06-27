@@ -22,19 +22,20 @@ namespace troy {
         }
 
         template <typename T>
-        inline T* malloc(size_t length) {
-            T* ret = reinterpret_cast<T*>(utils::MemoryPool::Allocate(length * sizeof(T)));
+        inline T* malloc(MemoryPool& pool, size_t length) {
+            T* ret = reinterpret_cast<T*>(pool.allocate(length * sizeof(T)));
             return ret;
         }
 
         template <typename T>
-        inline void free(T* ptr) {
-            utils::MemoryPool::Free(reinterpret_cast<void*>(ptr));
+        inline void free(MemoryPool& pool, T* ptr) {
+            pool.release(reinterpret_cast<void*>(ptr));
         }
 
 
         template <typename T>
-        inline void copy_host_to_device(T* dst, const T* src, size_t length) {
+        inline void copy_host_to_device(MemoryPool& pool, T* dst, const T* src, size_t length) {
+            pool.set_device();
             cudaError_t status = cudaMemcpy(dst, src, length * sizeof(T), cudaMemcpyHostToDevice);
             if (status != cudaSuccess) {
                 runtime_error("[kernel_provider::copy_host_to_device] cudaMemcpy host to device failed", status);
@@ -42,7 +43,8 @@ namespace troy {
         }
 
         template <typename T>
-        inline void copy_device_to_host(T* dst, const T* src, size_t length) {
+        inline void copy_device_to_host(MemoryPool& pool, T* dst, const T* src, size_t length) {
+            pool.set_device();
             cudaError_t status = cudaMemcpy(dst, src, length * sizeof(T), cudaMemcpyDeviceToHost);
             if (status != cudaSuccess) {
                 runtime_error("[kernel_provider::copy_device_to_host] cudaMemcpy device to host failed", status);
@@ -50,7 +52,8 @@ namespace troy {
         }
 
         template <typename T>
-        inline void copy_device_to_device(T* dst, const T* src, size_t length) {
+        inline void copy_device_to_device(MemoryPool& pool, T* dst, const T* src, size_t length) {
+            pool.set_device();
             cudaError_t status = cudaMemcpy(dst, src, length * sizeof(T), cudaMemcpyDeviceToDevice);
             if (status != cudaSuccess) {
                 runtime_error("[kernel_provider::copy_device_to_device] cudaMemcpy device to device failed", status);
@@ -58,7 +61,8 @@ namespace troy {
         }
 
         template <typename T>
-        inline void memset(T* ptr, size_t length, int value) {
+        inline void memset(MemoryPool& pool, T* ptr, size_t length, int value) {
+            pool.set_device();
             cudaError_t status = cudaMemset(ptr, value, length * sizeof(T));
             if (status != cudaSuccess) {
                 runtime_error("[kernel_provider::memset] cudaMemset failed", status);
@@ -66,8 +70,9 @@ namespace troy {
         }
 
         template <typename T>
-        inline void memset_zero(T* ptr, size_t length) {
-            memset(ptr, length, 0);
+        inline void memset_zero(MemoryPool& pool, T* ptr, size_t length) {
+            pool.set_device();
+            memset(pool, ptr, length, 0);
         }
 
     }

@@ -25,7 +25,7 @@ namespace troy {
             // Reduces input using base 2^64 Barrett reduction
             // floor(2^64 / mod) == floor( floor(2^128 / mod) )
             uint64_t tmp[2];
-            Slice<uint64_t> tmp_slice(tmp, 2, utils::on_device());
+            Slice<uint64_t> tmp_slice(tmp, 2, utils::on_device(), nullptr);
             ConstSlice<uint64_t> const_ratio = this->const_ratio();
             utils::multiply_uint64_high_word(input, const_ratio[1], tmp[1]);
 
@@ -48,7 +48,7 @@ namespace troy {
             // input allocation size must be 128 bits
             uint64_t tmp1 = 0;
             uint64_t tmp2[2] = {0, 0};
-            Slice<uint64_t> tmp2_slice(tmp2, 2, utils::on_device());
+            Slice<uint64_t> tmp2_slice(tmp2, 2, utils::on_device(), nullptr);
             uint64_t tmp3 = 0;
             uint64_t carry = 0;
             ConstSlice<uint64_t> const_ratio = this->const_ratio();
@@ -80,20 +80,20 @@ namespace troy {
         __host__ __device__
         inline uint64_t reduce_uint128(__uint128_t value) const {
             uint64_t value_limbs[2] = {static_cast<uint64_t>(value), static_cast<uint64_t>(value >> 64)};
-            return reduce_uint128_limbs(utils::ConstSlice<uint64_t>(value_limbs, 2, utils::on_device()));
+            return reduce_uint128_limbs(utils::ConstSlice<uint64_t>(value_limbs, 2, utils::on_device(), nullptr));
         }
 
         __host__ __device__
         inline uint64_t reduce_mul_uint64(uint64_t operand1, uint64_t operand2) const {
             uint64_t tmp[2];
-            utils::Slice<uint64_t> tmp_slice(tmp, 2, utils::on_device());
+            utils::Slice<uint64_t> tmp_slice(tmp, 2, utils::on_device(), nullptr);
             utils::multiply_uint64_uint64(operand1, operand2, tmp_slice);
             return reduce_uint128_limbs(tmp_slice.as_const());
         }
 
         __host__ __device__
         inline utils::ConstSlice<uint64_t> const_ratio() const {
-            return utils::ConstSlice<uint64_t>(const_ratio_, 3, utils::on_device());
+            return utils::ConstSlice<uint64_t>(const_ratio_, 3, utils::on_device(), nullptr);
         }
 
         __host__ __device__

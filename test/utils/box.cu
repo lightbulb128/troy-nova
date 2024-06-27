@@ -23,14 +23,14 @@ namespace box {
     TEST(Box, HostBox) {
 
         int x = 1;
-        Box<int> x_box(new int(x), false);
+        Box<int> x_box(new int(x), false, nullptr);
         EXPECT_EQ(*x_box, 1);
 
         *x_box = 2;
         EXPECT_EQ(*x_box, 2);
 
         Foo f(12);
-        Box<Foo> f_box(new Foo(f), false);
+        Box<Foo> f_box(new Foo(f), false, nullptr);
         EXPECT_EQ(f_box->get_num(), 12);
 
         f_box->set_num(13);

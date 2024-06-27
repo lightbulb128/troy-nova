@@ -49,13 +49,6 @@ namespace troy {namespace utils {
             }
         }
 
-        inline void set_device() {
-            cudaError_t status = cudaSetDevice(device_index);
-            if (status != cudaSuccess) {
-                runtime_error("[MemoryPool::destroy] cudaSetDevice failed.", status);
-            }
-        }
-
         inline void* try_allocate(size_t required) {
             // here we must already have the lock
             size_t free, total;
@@ -98,6 +91,17 @@ namespace troy {namespace utils {
         }
 
     public:
+
+        inline void set_device() {
+            cudaError_t status = cudaSetDevice(device_index);
+            if (status != cudaSuccess) {
+                runtime_error("[MemoryPool::destroy] cudaSetDevice failed.", status);
+            }
+        }
+
+        inline size_t get_device() const {
+            return device_index;
+        }
 
         // User shouldn't call this but call Create() instead
         inline MemoryPool(size_t device_index = 0): device_index(device_index) {
@@ -209,13 +213,6 @@ namespace troy {namespace utils {
             }
         }
 
-        inline void set_device() {
-            cudaError_t status = cudaSetDevice(device_index);
-            if (status != cudaSuccess) {
-                runtime_error("[MemoryPool::destroy] cudaSetDevice failed.", status);
-            }
-        }
-
         inline void* try_allocate(size_t required) {
             // here we must already have the lock
             size_t free, total;
@@ -274,6 +271,16 @@ namespace troy {namespace utils {
 
     public:
 
+        inline void set_device() {
+            cudaError_t status = cudaSetDevice(device_index);
+            if (status != cudaSuccess) {
+                runtime_error("[MemoryPool::destroy] cudaSetDevice failed.", status);
+            }
+        }
+
+        inline size_t get_device() const {
+            return device_index;
+        }
         // User shouldn't call this but call Create() instead
         inline MemoryPool(size_t device_index = 0): device_index(device_index) {
             total_allocated = 0;
@@ -420,6 +427,8 @@ namespace troy {namespace utils {
             }
         }
 
+    public:
+
         inline void set_device() {
             cudaError_t status = cudaSetDevice(device_index);
             if (status != cudaSuccess) {
@@ -427,7 +436,9 @@ namespace troy {namespace utils {
             }
         }
 
-    public:
+        inline size_t get_device() const {
+            return device_index;
+        }
 
         // User shouldn't call this but call Create() instead
         inline MemoryPool(size_t device_index = 0): device_index(device_index) {

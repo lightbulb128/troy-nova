@@ -20,9 +20,9 @@ namespace troy {
             uint64_t numerator[3]{0, 0, 1};
             uint64_t quotient[3]{0, 0, 0};
             utils::divide_uint192_uint64_inplace(
-                utils::Slice<uint64_t>(numerator, 3, false),
+                utils::Slice<uint64_t>(numerator, 3, false, nullptr),
                 value,
-                utils::Slice<uint64_t>(quotient, 3, false)
+                utils::Slice<uint64_t>(quotient, 3, false, nullptr)
             );
             this->const_ratio_[0] = quotient[0];
             this->const_ratio_[1] = quotient[1];

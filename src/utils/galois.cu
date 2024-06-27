@@ -19,7 +19,7 @@ namespace troy {namespace utils {
 
     Array<size_t> GaloisTool::generate_table_ntt(size_t coeff_count_power, size_t galois_element) {
         size_t coeff_count = 1 << coeff_count_power;
-        Array<size_t> result(coeff_count, false);
+        Array<size_t> result(coeff_count, false, nullptr);
         size_t mask = coeff_count - 1;
         for (size_t i = 0; i < coeff_count; i++) {
             uint32_t reversed = utils::reverse_bits_uint32(
@@ -84,7 +84,7 @@ namespace troy {namespace utils {
         return galois_elements;
     }
     
-    void GaloisTool::ensure_permutation_table(size_t galois_element) const {
+    void GaloisTool::ensure_permutation_table(size_t galois_element, MemoryPoolHandle pool) const {
         size_t index = GaloisTool::get_index_from_element(galois_element);
 
         // acquire read lock
@@ -105,13 +105,12 @@ namespace troy {namespace utils {
             galois_element
         );
         if (this->on_device()) {
-            this->permutation_tables[index].to_device_inplace();
+            this->permutation_tables[index].to_device_inplace(pool);
         }
 
         // release write lock
         write_lock.unlock();
     }
-
 
     static void host_apply_ps(const GaloisTool& self, ConstSlice<uint64_t> polys, size_t pcount, size_t galois_element, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         size_t mask = self.coeff_count() - 1;
@@ -150,7 +149,7 @@ namespace troy {namespace utils {
     
     void GaloisTool::apply_ps(ConstSlice<uint64_t> polys, size_t pcount, size_t galois_element, ConstSlice<Modulus> moduli, Slice<uint64_t> result) const {
         bool device = this->on_device();
-        if (!same(device, polys.on_device(), moduli.on_device(), result.on_device())) {
+        if (!utils::device_compatible(polys, moduli, result)) {
             throw std::invalid_argument("[GaloisTool::apply_ps] Arguments are not on the same device");
         }
         if (device) {
@@ -192,15 +191,15 @@ namespace troy {namespace utils {
         result[global_index] = polys[input_index];
     }
 
-    void GaloisTool::apply_ntt_ps(ConstSlice<uint64_t> polys, size_t pcount, size_t coeff_modulus_size, size_t galois_element, Slice<uint64_t> result) const {
+    void GaloisTool::apply_ntt_ps(ConstSlice<uint64_t> polys, size_t pcount, size_t coeff_modulus_size, size_t galois_element, Slice<uint64_t> result, MemoryPoolHandle pool) const {
         bool device = this->on_device();
-        if (!same(device, polys.on_device(), result.on_device())) {
-            throw std::invalid_argument("[GaloisTool::apply_ntt_ps] Arguments are not on the same device");
-        }
-        this->ensure_permutation_table(galois_element);
+        this->ensure_permutation_table(galois_element, pool);
         // obtain read lock
         std::shared_lock<std::shared_mutex> read_lock(this->permutation_tables_rwlock);
         ConstSlice<size_t> permutation_table = this->permutation_tables[GaloisTool::get_index_from_element(galois_element)].const_reference();
+        if (!utils::device_compatible(permutation_table, polys, result)) {
+            throw std::invalid_argument("[GaloisTool::apply_ntt_ps] Arguments are not on the same device");
+        }
         if (device) {
             size_t total = this->coeff_count() * coeff_modulus_size * pcount;
             size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);

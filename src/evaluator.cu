@@ -131,7 +131,7 @@ namespace troy {
         return context_data_ptr.value();
     }
 
-    void Evaluator::negate_inplace(Ciphertext& encrypted) const {
+    void Evaluator::negate_inplace(Ciphertext& encrypted, MemoryPoolHandle pool) const {
         check_ciphertext("[Evaluator::negate_inplace]", encrypted);
         ContextDataPointer context_data = this->get_context_data("[Evaluator::negate_inplace]", encrypted.parms_id());
         const EncryptionParameters& parms = context_data->parms();
@@ -190,7 +190,7 @@ namespace troy {
         }
     }
 
-    void Evaluator::bfv_multiply_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2) const {
+    void Evaluator::bfv_multiply_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool) const {
         check_is_not_ntt_form("[Evaluator::bfv_multiply_inplace]", encrypted1);
         check_is_not_ntt_form("[Evaluator::bfv_multiply_inplace]", encrypted2);
         
@@ -228,9 +228,9 @@ namespace troy {
         bool device = encrypted1.on_device();
         encrypted1.resize(this->context(), context_data->parms_id(), dest_size);
         // Allocate space for a base q output of behz_extend_base_convertToNtt for encrypted1
-        Buffer<uint64_t> encrypted1_q(encrypted1_size, base_q_size, coeff_count, device);
+        Buffer<uint64_t> encrypted1_q(encrypted1_size, base_q_size, coeff_count, device, pool);
         // Allocate space for a base Bsk output of behz_extend_base_convertToNtt for encrypted1
-        Buffer<uint64_t> encrypted1_Bsk(encrypted1_size, base_Bsk_size, coeff_count, device);
+        Buffer<uint64_t> encrypted1_Bsk(encrypted1_size, base_Bsk_size, coeff_count, device, pool);
 
         // Perform BEHZ steps (1)-(3) for encrypted1
         // Make copy of input polynomial (in base q) and convert to NTT form
@@ -238,7 +238,7 @@ namespace troy {
         // Lazy reduction
         utils::ntt_negacyclic_harvey_lazy_ps(encrypted1_q.reference(), encrypted1_size, coeff_count, base_q_ntt_tables);
         // Allocate temporary space for a polynomial in the Bsk U {m_tilde} base
-        Buffer<uint64_t> temp(base_Bsk_m_tilde_size, coeff_count, device);
+        Buffer<uint64_t> temp(base_Bsk_m_tilde_size, coeff_count, device, pool);
         for (size_t i = 0; i < encrypted1_size; i++) {
             // (1) Convert from base q to base Bsk U {m_tilde}
             rns_tool.fast_b_conv_m_tilde(encrypted1.const_poly(i), temp.reference());
@@ -249,8 +249,8 @@ namespace troy {
         utils::ntt_negacyclic_harvey_lazy_ps(encrypted1_Bsk.reference(), encrypted1_size, coeff_count, base_Bsk_ntt_tables);
 
         // Repeat for encrypted2
-        Buffer<uint64_t> encrypted2_q(encrypted2_size, base_q_size, coeff_count, device);
-        Buffer<uint64_t> encrypted2_Bsk(encrypted2_size, base_Bsk_size, coeff_count, device);
+        Buffer<uint64_t> encrypted2_q(encrypted2_size, base_q_size, coeff_count, device, pool);
+        Buffer<uint64_t> encrypted2_Bsk(encrypted2_size, base_Bsk_size, coeff_count, device, pool);
         encrypted2_q.copy_from_slice(encrypted2.polys(0, encrypted2_size));
         utils::ntt_negacyclic_harvey_lazy_ps(encrypted2_q.reference(), encrypted2_size, coeff_count, base_q_ntt_tables);
         for (size_t i = 0; i < encrypted2_size; i++) {
@@ -261,12 +261,12 @@ namespace troy {
 
         // Allocate temporary space for the output of step (4)
         // We allocate space separately for the base q and the base Bsk components
-        Buffer<uint64_t> temp_dest_q(dest_size, base_q_size, coeff_count, device);
-        Buffer<uint64_t> temp_dest_Bsk(dest_size, base_Bsk_size, coeff_count, device);
+        Buffer<uint64_t> temp_dest_q(dest_size, base_q_size, coeff_count, device, pool);
+        Buffer<uint64_t> temp_dest_Bsk(dest_size, base_Bsk_size, coeff_count, device, pool);
 
         // Perform BEHZ step (4): dyadic multiplication on arbitrary size ciphertexts
-        Buffer<uint64_t> temp1(base_q_size, coeff_count, device);
-        Buffer<uint64_t> temp2(base_Bsk_size, coeff_count, device);
+        Buffer<uint64_t> temp1(base_q_size, coeff_count, device, pool);
+        Buffer<uint64_t> temp2(base_Bsk_size, coeff_count, device, pool);
         for (size_t i = 0; i < dest_size; i++) {
             // We iterate over relevant components of encrypted1 and encrypted2 in increasing order for
             // encrypted1 and reversed (decreasing) order for encrypted2. The bounds for the indices of
@@ -315,8 +315,8 @@ namespace troy {
         utils::inverse_ntt_negacyclic_harvey_ps(temp_dest_Bsk.reference(), dest_size, coeff_count, base_Bsk_ntt_tables);
 
         // Perform BEHZ steps (6)-(8)
-        Buffer<uint64_t> temp_q_Bsk(base_q_size + base_Bsk_size, coeff_count, device);
-        Buffer<uint64_t> temp_Bsk(base_Bsk_size, coeff_count, device);
+        Buffer<uint64_t> temp_q_Bsk(base_q_size + base_Bsk_size, coeff_count, device, pool);
+        Buffer<uint64_t> temp_Bsk(base_Bsk_size, coeff_count, device, pool);
         uint64_t plain_modulus_value = parms.plain_modulus_host().value();
         for (size_t i = 0; i < dest_size; i++) {
             // Bring together the base q and base Bsk components into a single allocation
@@ -342,7 +342,7 @@ namespace troy {
         }
     }
     
-    void Evaluator::ckks_multiply_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2) const {
+    void Evaluator::ckks_multiply_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool) const {
         check_is_ntt_form("[Evaluator::ckks_multiply_inplace]", encrypted1);
         check_is_ntt_form("[Evaluator::ckks_multiply_inplace]", encrypted2);
         
@@ -360,9 +360,9 @@ namespace troy {
 
         encrypted1.resize(this->context(), context_data->parms_id(), dest_size);
         bool device = encrypted1.on_device();
-        Buffer<uint64_t> temp(dest_size, coeff_modulus_size, coeff_count, device);
+        Buffer<uint64_t> temp(dest_size, coeff_modulus_size, coeff_count, device, pool);
 
-        Buffer<uint64_t> prod(coeff_modulus_size, coeff_count, device);
+        Buffer<uint64_t> prod(coeff_modulus_size, coeff_count, device, pool);
         for (size_t i = 0; i < dest_size; i++) {
             // We iterate over relevant components of encrypted1 and encrypted2 in increasing order for
             // encrypted1 and reversed (decreasing) order for encrypted2. The bounds for the indices of
@@ -397,7 +397,7 @@ namespace troy {
         }
     }
     
-    void Evaluator::bgv_multiply_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2) const {
+    void Evaluator::bgv_multiply_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool) const {
         check_is_ntt_form("[Evaluator::bgv_multiply_inplace]", encrypted1);
         check_is_ntt_form("[Evaluator::bgv_multiply_inplace]", encrypted2);
         
@@ -416,9 +416,9 @@ namespace troy {
         encrypted1.resize(this->context(), context_data->parms_id(), dest_size);
         bool device = encrypted1.on_device();
 
-        Buffer<uint64_t> temp(dest_size, coeff_modulus_size, coeff_count, device);
+        Buffer<uint64_t> temp(dest_size, coeff_modulus_size, coeff_count, device, pool);
 
-        Buffer<uint64_t> prod(coeff_modulus_size, coeff_count, device);
+        Buffer<uint64_t> prod(coeff_modulus_size, coeff_count, device, pool);
         for (size_t i = 0; i < dest_size; i++) {
             // We iterate over relevant components of encrypted1 and encrypted2 in increasing order for
             // encrypted1 and reversed (decreasing) order for encrypted2. The bounds for the indices of
@@ -454,22 +454,22 @@ namespace troy {
         );
     }
 
-    void Evaluator::multiply_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2) const {
+    void Evaluator::multiply_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool) const {
         check_no_seed("[Evaluator::multiply_inplace]", encrypted1);
         check_no_seed("[Evaluator::multiply_inplace]", encrypted2);
         check_same_parms_id("[Evaluator::multiply_inplace]", encrypted1, encrypted2);
         SchemeType scheme = this->context()->first_context_data().value()->parms().scheme();
         switch (scheme) {
             case SchemeType::BFV: {
-                this->bfv_multiply_inplace(encrypted1, encrypted2);
+                this->bfv_multiply_inplace(encrypted1, encrypted2, pool);
                 break;
             }
             case SchemeType::CKKS: {
-                this->ckks_multiply_inplace(encrypted1, encrypted2);
+                this->ckks_multiply_inplace(encrypted1, encrypted2, pool);
                 break;
             }
             case SchemeType::BGV: {
-                this->bgv_multiply_inplace(encrypted1, encrypted2);
+                this->bgv_multiply_inplace(encrypted1, encrypted2, pool);
                 break;
             }
             default: {
@@ -478,7 +478,7 @@ namespace troy {
         }
     }
 
-    void Evaluator::bfv_square_inplace(Ciphertext& encrypted) const {
+    void Evaluator::bfv_square_inplace(Ciphertext& encrypted, MemoryPoolHandle pool) const {
         check_is_not_ntt_form("[Evaluator::bfv_square_inplace]", encrypted);
         
         // Extract encryption parameters.
@@ -490,7 +490,7 @@ namespace troy {
         size_t encrypted_size = encrypted.polynomial_count();
 
         if (encrypted_size != 2) {
-            this->bfv_multiply_inplace(encrypted, encrypted);
+            this->bfv_multiply_inplace(encrypted, encrypted, pool);
             return;
         }
         
@@ -520,9 +520,9 @@ namespace troy {
         bool device = encrypted.on_device();
         encrypted.resize(this->context(), context_data->parms_id(), dest_size);
         // Allocate space for a base q output of behz_extend_base_convertToNtt for encrypted1
-        Buffer<uint64_t> encrypted_q(encrypted_size, base_q_size, coeff_count, device);
+        Buffer<uint64_t> encrypted_q(encrypted_size, base_q_size, coeff_count, device, pool);
         // Allocate space for a base Bsk output of behz_extend_base_convertToNtt for encrypted1
-        Buffer<uint64_t> encrypted_Bsk(encrypted_size, base_Bsk_size, coeff_count, device);
+        Buffer<uint64_t> encrypted_Bsk(encrypted_size, base_Bsk_size, coeff_count, device, pool);
 
         // Perform BEHZ steps (1)-(3) for encrypted1
         // Make copy of input polynomial (in base q) and convert to NTT form
@@ -530,7 +530,7 @@ namespace troy {
         // Lazy reduction
         utils::ntt_negacyclic_harvey_lazy_ps(encrypted_q.reference(), encrypted_size, coeff_count, base_q_ntt_tables);
         // Allocate temporary space for a polynomial in the Bsk U {m_tilde} base
-        Buffer<uint64_t> temp(base_Bsk_m_tilde_size, coeff_count, device);
+        Buffer<uint64_t> temp(base_Bsk_m_tilde_size, coeff_count, device, pool);
         for (size_t i = 0; i < encrypted_size; i++) {
             // (1) Convert from base q to base Bsk U {m_tilde}
             rns_tool.fast_b_conv_m_tilde(encrypted.const_poly(i), temp.reference());
@@ -542,8 +542,8 @@ namespace troy {
 
         // Allocate temporary space for the output of step (4)
         // We allocate space separately for the base q and the base Bsk components
-        Buffer<uint64_t> temp_dest_q(dest_size, base_q_size, coeff_count, device);
-        Buffer<uint64_t> temp_dest_Bsk(dest_size, base_Bsk_size, coeff_count, device);
+        Buffer<uint64_t> temp_dest_q(dest_size, base_q_size, coeff_count, device, pool);
+        Buffer<uint64_t> temp_dest_Bsk(dest_size, base_Bsk_size, coeff_count, device, pool);
 
         // Perform the BEHZ ciphertext square both for base q and base Bsk
 
@@ -570,8 +570,8 @@ namespace troy {
         utils::inverse_ntt_negacyclic_harvey_ps(temp_dest_Bsk.reference(), dest_size, coeff_count, base_Bsk_ntt_tables);
 
         // Perform BEHZ steps (6)-(8)
-        Buffer<uint64_t> temp_q_Bsk(base_q_size + base_Bsk_size, coeff_count, device);
-        Buffer<uint64_t> temp_Bsk(base_Bsk_size, coeff_count, device);
+        Buffer<uint64_t> temp_q_Bsk(base_q_size + base_Bsk_size, coeff_count, device, pool);
+        Buffer<uint64_t> temp_Bsk(base_Bsk_size, coeff_count, device, pool);
         uint64_t plain_modulus_value = parms.plain_modulus_host().value();
         for (size_t i = 0; i < dest_size; i++) {
             // Bring together the base q and base Bsk components into a single allocation
@@ -597,7 +597,7 @@ namespace troy {
         }
     }
 
-    void Evaluator::ckks_square_inplace(Ciphertext& encrypted) const {
+    void Evaluator::ckks_square_inplace(Ciphertext& encrypted, MemoryPoolHandle pool) const {
         check_is_ntt_form("[Evaluator::ckks_square_inplace]", encrypted);
         
         // Extract encryption parameters.
@@ -609,7 +609,7 @@ namespace troy {
         size_t encrypted_size = encrypted.polynomial_count();
 
         if (encrypted_size != 2) {
-            this->ckks_multiply_inplace(encrypted, encrypted);
+            this->ckks_multiply_inplace(encrypted, encrypted, pool);
             return;
         }
         
@@ -634,7 +634,7 @@ namespace troy {
         }
     }
     
-    void Evaluator::bgv_square_inplace(Ciphertext& encrypted) const {
+    void Evaluator::bgv_square_inplace(Ciphertext& encrypted, MemoryPoolHandle pool) const {
         check_is_ntt_form("[Evaluator::bgv_square_inplace]", encrypted);
         
         // Extract encryption parameters.
@@ -646,7 +646,7 @@ namespace troy {
         size_t encrypted_size = encrypted.polynomial_count();
 
         if (encrypted_size != 2) {
-            this->bgv_multiply_inplace(encrypted, encrypted);
+            this->bgv_multiply_inplace(encrypted, encrypted, pool);
             return;
         }
         
@@ -656,7 +656,7 @@ namespace troy {
         encrypted.resize(this->context(), context_data->parms_id(), dest_size);
         bool device = encrypted.on_device();
 
-        Buffer<uint64_t> temp(dest_size, coeff_modulus_size, coeff_count, device);
+        Buffer<uint64_t> temp(dest_size, coeff_modulus_size, coeff_count, device, pool);
 
         ConstSlice<uint64_t> eq0 = encrypted.const_poly(0);
         ConstSlice<uint64_t> eq1 = encrypted.const_poly(1);
@@ -679,20 +679,20 @@ namespace troy {
         );
     }
 
-    void Evaluator::square_inplace(Ciphertext& encrypted) const {
+    void Evaluator::square_inplace(Ciphertext& encrypted, MemoryPoolHandle pool) const {
         check_no_seed("[Evaluator::square_inplace]", encrypted);
         SchemeType scheme = this->context()->first_context_data().value()->parms().scheme();
         switch (scheme) {
             case SchemeType::BFV: {
-                this->bfv_square_inplace(encrypted);
+                this->bfv_square_inplace(encrypted, pool);
                 break;
             }
             case SchemeType::CKKS: {
-                this->ckks_square_inplace(encrypted);
+                this->ckks_square_inplace(encrypted, pool);
                 break;
             }
             case SchemeType::BGV: {
-                this->bgv_square_inplace(encrypted);
+                this->bgv_square_inplace(encrypted, pool);
                 break;
             }
             default: {
@@ -715,7 +715,7 @@ namespace troy {
         if (global_index >= coeff_count * key_component_count) return;
         size_t i = global_index % coeff_count;
         size_t k = global_index / coeff_count;
-        uint64_t qword[2] {0, 0}; Slice<uint64_t> qword_slice(qword, 2, true);
+        uint64_t qword[2] {0, 0}; Slice<uint64_t> qword_slice(qword, 2, true, nullptr);
         utils::multiply_uint64_uint64(t_operand[i], key_vector_j[k * key_poly_coeff_size + key_index * coeff_count + i], qword_slice);
         size_t accumulator_l_offset = k * coeff_count * 2 + 2 * i;
         Slice<uint64_t> accumulator_l = t_poly_lazy.slice(accumulator_l_offset, accumulator_l_offset + 2);
@@ -736,7 +736,7 @@ namespace troy {
     ) {
         bool device = t_poly_lazy.on_device();
         if (!device) {
-            uint64_t qword[2] {0, 0}; Slice<uint64_t> qword_slice(qword, 2, false);
+            uint64_t qword[2] {0, 0}; Slice<uint64_t> qword_slice(qword, 2, false, nullptr);
             for (size_t i = 0; i < coeff_count; i++) {
                 for (size_t k = 0; k < key_component_count; k++) {
                     utils::multiply_uint64_uint64(t_operand[i], key_vector_j[k * key_poly_coeff_size + key_index * coeff_count + i], qword_slice);
@@ -771,7 +771,7 @@ namespace troy {
         if (global_index >= coeff_count * key_component_count) return;
         size_t i = global_index % coeff_count;
         size_t k = global_index / coeff_count;
-        uint64_t qword[2] {0, 0}; Slice<uint64_t> qword_slice(qword, 2, true);
+        uint64_t qword[2] {0, 0}; Slice<uint64_t> qword_slice(qword, 2, true, nullptr);
         utils::multiply_uint64_uint64(t_operand[i], key_vector_j[k * key_poly_coeff_size + key_index * coeff_count + i], qword_slice);
         size_t accumulator_l_offset = k * coeff_count * 2 + 2 * i;
         Slice<uint64_t> accumulator_l = t_poly_lazy.slice(accumulator_l_offset, accumulator_l_offset + 2);
@@ -792,7 +792,7 @@ namespace troy {
     ) {
         bool device = t_poly_lazy.on_device();
         if (!device) {
-            uint64_t qword[2] {0, 0}; Slice<uint64_t> qword_slice(qword, 2, false);
+            uint64_t qword[2] {0, 0}; Slice<uint64_t> qword_slice(qword, 2, false, nullptr);
             for (size_t i = 0; i < coeff_count; i++) {
                 for (size_t k = 0; k < key_component_count; k++) {
                     utils::multiply_uint64_uint64(t_operand[i], key_vector_j[k * key_poly_coeff_size + key_index * coeff_count + i], qword_slice);
@@ -959,12 +959,13 @@ namespace troy {
         uint64_t qk_inv_qp,
         uint64_t qk,
         ConstSlice<MultiplyUint64Operand> modswitch_factors,
-        Slice<uint64_t> encrypted_i
+        Slice<uint64_t> encrypted_i,
+        MemoryPoolHandle pool
     ) {
         bool device = t_last.on_device();
         if (!device) {
 
-            Array<uint64_t> buffer(coeff_count * 3, false);
+            Array<uint64_t> buffer(coeff_count * 3, false, nullptr);
             Slice<uint64_t> delta = buffer.slice(0, coeff_count);
             Slice<uint64_t> c_mod_qi = buffer.slice(coeff_count, 2 * coeff_count);
             Slice<uint64_t> k = buffer.slice(2 * coeff_count, 3 * coeff_count);
@@ -993,7 +994,7 @@ namespace troy {
             }
 
         } else {
-            Array<uint64_t> delta(coeff_count * decomp_modulus_size, true);
+            Array<uint64_t> delta(coeff_count * decomp_modulus_size, true, pool);
             size_t block_count = utils::ceil_div(coeff_count * decomp_modulus_size, utils::KERNEL_THREAD_COUNT);
             kernel_ski_util5_step1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_last, coeff_count, plain_modulus, key_modulus, 
@@ -1124,7 +1125,7 @@ namespace troy {
         }
     }
 
-    void Evaluator::switch_key_inplace_internal(Ciphertext& encrypted, utils::ConstSlice<uint64_t> target, const KSwitchKeys& kswitch_keys, size_t kswitch_keys_index) const {
+    void Evaluator::switch_key_inplace_internal(Ciphertext& encrypted, utils::ConstSlice<uint64_t> target, const KSwitchKeys& kswitch_keys, size_t kswitch_keys_index, MemoryPoolHandle pool) const {
         check_no_seed("[Evaluator::switch_key_inplace_internal]", encrypted);
         if (!this->context()->using_keyswitching()) {
             throw std::invalid_argument("[Evaluator::switch_key_inplace_internal] Keyswitching is not supported.");
@@ -1147,7 +1148,7 @@ namespace troy {
         size_t coeff_count = parms.poly_modulus_degree();
         size_t decomp_modulus_size = parms.coeff_modulus().size();
         ConstSlice<Modulus> key_modulus = key_parms.coeff_modulus();
-        Array<Modulus> key_modulus_host = Array<Modulus>::create_and_copy_from_slice(key_modulus);
+        Array<Modulus> key_modulus_host = Array<Modulus>::create_and_copy_from_slice(key_modulus, pool);
         key_modulus_host.to_host_inplace();
         size_t key_modulus_size = key_modulus.size();
         size_t rns_modulus_size = decomp_modulus_size + 1;
@@ -1163,7 +1164,7 @@ namespace troy {
         if (target.size() != decomp_modulus_size * coeff_count) {
             throw std::invalid_argument("[Evaluator::switch_key_inplace_internal] Invalid target size.");
         }
-        Array<uint64_t> target_copied = Array<uint64_t>::create_and_copy_from_slice(target);
+        Array<uint64_t> target_copied = Array<uint64_t>::create_and_copy_from_slice(target, pool);
 
         // If target is in NTT form; switch back to normal form
         if (is_ntt_form) {
@@ -1174,9 +1175,9 @@ namespace troy {
 
         // Temporary result
         bool device = target.on_device();
-        Array<uint64_t> poly_prod(key_component_count * coeff_count * rns_modulus_size, device);
-        Array<uint64_t> poly_lazy(key_component_count * coeff_count * 2, device);
-        Array<uint64_t> temp_ntt(coeff_count, device);
+        Array<uint64_t> poly_prod(key_component_count * coeff_count * rns_modulus_size, device, pool);
+        Array<uint64_t> poly_lazy(key_component_count * coeff_count * 2, device, pool);
+        Array<uint64_t> temp_ntt(coeff_count, device, pool);
 
         for (size_t i = 0; i < rns_modulus_size; i++) {
             size_t key_index = (i == decomp_modulus_size ? key_modulus_size - 1 : i);
@@ -1191,7 +1192,7 @@ namespace troy {
             // Multiply with keys and perform lazy reduction on product's coefficients
             temp_ntt.set_zero();
             for (size_t j = 0; j < decomp_modulus_size; j++) {
-                ConstSlice<uint64_t> temp_operand(nullptr, 0, device);
+                ConstSlice<uint64_t> temp_operand(nullptr, 0, device, nullptr);
                 if (is_ntt_form && (i == j)) {
                     temp_operand = target.const_slice(j * coeff_count, (j + 1) * coeff_count);
                 } else {
@@ -1247,7 +1248,7 @@ namespace troy {
         
         // Accumulated products are now stored in t_poly_prod
 
-        temp_ntt = Array<uint64_t>(decomp_modulus_size * coeff_count, device);
+        temp_ntt = Array<uint64_t>(decomp_modulus_size * coeff_count, device, pool);
         for (size_t i = 0; i < key_component_count; i++) {
             if (scheme == SchemeType::BGV) {
                 // qk is the special prime
@@ -1264,7 +1265,8 @@ namespace troy {
                     t_last.as_const(), poly_prod.slice(i * coeff_count * rns_modulus_size, poly_prod.size()),
                     coeff_count, plain_modulus, key_modulus, key_ntt_tables,
                     decomp_modulus_size, rns_modulus_size, qk_inv_qp, qk,
-                    modswitch_factors, encrypted.poly(i)
+                    modswitch_factors, encrypted.poly(i),
+                    pool
                 );
             } else {
                 // Lazy reduction; this needs to be then reduced mod qi
@@ -1305,7 +1307,7 @@ namespace troy {
         }
     }
 
-    void Evaluator::apply_keyswitching_inplace(Ciphertext& encrypted, const KSwitchKeys& kswitch_keys) const {
+    void Evaluator::apply_keyswitching_inplace(Ciphertext& encrypted, const KSwitchKeys& kswitch_keys, MemoryPoolHandle pool) const {
         if (kswitch_keys.data().size() != 1) {
             throw std::invalid_argument("[Evaluator::apply_keyswitching_inplace] Key switch keys size must be 1.");
         }
@@ -1314,12 +1316,12 @@ namespace troy {
         }
         // due to the semantics of `switch_key_inplace_internal`, we should first get the c0 out
         // and then clear the original c0 in the encrypted.
-        Array<uint64_t> target = Array<uint64_t>::create_and_copy_from_slice(encrypted.const_poly(1));
+        Array<uint64_t> target = Array<uint64_t>::create_and_copy_from_slice(encrypted.const_poly(1), pool);
         encrypted.poly(1).set_zero();
-        this->switch_key_inplace_internal(encrypted, target.const_reference(), kswitch_keys, 0);
+        this->switch_key_inplace_internal(encrypted, target.const_reference(), kswitch_keys, 0, pool);
     }
 
-    void Evaluator::relinearize_inplace_internal(Ciphertext& encrypted, const RelinKeys& relin_keys, size_t destination_size) const {
+    void Evaluator::relinearize_inplace_internal(Ciphertext& encrypted, const RelinKeys& relin_keys, size_t destination_size, MemoryPoolHandle pool) const {
         check_no_seed("[Evaluator::relinearize_inplace_internal]", encrypted);
         if (relin_keys.parms_id() != this->context()->key_parms_id()) {
             throw std::invalid_argument("[Evaluator::relinearize_inplace_internal] Relin keys has incorrect parms id.");
@@ -1336,13 +1338,13 @@ namespace troy {
         for (size_t i = 0; i < relins_needed; i++) {
             this->switch_key_inplace_internal(
                 encrypted, encrypted.const_poly(encrypted_size - 1),
-                relin_keys.as_kswitch_keys(), RelinKeys::get_index(encrypted_size - 1));
+                relin_keys.as_kswitch_keys(), RelinKeys::get_index(encrypted_size - 1), pool);
             encrypted_size -= 1;
         }
         encrypted.resize(this->context(), context_data->parms_id(), destination_size);
     }
 
-    void Evaluator::mod_switch_scale_to_next_internal(const Ciphertext& encrypted, Ciphertext& destination) const {
+    void Evaluator::mod_switch_scale_to_next_internal(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool) const {
         ParmsID parms_id = encrypted.parms_id();
         ContextDataPointer context_data = this->get_context_data("[Evaluator::mod_switch_scale_to_next_internal]", parms_id);
         const EncryptionParameters& parms = context_data->parms();
@@ -1381,13 +1383,13 @@ namespace troy {
             }
             case SchemeType::CKKS: {
                 for (size_t i = 0; i < encrypted_size; i++) {
-                    rns_tool.divide_and_round_q_last_ntt_inplace(encrypted_copy.poly(i), context_data->small_ntt_tables());
+                    rns_tool.divide_and_round_q_last_ntt_inplace(encrypted_copy.poly(i), context_data->small_ntt_tables(), pool);
                 }
                 break;
             }
             case SchemeType::BGV: {
                 for (size_t i = 0; i < encrypted_size; i++) {
-                    rns_tool.mod_t_and_divide_q_last_ntt_inplace(encrypted_copy.poly(i), context_data->small_ntt_tables());
+                    rns_tool.mod_t_and_divide_q_last_ntt_inplace(encrypted_copy.poly(i), context_data->small_ntt_tables(), pool);
                 }
                 break;
             }
@@ -1397,7 +1399,7 @@ namespace troy {
         }
 
         bool device = encrypted.on_device();
-        if (device) destination.to_device_inplace();
+        if (device) destination.to_device_inplace(pool);
         else destination.to_host_inplace();
 
         destination.resize(this->context(), next_context_data->parms_id(), encrypted_size);
@@ -1409,7 +1411,7 @@ namespace troy {
         if (scheme == SchemeType::CKKS) {
             // take the last modulus
             size_t id = parms.coeff_modulus().size() - 1;
-            Array<Modulus> modulus = Array<Modulus>::create_and_copy_from_slice(parms.coeff_modulus().const_slice(id, id+1));
+            Array<Modulus> modulus = Array<Modulus>::create_and_copy_from_slice(parms.coeff_modulus().const_slice(id, id+1), pool);
             modulus.to_host_inplace();
             destination.scale() = encrypted.scale() / modulus[0].value();
         } else if (scheme == SchemeType::BGV) {
@@ -1419,7 +1421,7 @@ namespace troy {
         }
     }
 
-    void Evaluator::mod_switch_drop_to_next_internal(const Ciphertext& encrypted, Ciphertext& destination) const {
+    void Evaluator::mod_switch_drop_to_next_internal(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool) const {
         ParmsID parms_id = encrypted.parms_id();
         ContextDataPointer context_data = this->get_context_data("[Evaluator::mod_switch_scale_to_next_internal]", parms_id);
         const EncryptionParameters& parms = context_data->parms();
@@ -1441,7 +1443,7 @@ namespace troy {
         size_t next_coeff_modulus_size = next_parms.coeff_modulus().size();
 
         bool device = encrypted.on_device();
-        if (device) destination.to_device_inplace();
+        if (device) destination.to_device_inplace(pool);
         else destination.to_host_inplace();
 
         destination.resize(this->context(), next_context_data->parms_id(), encrypted_size);
@@ -1454,7 +1456,7 @@ namespace troy {
         destination.correction_factor() = encrypted.correction_factor();
     }
 
-    void Evaluator::mod_switch_drop_to_next_plain_inplace_internal(Plaintext& plain) const {
+    void Evaluator::mod_switch_drop_to_next_plain_inplace_internal(Plaintext& plain, MemoryPoolHandle pool) const {
         if (!plain.is_ntt_form()) {
             throw std::invalid_argument("[Evaluator::mod_switch_drop_to_next_plain_inplace_internal] Plaintext is not in NTT form.");
         }
@@ -1479,7 +1481,7 @@ namespace troy {
         plain.parms_id() = next_context_data->parms_id();
     }
 
-    void Evaluator::mod_switch_to_next(const Ciphertext& encrypted, Ciphertext& destination) const {
+    void Evaluator::mod_switch_to_next(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool) const {
         check_no_seed("[Evaluator::mod_switch_to_next]", encrypted);
         if (this->context()->last_parms_id() == encrypted.parms_id()) {
             throw std::invalid_argument("[Evaluator::mod_switch_to_next] End of modulus switching chain reached.");
@@ -1487,31 +1489,31 @@ namespace troy {
         SchemeType scheme = this->context()->first_context_data().value()->parms().scheme();
         switch (scheme) {
             case SchemeType::BFV: 
-                this->mod_switch_scale_to_next_internal(encrypted, destination);
+                this->mod_switch_scale_to_next_internal(encrypted, destination, pool);
                 break;
             case SchemeType::CKKS:
-                this->mod_switch_drop_to_next_internal(encrypted, destination);
+                this->mod_switch_drop_to_next_internal(encrypted, destination, pool);
                 break;
             case SchemeType::BGV:
-                this->mod_switch_scale_to_next_internal(encrypted, destination);
+                this->mod_switch_scale_to_next_internal(encrypted, destination, pool);
                 break;
             default:
                 throw std::logic_error("[Evaluator::mod_switch_to_next] Scheme not implemented.");
         }
     }
 
-    void Evaluator::mod_switch_to_inplace(Ciphertext& encrypted, const ParmsID& parms_id) const {
+    void Evaluator::mod_switch_to_inplace(Ciphertext& encrypted, const ParmsID& parms_id, MemoryPoolHandle pool) const {
         ContextDataPointer context_data = this->get_context_data("[Evaluator::mod_switch_to_inplace]", encrypted.parms_id());
         ContextDataPointer target_context_data = this->get_context_data("[Evaluator::mod_switch_to_inplace]", parms_id);
         if (context_data->chain_index() < target_context_data->chain_index()) {
             throw std::invalid_argument("[Evaluator::mod_switch_to_inplace] Cannot switch to a higher level.");
         }
         while (encrypted.parms_id() != parms_id) {
-            this->mod_switch_to_next_inplace(encrypted);
+            this->mod_switch_to_next_inplace(encrypted, pool);
         }
     }
 
-    void Evaluator::mod_switch_plain_to_inplace(Plaintext& plain, const ParmsID& parms_id) const {
+    void Evaluator::mod_switch_plain_to_inplace(Plaintext& plain, const ParmsID& parms_id, MemoryPoolHandle pool) const {
         if (!plain.is_ntt_form()) {
             throw std::invalid_argument("[Evaluator::mod_switch_plain_to_inplace] Plaintext is not in NTT form.");
         }
@@ -1521,11 +1523,11 @@ namespace troy {
             throw std::invalid_argument("[Evaluator::mod_switch_plain_to_inplace] Cannot switch to a higher level.");
         }
         while (plain.parms_id() != parms_id) {
-            this->mod_switch_plain_to_next_inplace(plain);
+            this->mod_switch_plain_to_next_inplace(plain, pool);
         }
     }
 
-    void Evaluator::rescale_to_next(const Ciphertext& encrypted, Ciphertext& destination) const {
+    void Evaluator::rescale_to_next(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool) const {
         check_no_seed("[Evaluator::rescale_to_next]", encrypted);
         if (this->context()->last_parms_id() == encrypted.parms_id()) {
             throw std::invalid_argument("[Evaluator::rescale_to_next] End of modulus switching chain reached.");
@@ -1536,25 +1538,25 @@ namespace troy {
                 throw std::invalid_argument("[Evaluator::rescale_to_next] Cannot rescale BFV/BGV ciphertext.");
                 break;
             case SchemeType::CKKS:
-                this->mod_switch_scale_to_next_internal(encrypted, destination);
+                this->mod_switch_scale_to_next_internal(encrypted, destination, pool);
                 break;
             default:
                 throw std::logic_error("[Evaluator::rescale_to_next] Scheme not implemented.");
         }
     }
     
-    void Evaluator::rescale_to(const Ciphertext& encrypted, const ParmsID& parms_id, Ciphertext& destination) const {
+    void Evaluator::rescale_to(const Ciphertext& encrypted, const ParmsID& parms_id, Ciphertext& destination, MemoryPoolHandle pool) const {
         ContextDataPointer context_data = this->get_context_data("[Evaluator::rescale_to]", encrypted.parms_id());
         ContextDataPointer target_context_data = this->get_context_data("[Evaluator::rescale_to]", parms_id);
         if (context_data->chain_index() < target_context_data->chain_index()) {
             throw std::invalid_argument("[Evaluator::rescale_to] Cannot rescale to a higher level.");
         }
         while (encrypted.parms_id() != parms_id) {
-            this->rescale_to_next(encrypted, destination);
+            this->rescale_to_next(encrypted, destination, pool);
         }
     }
 
-    void Evaluator::translate_plain_inplace(Ciphertext& encrypted, const Plaintext& plain, bool subtract) const {
+    void Evaluator::translate_plain_inplace(Ciphertext& encrypted, const Plaintext& plain, bool subtract, MemoryPoolHandle pool) const {
         check_no_seed("[Evaluator::translate_plain_inplace]", encrypted);
         ContextDataPointer context_data = this->get_context_data("[Evaluator::translate_plain_inplace]", encrypted.parms_id());
         const EncryptionParameters& parms = context_data->parms();
@@ -1620,7 +1622,7 @@ namespace troy {
             case SchemeType::BGV: {
                 Plaintext plain_copy = plain;
                 utils::multiply_scalar(plain.poly(), encrypted.correction_factor(), parms.plain_modulus(), plain_copy.poly());
-                this->transform_plain_to_ntt_inplace(plain_copy, encrypted.parms_id());
+                this->transform_plain_to_ntt_inplace(plain_copy, encrypted.parms_id(), pool);
                 if (!subtract) {
                     utils::add_inplace_p(encrypted.poly(0), plain_copy.const_poly(), coeff_count, coeff_modulus);
                 } else {
@@ -1633,7 +1635,7 @@ namespace troy {
         }
     }
 
-    void Evaluator::multiply_plain_normal_inplace(Ciphertext& encrypted, const Plaintext& plain) const {
+    void Evaluator::multiply_plain_normal_inplace(Ciphertext& encrypted, const Plaintext& plain, MemoryPoolHandle pool) const {
         check_no_seed("[Evaluator::multiply_plain_normal_inplace]", encrypted);
         ContextDataPointer context_data = this->get_context_data("[Evaluator::multiply_plain_normal_inplace]", encrypted.parms_id());
         const EncryptionParameters& parms = context_data->parms();
@@ -1647,7 +1649,7 @@ namespace troy {
 
         size_t encrypted_size = encrypted.polynomial_count();
         bool device = encrypted.on_device();
-        Buffer<uint64_t> temp(coeff_modulus_size, coeff_count, device);
+        Buffer<uint64_t> temp(coeff_modulus_size, coeff_count, device, pool);
 
         if (plain.parms_id() == parms_id_zero) {
 
@@ -1658,7 +1660,7 @@ namespace troy {
             
             // Generic case: any plaintext polynomial
             // Allocate temporary space for an entire RNS polynomial
-            scaling_variant::centralize(plain, context_data, temp.reference());
+            scaling_variant::centralize(plain, context_data, temp.reference(), pool);
         
         } else {
 
@@ -1712,13 +1714,13 @@ namespace troy {
         }
     }
 
-    void Evaluator::multiply_plain_inplace(Ciphertext& encrypted, const Plaintext& plain) const {
+    void Evaluator::multiply_plain_inplace(Ciphertext& encrypted, const Plaintext& plain, MemoryPoolHandle pool) const {
         bool encrypted_ntt = encrypted.is_ntt_form();
         bool plain_ntt = plain.is_ntt_form();
         if (encrypted_ntt && plain_ntt) {
             this->multiply_plain_ntt_inplace(encrypted, plain);
         } else if (!encrypted_ntt && !plain_ntt) {
-            this->multiply_plain_normal_inplace(encrypted, plain);
+            this->multiply_plain_normal_inplace(encrypted, plain, pool);
         } else if (encrypted_ntt && !plain_ntt) {
             Plaintext plain_copy = plain.clone();
             this->transform_plain_to_ntt_inplace(plain_copy, encrypted.parms_id());
@@ -1807,7 +1809,7 @@ namespace troy {
     ///    Usually, this form of plaintext is created with [BatchEncoder::scale_up],
     ///    so after NTT-ed it could still be added to a ciphertext, but it cannot be 
     ///    multiplied with a BFV ciphertext, since both the operands are already scaled.
-    void Evaluator::transform_plain_to_ntt_inplace(Plaintext& plain, const ParmsID& parms_id) const {
+    void Evaluator::transform_plain_to_ntt_inplace(Plaintext& plain, const ParmsID& parms_id, MemoryPoolHandle pool) const {
         if (plain.is_ntt_form()) {
             throw std::invalid_argument("[Evaluator::transform_plain_to_ntt_inplace] Plaintext is already in NTT form.");
         }
@@ -1829,7 +1831,7 @@ namespace troy {
 
             if (!context_data->qualifiers().using_fast_plain_lift) {
                 bool device = plain.on_device();
-                Buffer<uint64_t> temp(coeff_modulus_size, coeff_count, device);
+                Buffer<uint64_t> temp(coeff_modulus_size, coeff_count, device, pool);
                 transform_plain_to_ntt_no_fast_plain_lift(
                     plain_coeff_count, coeff_modulus_size,
                     plain.const_poly(), temp.reference(), plain_upper_half_threshold, plain_upper_half_increment
@@ -1889,7 +1891,7 @@ namespace troy {
         encrypted.is_ntt_form() = false;
     }
     
-    void Evaluator::apply_galois_inplace(Ciphertext& encrypted, size_t galois_element, const GaloisKeys& galois_keys) const {
+    void Evaluator::apply_galois_inplace(Ciphertext& encrypted, size_t galois_element, const GaloisKeys& galois_keys, MemoryPoolHandle pool) const {
         check_no_seed("[Evaluator::apply_galois_inplace]", encrypted);
         if (galois_keys.parms_id() != this->context()->key_parms_id()) {
             throw std::invalid_argument("[Evaluator::apply_galois_inplace] Galois keys has incorrect parms id.");
@@ -1914,7 +1916,7 @@ namespace troy {
             throw std::invalid_argument("[Evaluator::apply_galois_inplace] Ciphertext size must be 2.");
         }
 
-        Array<uint64_t> temp(coeff_count * coeff_modulus_size, encrypted.on_device());
+        Array<uint64_t> temp(coeff_count * coeff_modulus_size, encrypted.on_device(), pool);
         // DO NOT CHANGE EXECUTION ORDER OF FOLLOWING SECTION
         // BEGIN: Apply Galois for each ciphertext
         // Execution order is sensitive, since apply_galois is not inplace!
@@ -1923,16 +1925,16 @@ namespace troy {
             encrypted.poly(0).copy_from_slice(temp.const_reference());
             galois_tool.apply_p(encrypted.const_poly(1), galois_element, coeff_modulus, temp.reference());
         } else {
-            galois_tool.apply_ntt_p(encrypted.const_poly(0), coeff_modulus_size, galois_element, temp.reference());
+            galois_tool.apply_ntt_p(encrypted.const_poly(0), coeff_modulus_size, galois_element, temp.reference(), pool);
             encrypted.poly(0).copy_from_slice(temp.const_reference());
-            galois_tool.apply_ntt_p(encrypted.const_poly(1), coeff_modulus_size, galois_element, temp.reference());
+            galois_tool.apply_ntt_p(encrypted.const_poly(1), coeff_modulus_size, galois_element, temp.reference(), pool);
         }
         encrypted.poly(1).set_zero();
 
-        this->switch_key_inplace_internal(encrypted, temp.const_reference(), galois_keys.as_kswitch_keys(), GaloisKeys::get_index(galois_element));
+        this->switch_key_inplace_internal(encrypted, temp.const_reference(), galois_keys.as_kswitch_keys(), GaloisKeys::get_index(galois_element), pool);
     }
     
-    void Evaluator::apply_galois_plain_inplace(Plaintext& plain, size_t galois_element) const {
+    void Evaluator::apply_galois_plain_inplace(Plaintext& plain, size_t galois_element, MemoryPoolHandle pool) const {
         ContextDataPointer context_data = plain.is_ntt_form()
             ? this->get_context_data("[Evaluator::apply_galois_plain_inplace]", plain.parms_id())
             : this->context()->key_context_data().value();
@@ -1948,7 +1950,7 @@ namespace troy {
             throw std::invalid_argument("[Evaluator::apply_galois_inplace] Galois element is not valid.");
         }
 
-        Array<uint64_t> temp(coeff_count * (plain.is_ntt_form() ? coeff_modulus_size : 1), plain.on_device());
+        Array<uint64_t> temp(coeff_count * (plain.is_ntt_form() ? coeff_modulus_size : 1), plain.on_device(), pool);
         if (!plain.is_ntt_form()) {
             if (context_data->is_ckks()) {
                 galois_tool.apply_p(plain.const_poly(), galois_element, coeff_modulus, temp.reference());
@@ -1956,7 +1958,7 @@ namespace troy {
                 galois_tool.apply(plain.const_poly(), galois_element, context_data->parms().plain_modulus(), temp.reference());
             }
         } else {
-            galois_tool.apply_ntt_p(plain.const_poly(), coeff_modulus_size, galois_element, temp.reference());
+            galois_tool.apply_ntt_p(plain.const_poly(), coeff_modulus_size, galois_element, temp.reference(), pool);
         }
 
         ParmsID parms_id = plain.parms_id();
@@ -1966,7 +1968,7 @@ namespace troy {
         plain.parms_id() = parms_id;
     }
 
-    void Evaluator::rotate_inplace_internal(Ciphertext& encrypted, int steps, const GaloisKeys& galois_keys) const {
+    void Evaluator::rotate_inplace_internal(Ciphertext& encrypted, int steps, const GaloisKeys& galois_keys, MemoryPoolHandle pool) const {
         ContextDataPointer context_data = this->get_context_data("[Evaluator::rotate_inplace_internal]", encrypted.parms_id());
         if (!context_data->qualifiers().using_batching) {
             throw std::invalid_argument("[Evaluator::rotate_inplace_internal] Batching must be enabled to use rotate.");
@@ -1980,7 +1982,7 @@ namespace troy {
         const GaloisTool& galois_tool = context_data->galois_tool();
         if (galois_keys.has_key(galois_tool.get_element_from_step(steps))) {
             size_t element = galois_tool.get_element_from_step(steps);
-            this->apply_galois_inplace(encrypted, element, galois_keys);
+            this->apply_galois_inplace(encrypted, element, galois_keys, pool);
         } else {
             // Convert the steps to NAF: guarantees using smallest HW
             std::vector<int> naf_steps = utils::naf(steps);
@@ -1988,18 +1990,18 @@ namespace troy {
                 throw std::invalid_argument("[Evaluator::rotate_inplace_internal] Galois key not present.");
             }
             for (int naf_step : naf_steps) {
-                this->rotate_inplace_internal(encrypted, naf_step, galois_keys);
+                this->rotate_inplace_internal(encrypted, naf_step, galois_keys, pool);
             }
         }
     }
     
-    void Evaluator::conjugate_inplace_internal(Ciphertext& encrypted, const GaloisKeys& galois_keys) const {
+    void Evaluator::conjugate_inplace_internal(Ciphertext& encrypted, const GaloisKeys& galois_keys, MemoryPoolHandle pool) const {
         ContextDataPointer context_data = this->get_context_data("Evaluator::conjugate_inplace_internal", encrypted.parms_id());
         if (!context_data->qualifiers().using_batching) {
             throw std::logic_error("[Evaluator::conjugate_inplace_internal] Batching is not enabled.");
         }
         const GaloisTool& galois_tool = context_data->galois_tool();
-        this->apply_galois_inplace(encrypted, galois_tool.get_element_from_step(0), galois_keys);
+        this->apply_galois_inplace(encrypted, galois_tool.get_element_from_step(0), galois_keys, pool);
     }
 
     void Evaluator::negacyclic_shift(const Ciphertext& encrypted, size_t shift, Ciphertext& destination) const {
@@ -2051,7 +2053,7 @@ namespace troy {
         }
     }
     
-    LWECiphertext Evaluator::extract_lwe_new(const Ciphertext& encrypted, size_t term) const {
+    LWECiphertext Evaluator::extract_lwe_new(const Ciphertext& encrypted, size_t term, MemoryPoolHandle pool) const {
         check_no_seed("[Evaluator::extract_lwe_new]", encrypted);
         if (encrypted.polynomial_count() != 2) {
             throw std::invalid_argument("[Evaluator::extract_lwe_new] Ciphertext size must be 2.");
@@ -2071,13 +2073,13 @@ namespace troy {
         // gather c1
         size_t shift = (term == 0) ? 0 : (coeff_count * 2 - term);
         bool device = encrypted.on_device();
-        utils::DynamicArray<uint64_t> c1(coeff_count * coeff_modulus_size, device);
+        utils::DynamicArray<uint64_t> c1(coeff_count * coeff_modulus_size, device, pool);
         utils::negacyclic_shift_p(
             encrypted.const_poly(1), shift, coeff_count, coeff_modulus, c1.reference()
         );
 
         // gather c0
-        utils::DynamicArray<uint64_t> c0(coeff_modulus_size, device);
+        utils::DynamicArray<uint64_t> c0(coeff_modulus_size, device, pool);
         extract_lwe_gather_c0(
             coeff_modulus_size, coeff_count, term,
             encrypted.const_poly(0), c0.reference()
@@ -2096,12 +2098,12 @@ namespace troy {
     }
 
     
-    void Evaluator::field_trace_inplace(Ciphertext& encrypted, const GaloisKeys& automorphism_keys, size_t logn) const {
+    void Evaluator::field_trace_inplace(Ciphertext& encrypted, const GaloisKeys& automorphism_keys, size_t logn, MemoryPoolHandle pool) const {
         size_t poly_degree = encrypted.poly_modulus_degree();
         Ciphertext temp;
         while (poly_degree > (1 << logn)) {
             size_t galois_element = poly_degree + 1;
-            this->apply_galois(encrypted, galois_element, automorphism_keys, temp);
+            this->apply_galois(encrypted, galois_element, automorphism_keys, temp, pool);
             this->add_inplace(encrypted, temp);
             poly_degree >>= 1;
         }
@@ -2122,7 +2124,7 @@ namespace troy {
         }
     }
     
-    Ciphertext Evaluator::pack_lwe_ciphertexts_new(const std::vector<LWECiphertext>& lwes, const GaloisKeys& automorphism_keys) const {
+    Ciphertext Evaluator::pack_lwe_ciphertexts_new(const std::vector<LWECiphertext>& lwes, const GaloisKeys& automorphism_keys, MemoryPoolHandle pool) const {
         
         size_t lwes_count = lwes.size();
         if (lwes_count == 0) {
@@ -2166,12 +2168,12 @@ namespace troy {
         size_t l = 0;
         while ((1 << l) < lwes_count) l += 1;
         std::vector<Ciphertext> rlwes(1 << l);
-        Ciphertext zero_rlwe = this->assemble_lwe_new(lwes[0]);
+        Ciphertext zero_rlwe = this->assemble_lwe_new(lwes[0], pool);
         zero_rlwe.data().reference().set_zero();
         for (size_t i = 0; i < (1<<l); i++) {
             size_t index = static_cast<size_t>(utils::reverse_bits_uint64(static_cast<uint64_t>(i), l));
             if (index < lwes_count) {
-                rlwes[i] = this->assemble_lwe_new(lwes[index]);
+                rlwes[i] = this->assemble_lwe_new(lwes[index], pool);
                 this->divide_by_poly_modulus_degree_inplace(rlwes[i]);
             } else {
                 rlwes[i] = zero_rlwe;
@@ -2194,7 +2196,7 @@ namespace troy {
                 if (ntt_form) {
                     this->transform_to_ntt_inplace(odd);
                 }
-                this->apply_galois_inplace(odd, (1 << (layer + 1)) + 1, automorphism_keys);
+                this->apply_galois_inplace(odd, (1 << (layer + 1)) + 1, automorphism_keys, pool);
                 if (ntt_form) {
                     this->transform_from_ntt_inplace(odd);
                 }
@@ -2207,7 +2209,7 @@ namespace troy {
         if (ntt_form) {
             this->transform_to_ntt_inplace(ret);
         }
-        field_trace_inplace(ret, automorphism_keys, l);
+        field_trace_inplace(ret, automorphism_keys, l, pool);
         return ret;
     }
 }

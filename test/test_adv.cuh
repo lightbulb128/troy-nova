@@ -17,7 +17,7 @@ namespace tool {
 
     template<typename T>
     ConstSlice<T> sfv(const vector<T> &vec) {
-        return ConstSlice<T>(vec.data(), vec.size(), false);
+        return ConstSlice<T>(vec.data(), vec.size(), false, nullptr);
     }
 
     class GeneralVector {

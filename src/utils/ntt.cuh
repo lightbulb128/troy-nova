@@ -20,19 +20,22 @@ namespace troy {namespace utils {
 
     public:
 
+        inline MemoryPoolHandle pool() const { return root_powers_.pool(); }
+        inline bool device_index() const { return root_powers_.device_index(); }
+
         NTTTables(): device(false) {}
 
         NTTTables(size_t coeff_count_power, const Modulus& modulus);
 
-        inline NTTTables clone() const {
+        inline NTTTables clone(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             NTTTables copied;
             copied.root_ = root_;
             copied.coeff_count_power_ = coeff_count_power_;
             copied.coeff_count_ = coeff_count_;
             copied.modulus_ = modulus_;
             copied.inv_degree_modulo_ = inv_degree_modulo_;
-            copied.root_powers_ = root_powers_.clone();
-            copied.inv_root_powers_ = inv_root_powers_.clone();
+            copied.root_powers_ = root_powers_.clone(pool);
+            copied.inv_root_powers_ = inv_root_powers_.clone(pool);
             return copied;
         }
 
@@ -42,10 +45,10 @@ namespace troy {namespace utils {
 
         __host__ __device__ uint64_t root() const { return root_; }
         __host__ __device__ ConstSlice<MultiplyUint64Operand> root_powers() const {
-            return root_powers_.const_reference();
+            return root_powers_.detached_const_reference();
         }
         __host__ __device__ ConstSlice<MultiplyUint64Operand> inv_root_powers() const {
-            return inv_root_powers_.const_reference();
+            return inv_root_powers_.detached_const_reference();
         }
         __host__ __device__ MultiplyUint64Operand inv_degree_modulo() const {
             return inv_degree_modulo_;
@@ -55,24 +58,24 @@ namespace troy {namespace utils {
         __host__ __device__ size_t coeff_count() const { return coeff_count_; }
 
         /* This function moves all the arrays in the struct into device. */
-        inline void to_device_inplace() {
-            root_powers_.to_device_inplace();
-            inv_root_powers_.to_device_inplace();
+        inline void to_device_inplace(MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+            root_powers_.to_device_inplace(pool);
+            inv_root_powers_.to_device_inplace(pool);
             device = true;
         }
 
         /* This function moves all the arrays in the struct into device. */
-        inline NTTTables to_device() const {
-            NTTTables tables = this->clone();
-            tables.to_device_inplace();
+        inline NTTTables to_device(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            NTTTables tables = this->clone(pool);
+            tables.to_device_inplace(pool);
             return tables;
         }
 
         inline static Array<NTTTables> create_ntt_tables(size_t coeff_count_power, ConstSlice<Modulus> moduli) {
             if (moduli.size() == 0) {
-                return Array<NTTTables>(0, false);
+                return Array<NTTTables>(0, false, nullptr);
             }
-            Array<NTTTables> tables(moduli.size(), false);
+            Array<NTTTables> tables(moduli.size(), false, nullptr);
             for (size_t i = 0; i < moduli.size(); i++) {
                 tables[i] = NTTTables(coeff_count_power, moduli[i]);
             }

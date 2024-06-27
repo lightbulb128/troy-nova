@@ -29,7 +29,7 @@ namespace troy {namespace utils {
 
         // Populate tables with powers of root in specific orders.
         
-        Array<MultiplyUint64Operand> root_powers(coeff_count, false);
+        Array<MultiplyUint64Operand> root_powers(coeff_count, false, nullptr);
         MultiplyUint64Operand root_operand(root, modulus);
         uint64_t power = root;
         for (size_t i = 1; i < coeff_count; i++) {
@@ -41,7 +41,7 @@ namespace troy {namespace utils {
         }
         root_powers[0] = MultiplyUint64Operand(1, modulus);
 
-        Array<MultiplyUint64Operand> inv_root_powers(coeff_count, false);
+        Array<MultiplyUint64Operand> inv_root_powers(coeff_count, false, nullptr);
         root_operand = MultiplyUint64Operand(inv_root, modulus);
         power = inv_root;
         for (size_t i = 1; i < coeff_count; i++) {
@@ -102,7 +102,7 @@ namespace troy {namespace utils {
     void ntt_multiply_inv_degree(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables) {
         bool device = operand.on_device();
         // same device
-        if (device != tables.on_device()) {
+        if (!device_compatible(operand, tables)) {
             throw std::invalid_argument("[ntt_multiply_inv_degree] Operand and tables must be on the same device.");
         }
         if (device) {
@@ -312,7 +312,7 @@ namespace troy {namespace utils {
     void ntt_transfer_to_rev(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers) {
         bool device = operand.on_device();
         // same device
-        if (device != tables.on_device()) {
+        if (!device_compatible(operand, tables)) {
             throw std::invalid_argument("[ntt_transfer_to_rev] Operand and tables must be on the same device.");
         }
         if (!device) {
@@ -538,7 +538,7 @@ namespace troy {namespace utils {
     void ntt_transfer_from_rev(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers) {
         bool device = operand.on_device();
         // same device
-        if (device != tables.on_device()) {
+        if (!device_compatible(operand, tables)) {
             throw std::invalid_argument("[ntt_transfer_from_rev] Operand and tables must be on the same device.");
         }
         if (!device) {
@@ -610,7 +610,7 @@ namespace troy {namespace utils {
     void ntt_transfer_last_reduce(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables) {
         bool device = operand.on_device();
         // same device=
-        if (device != tables.on_device()) {
+        if (!device_compatible(operand, tables)) {
             throw std::invalid_argument("[ntt_transfer_last_reduce] Operand and tables must be on the same device.");
         }
         if (device) {

@@ -11,10 +11,10 @@ namespace rns_base {
 
     bool test_compose_decompose_single(const RNSBase& base, vector<uint64_t> input, vector<uint64_t> output, bool device) {
 
-        Array<uint64_t> x(input.size(), false);
-        x.copy_from_slice(ConstSlice<uint64_t>(input.data(), input.size(), false));
+        Array<uint64_t> x(input.size(), false, nullptr);
+        x.copy_from_slice(ConstSlice<uint64_t>(input.data(), input.size(), false, nullptr));
 
-        if (device) x.to_device_inplace();
+        if (device) x.to_device_inplace(MemoryPool::GlobalPool());
 
         base.decompose_single(x.reference());
 
@@ -121,7 +121,7 @@ namespace rns_base {
     bool test_compose_decompose_array(const RNSBase& base, vector<uint64_t> input, vector<uint64_t> output, bool device) {
 
         Array<uint64_t> x(input.size(), false);
-        x.copy_from_slice(ConstSlice<uint64_t>(input.data(), input.size(), false));
+        x.copy_from_slice(ConstSlice<uint64_t>(input.data(), input.size(), false, nullptr));
 
         if (device) x.to_device_inplace();
 
@@ -231,9 +231,9 @@ namespace rns_base {
         if (device) converter.to_device_inplace();
         // create input array
         Array<uint64_t> x = Array<uint64_t>::from_vector(std::move(input));
-        if (device) x.to_device_inplace();
+        if (device) x.to_device_inplace(MemoryPool::GlobalPool());
         // convert
-        Array<uint64_t> y(output.size(), x.on_device());
+        Array<uint64_t> y(output.size(), x.on_device(), x.pool());
         converter.fast_convert_array(x.const_reference(), y.reference());
         if (device) y.to_host_inplace();
         // check

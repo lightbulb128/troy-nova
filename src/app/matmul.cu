@@ -84,7 +84,7 @@ namespace troy { namespace linear {
                 vec[r] = weights[i * output_dims + j];
             }
         }
-        return encoder.encode_weights(vec);
+        return encoder.encode_weights(vec, pool);
     }
 
     template Plaintext MatmulHelper::encode_weights_small<BatchEncoderAdapter, uint64_t>(
@@ -183,7 +183,7 @@ namespace troy { namespace linear {
                 for (size_t i = li; i < ui; i++)
                     for (size_t j = lj; j < uj; j++)
                         vec[(i - li) * input_block * output_block + (j - lj)] = inputs[i * input_dims + j];
-                Plaintext encoded = encoder.encode_inputs(vec);
+                Plaintext encoded = encoder.encode_inputs(vec, pool);
                 encoded_row.push_back(std::move(encoded));
             }
             ret.data().push_back(std::move(encoded_row));
@@ -232,16 +232,16 @@ namespace troy { namespace linear {
 
     Cipher2d MatmulHelper::encrypt_inputs_uint64s(const Encryptor& encryptor, const BatchEncoder& encoder, const uint64_t* inputs) const {
         Plain2d plain = encode_inputs_uint64s(encoder, inputs);
-        return plain.encrypt_symmetric(encryptor);
+        return plain.encrypt_symmetric(encryptor, pool);
     }
     Cipher2d MatmulHelper::encrypt_inputs_doubles(const Encryptor& encryptor, const CKKSEncoder& encoder, const double* inputs, std::optional<ParmsID> parms_id, double scale) const {
         Plain2d plain = encode_inputs_doubles(encoder, inputs, parms_id, scale);
-        return plain.encrypt_symmetric(encryptor);
+        return plain.encrypt_symmetric(encryptor, pool);
     }
     template <typename T>
     Cipher2d MatmulHelper::encrypt_inputs_ring2k(const Encryptor& encryptor, const PolynomialEncoderRing2k<T>& encoder, const T* inputs, std::optional<ParmsID> parms_id) const {
         Plain2d plain = encode_inputs_ring2k(encoder, inputs, parms_id);
-        return plain.encrypt_symmetric(encryptor);
+        return plain.encrypt_symmetric(encryptor, pool);
     }
     template Cipher2d MatmulHelper::encrypt_inputs_ring2k<uint32_t>(
         const Encryptor& encryptor, const PolynomialEncoderRing2k<uint32_t>& encoder, const uint32_t* inputs, std::optional<ParmsID> parms_id
@@ -267,7 +267,7 @@ namespace troy { namespace linear {
             for (size_t i = 0; i < w.data().size(); i++) {
                 for (size_t j = 0; j < w[i].size(); j++) {
                     Ciphertext prod;
-                    evaluator.multiply_plain(a[b][i], w[i][j], prod);
+                    evaluator.multiply_plain(a[b][i], w[i][j], prod, pool);
                     if (i==0) outVecs[j] = std::move(prod);
                     else {
                         evaluator.add_inplace(outVecs[j], prod);
@@ -293,7 +293,7 @@ namespace troy { namespace linear {
             for (size_t i = 0; i < w.data().size(); i++) {
                 for (size_t j = 0; j < w[i].size(); j++) {
                     Ciphertext prod;
-                    evaluator.multiply(a[b][i], w[i][j], prod);
+                    evaluator.multiply(a[b][i], w[i][j], prod, pool);
                     if (i==0) outVecs[j] = std::move(prod);
                     else {
                         evaluator.add_inplace(outVecs[j], prod);
@@ -319,7 +319,7 @@ namespace troy { namespace linear {
             for (size_t i = 0; i < w.data().size(); i++) {
                 for (size_t j = 0; j < w[i].size(); j++) {
                     Ciphertext prod;
-                    evaluator.multiply_plain(w[i][j], a[b][i], prod);
+                    evaluator.multiply_plain(w[i][j], a[b][i], prod, pool);
                     if (i==0) outVecs[j] = std::move(prod);
                     else {
                         evaluator.add_inplace(outVecs[j], prod);
@@ -346,7 +346,7 @@ namespace troy { namespace linear {
                     for (size_t i = li; i < ui; i++)
                         for (size_t j = lj; j < uj; j++) 
                             buffer[(i - li) * input_block * output_block + (j - lj) * input_block + input_block - 1] = outputs[i * output_dims + j];
-                    Plaintext pt = encoder.encode_inputs(buffer);
+                    Plaintext pt = encoder.encode_inputs(buffer, pool);
                     encoded_row.push_back(std::move(pt));
                 }
                 ret.data().push_back(std::move(encoded_row));
@@ -379,7 +379,7 @@ namespace troy { namespace linear {
             }
             plain2d.data()[0].reserve(ret.size());
             for (size_t i = 0; i < ret.size(); i++) {
-                Plaintext pt = encoder.encode_inputs(ret[i]);
+                Plaintext pt = encoder.encode_inputs(ret[i], pool);
                 plain2d.data()[0].push_back(std::move(pt));
             }
             return plain2d;
@@ -437,7 +437,7 @@ namespace troy { namespace linear {
                 size_t dj = 0;
                 for (size_t lj = 0; lj < output_dims; lj += vecsize) {
                     size_t uj = (lj + vecsize > output_dims) ? output_dims : (lj + vecsize);
-                    std::vector<T> buffer = encoder.decrypt_outputs(decryptor, outputs[di][dj]);
+                    std::vector<T> buffer = encoder.decrypt_outputs(decryptor, outputs[di][dj], pool);
                     for (size_t i = li; i < ui; i++)
                         for (size_t j = lj; j < uj; j++) 
                             dec[i * output_dims + j] = buffer[(i - li) * input_block * output_block + (j - lj) * input_block + input_block - 1];
@@ -448,7 +448,7 @@ namespace troy { namespace linear {
         } else {
             std::vector<std::vector<T>> buffer;
             for (size_t i = 0; i < outputs.data()[0].size(); i++) {
-                buffer.push_back(encoder.decrypt_outputs(decryptor, outputs[0][i]));
+                buffer.push_back(encoder.decrypt_outputs(decryptor, outputs[0][i], pool));
             }
             size_t li = 0; size_t di = 0; while (li < this->batch_size) {
                 size_t ui = std::min(this->batch_size, li + this->batch_block);
@@ -548,7 +548,7 @@ namespace troy { namespace linear {
                 }
                 evaluator.divide_by_poly_modulus_degree_inplace(buffer, slot_count / packSlots);
                 if (is_ntt) evaluator.transform_to_ntt_inplace(buffer);
-                evaluator.field_trace_inplace(buffer, autoKey, field_trace_logn);
+                evaluator.field_trace_inplace(buffer, autoKey, field_trace_logn, pool);
                 if (is_ntt) evaluator.transform_from_ntt_inplace(buffer);
                 shift = currentSlot;
                 if (shift != 0) {
@@ -605,7 +605,7 @@ namespace troy { namespace linear {
             std::vector<Plaintext> row; row.reserve(cols);
             for (size_t j = 0; j < cols; j++) {
                 Plaintext pt;
-                pt.load(stream);
+                pt.load(stream, pool);
                 row.push_back(std::move(pt));
             }
             ret.data().push_back(std::move(row));
@@ -661,7 +661,7 @@ namespace troy { namespace linear {
                         for (size_t j = lj; j < uj; j++) 
                             required[rid++] = (i - li) * input_block * output_block + (j - lj) * input_block + input_block - 1;
                     Ciphertext c;
-                    c.load_terms(stream, context, required);
+                    c.load_terms(stream, context, required, pool);
                     row.push_back(std::move(c));
                 }
                 ret.data().push_back(std::move(row));
@@ -673,7 +673,7 @@ namespace troy { namespace linear {
             Cipher2d ret; ret.data().push_back(std::vector<Ciphertext>());
             ret[0].reserve(count);
             for (size_t i = 0; i < count; i++) {
-                Ciphertext c; c.load(stream, context);
+                Ciphertext c; c.load(stream, context, pool);
                 ret[0].push_back(std::move(c));
             }
             return ret;

@@ -50,8 +50,11 @@ namespace troy {
 
     public:
 
+        inline MemoryPoolHandle pool() const { return coeff_modulus_.pool(); }
+        inline bool device_index() const { return coeff_modulus_.device_index(); }
+
         inline EncryptionParameters(SchemeType scheme_type) : 
-            scheme_(scheme_type), device(false), plain_modulus_(new Modulus(0), false),
+            scheme_(scheme_type), device(false), plain_modulus_(new Modulus(0), false, nullptr),
             plain_modulus_host_(0), use_special_prime_for_encryption_(false)
         {}
 
@@ -61,8 +64,8 @@ namespace troy {
             scheme_(parms.scheme_),
             parms_id_(parms.parms_id_),
             poly_modulus_degree_(parms.poly_modulus_degree_),
-            coeff_modulus_(parms.coeff_modulus_.clone()),
-            plain_modulus_(parms.plain_modulus_.clone()),
+            coeff_modulus_(parms.coeff_modulus_.clone(parms.pool())),
+            plain_modulus_(parms.plain_modulus_.clone(parms.pool())),
             plain_modulus_host_(parms.plain_modulus_host_),
             use_special_prime_for_encryption_(parms.use_special_prime_for_encryption_),
             device(parms.device) {}
@@ -77,8 +80,8 @@ namespace troy {
             scheme_ = parms.scheme_;
             parms_id_ = parms.parms_id_;
             poly_modulus_degree_ = parms.poly_modulus_degree_;
-            coeff_modulus_ = parms.coeff_modulus_.clone();
-            plain_modulus_ = parms.plain_modulus_.clone();
+            coeff_modulus_ = parms.coeff_modulus_.clone(parms.pool());
+            plain_modulus_ = parms.plain_modulus_.clone(parms.pool());
             plain_modulus_host_ = parms.plain_modulus_host_;
             use_special_prime_for_encryption_ = parms.use_special_prime_for_encryption_;
             device = parms.device;
@@ -132,7 +135,7 @@ namespace troy {
             if (this->on_device() || coeff_modulus.on_device()) {
                 throw std::invalid_argument("[EncryptionParameters::set_coeff_modulus] Can only set coeff_modulus on host");
             }
-            coeff_modulus_ = utils::Array<Modulus>::create_and_copy_from_slice(coeff_modulus);
+            coeff_modulus_ = utils::Array<Modulus>::create_and_copy_from_slice(coeff_modulus, pool());
             compute_parms_id();
         }
 
@@ -141,7 +144,7 @@ namespace troy {
         }
 
         inline void set_coeff_modulus(const std::vector<Modulus>& coeff_modulus) {
-            utils::Array<Modulus> array(coeff_modulus.size(), false);
+            utils::Array<Modulus> array(coeff_modulus.size(), false, nullptr);
             for (size_t i = 0; i < coeff_modulus.size(); i++) {
                 array[i] = coeff_modulus[i];
             }
@@ -149,7 +152,7 @@ namespace troy {
         }
 
         inline void set_coeff_modulus(const std::vector<uint64_t>& coeff_modulus) {
-            utils::Array<Modulus> array(coeff_modulus.size(), false);
+            utils::Array<Modulus> array(coeff_modulus.size(), false, nullptr);
             for (size_t i = 0; i < coeff_modulus.size(); i++) {
                 array[i] = Modulus(coeff_modulus[i]);
             }
@@ -160,7 +163,7 @@ namespace troy {
             if (this->on_device()) {
                 throw std::invalid_argument("[EncryptionParameters::set_plain_modulus] Can only set plain_modulus on host");
             }
-            utils::Box<Modulus> new_t = utils::Box<Modulus>(new Modulus(plain_modulus), false);
+            utils::Box<Modulus> new_t = utils::Box<Modulus>(new Modulus(plain_modulus), false, nullptr);
             plain_modulus_ = std::move(new_t);
             plain_modulus_host_ = plain_modulus;
             compute_parms_id();
@@ -174,22 +177,31 @@ namespace troy {
             use_special_prime_for_encryption_ = use_special_prime_for_encryption;
         }
 
-        inline EncryptionParameters clone() const {
-            return EncryptionParameters(*this);
+        inline EncryptionParameters clone(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            EncryptionParameters ret;
+            ret.scheme_ = this->scheme_;
+            ret.parms_id_ = this->parms_id_;
+            ret.poly_modulus_degree_ = this->poly_modulus_degree_;
+            ret.coeff_modulus_ = this->coeff_modulus_.clone(pool);
+            ret.plain_modulus_ = this->plain_modulus_.clone(pool);
+            ret.plain_modulus_host_ = this->plain_modulus_host_;
+            ret.use_special_prime_for_encryption_ = this->use_special_prime_for_encryption_;
+            ret.device = this->device;
+            return ret;
         }
 
-        inline void to_device_inplace() {
+        inline void to_device_inplace(MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
             if (this->on_device()) {
                 return;
             }
-            this->coeff_modulus_.to_device_inplace();
-            this->plain_modulus_.to_device_inplace();
+            this->coeff_modulus_.to_device_inplace(pool);
+            this->plain_modulus_.to_device_inplace(pool);
             this->device = true;
         }
 
-        inline EncryptionParameters to_device() const {
-            EncryptionParameters cloned = this->clone();
-            cloned.to_device_inplace();
+        inline EncryptionParameters to_device(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            EncryptionParameters cloned = this->clone(pool);
+            cloned.to_device_inplace(pool);
             return cloned;
         }
         
@@ -203,7 +215,7 @@ namespace troy {
         }
 
         inline EncryptionParameters to_host() const {
-            EncryptionParameters cloned = this->clone();
+            EncryptionParameters cloned = this->clone(pool());
             cloned.to_host_inplace();
             return cloned;
         }

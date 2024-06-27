@@ -54,6 +54,9 @@ namespace troy {namespace utils {
 
     public:
 
+        inline MemoryPoolHandle pool() const { return base_q_.pool(); }
+        inline bool device_index() const { return base_q_.device_index(); }
+
         inline size_t coeff_count() const noexcept { return coeff_count_; }
 
         inline const RNSBase& base_q() const noexcept { return base_q_; }
@@ -98,34 +101,34 @@ namespace troy {namespace utils {
 
         RNSTool(size_t poly_modulus_degree, const RNSBase& q, const Modulus& t);
 
-        RNSTool clone() const;
-        void to_device_inplace();
-        inline RNSTool to_device() const {
-            RNSTool res = clone();
-            res.to_device_inplace();
+        RNSTool clone(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        void to_device_inplace(MemoryPoolHandle pool = MemoryPool::GlobalPool());
+        inline RNSTool to_device(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            RNSTool res = clone(pool);
+            res.to_device_inplace(pool);
             return res;
         }
 
         void divide_and_round_q_last_inplace(Slice<uint64_t> input) const;
 
-        void divide_and_round_q_last_ntt_inplace(Slice<uint64_t> input, ConstSlice<NTTTables> rns_ntt_tables) const;
+        void divide_and_round_q_last_ntt_inplace(Slice<uint64_t> input, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
 
-        void fast_b_conv_sk(ConstSlice<uint64_t> input, Slice<uint64_t> destination) const;
+        void fast_b_conv_sk(ConstSlice<uint64_t> input, Slice<uint64_t> destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
 
         void sm_mrq(ConstSlice<uint64_t> input, Slice<uint64_t> destination) const;
 
-        void fast_floor(ConstSlice<uint64_t> input, Slice<uint64_t> destination) const;
+        void fast_floor(ConstSlice<uint64_t> input, Slice<uint64_t> destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
 
-        void fast_b_conv_m_tilde(ConstSlice<uint64_t> input, Slice<uint64_t> destination) const;
+        void fast_b_conv_m_tilde(ConstSlice<uint64_t> input, Slice<uint64_t> destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
 
-        void decrypt_scale_and_round(ConstSlice<uint64_t> phase, Slice<uint64_t> destination) const;
+        void decrypt_scale_and_round(ConstSlice<uint64_t> phase, Slice<uint64_t> destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
 
-        void mod_t_and_divide_q_last_inplace(Slice<uint64_t> input) const;
+        void mod_t_and_divide_q_last_inplace(Slice<uint64_t> input, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
 
-        void mod_t_and_divide_q_last_ntt_inplace(Slice<uint64_t> input, ConstSlice<NTTTables> rns_ntt_tables) const;
+        void mod_t_and_divide_q_last_ntt_inplace(Slice<uint64_t> input, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
 
-        inline void decrypt_mod_t(ConstSlice<uint64_t> phase, Slice<uint64_t> destination) const {
-            this->base_q_to_t_conv().exact_convey_array(phase, destination);
+        inline void decrypt_mod_t(ConstSlice<uint64_t> phase, Slice<uint64_t> destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            this->base_q_to_t_conv().exact_convey_array(phase, destination, pool);
         }
 
     };

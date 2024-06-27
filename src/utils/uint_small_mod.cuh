@@ -36,7 +36,7 @@ namespace troy { namespace utils {
 
     __host__ __device__
     inline uint64_t divide2_uint64_mod(uint64_t operand, const Modulus& modulus) {
-        if (operand & 1 > 0) {
+        if ((operand & 1) > 0) {
             uint64_t temp = 0;
             uint8_t carry = utils::add_uint64(operand, modulus.value(), temp);
             operand = temp >> 1;
@@ -84,7 +84,7 @@ namespace troy { namespace utils {
     __host__ __device__
     inline uint64_t multiply_uint64_mod(uint64_t operand1, uint64_t operand2, const Modulus& modulus) {
         uint64_t temp[2];
-        Slice<uint64_t> temp_slice(temp, 2, on_device());
+        Slice<uint64_t> temp_slice(temp, 2, on_device(), nullptr);
         utils::multiply_uint64_uint64(operand1, operand2, temp_slice);
         return modulus.reduce_uint128_limbs(temp_slice.as_const());
     }
@@ -99,9 +99,9 @@ namespace troy { namespace utils {
             uint64_t wide_quotient[2]{0, 0};
             uint64_t wide_coeff[2]{0, this->operand};
             divide_uint128_uint64_inplace(
-                Slice<uint64_t>(wide_coeff, 2, on_device()),
+                Slice<uint64_t>(wide_coeff, 2, on_device(), nullptr),
                 modulus.value(),
-                Slice<uint64_t>(wide_quotient, 2, on_device())
+                Slice<uint64_t>(wide_quotient, 2, on_device(), nullptr)
             );
             this->quotient = wide_quotient[0];
         }
@@ -172,7 +172,7 @@ namespace troy { namespace utils {
             }
         } else {
             uint64_t temp[2]; temp[0] = 0; temp[1] = value[value.size() - 1];
-            ConstSlice<uint64_t> temp_slice(temp, 2, on_device());
+            ConstSlice<uint64_t> temp_slice(temp, 2, on_device(), nullptr);
             for (int i = value.size() - 2; i >= 0; i--) {
                 temp[0] = value[i];
                 temp[1] = modulus.reduce_uint128_limbs(temp_slice);
@@ -189,7 +189,7 @@ namespace troy { namespace utils {
     inline uint64_t multiply_add_uint64_mod(uint64_t operand1, uint64_t operand2, uint64_t operand3, const Modulus& modulus) {
         // lazy reduction
         uint64_t temp[2];
-        Slice<uint64_t> temp_slice(temp, 2, on_device());
+        Slice<uint64_t> temp_slice(temp, 2, on_device(), nullptr);
         utils::multiply_uint64_uint64(operand1, operand2, temp_slice);
         temp[1] += static_cast<uint64_t>(utils::add_uint64(temp[0], operand3, temp[0]));
         return modulus.reduce_uint128_limbs(temp_slice.as_const());
@@ -223,7 +223,7 @@ namespace troy { namespace utils {
         if (exponent == 1) {return operand;}
         uint64_t power = operand; uint64_t product; uint64_t intermediate = 1;
         while (true) {
-            if (exponent & 1 > 0) {
+            if ((exponent & 1) > 0) {
                 product = utils::multiply_uint64_mod(power, intermediate, modulus);
                 utils::swap(product, intermediate);
             }
@@ -241,7 +241,7 @@ namespace troy { namespace utils {
     Correctness: Follows the condition of barrett_reduce_128.
     */
     __host__
-    void divide_uint_mod_inplace(Slice<uint64_t> numerator, const Modulus& modulus, Slice<uint64_t> quotient);
+    void divide_uint_mod_inplace(Slice<uint64_t> numerator, const Modulus& modulus, Slice<uint64_t> quotient, MemoryPoolHandle pool);
 
     /**
     Computes <operand1, operand2> mod modulus.
@@ -250,9 +250,9 @@ namespace troy { namespace utils {
     __host__ __device__
     inline uint64_t dot_product_mod(ConstSlice<uint64_t> operand1, ConstSlice<uint64_t> operand2, const Modulus& modulus) {
         uint64_t accumulator[2]{0, 0};
-        Slice<uint64_t> accumulator_slice(accumulator, 2, on_device());
+        Slice<uint64_t> accumulator_slice(accumulator, 2, on_device(), nullptr);
         uint64_t qword[2]{0, 0};
-        Slice<uint64_t> qword_slice(qword, 2, on_device());
+        Slice<uint64_t> qword_slice(qword, 2, on_device(), nullptr);
         for (size_t i = 0; i < operand1.size(); i++) {
             utils::multiply_uint64_uint64(operand1[i], operand2[i], qword_slice);
             utils::add_uint128_inplace(accumulator_slice, qword_slice.as_const());

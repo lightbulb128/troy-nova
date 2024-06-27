@@ -45,11 +45,12 @@ namespace troy { namespace linear {
         size_t slot_count;
         size_t batch_block, input_block, output_block;
         MatmulObjective objective; 
+        MemoryPoolHandle pool;
         bool pack_lwe;
 
-        inline MatmulHelper(size_t batch_size, size_t input_dims, size_t output_dims, size_t slot_count, MatmulObjective objective = MatmulObjective::EncryptLeft, bool pack_lwe = true):
+        inline MatmulHelper(size_t batch_size, size_t input_dims, size_t output_dims, size_t slot_count, MatmulObjective objective = MatmulObjective::EncryptLeft, bool pack_lwe = true, MemoryPoolHandle pool = MemoryPool::GlobalPool()):
             batch_size(batch_size), input_dims(input_dims), output_dims(output_dims),
-            slot_count(slot_count), objective(objective), pack_lwe(pack_lwe)
+            slot_count(slot_count), objective(objective), pack_lwe(pack_lwe), pool(pool)
         {
             determine_block();
         }

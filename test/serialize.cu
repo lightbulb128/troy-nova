@@ -369,7 +369,7 @@ namespace serialize {
         for (size_t term: terms) {
             ASSERT_TRUE(truth.element(term).near_equal(decoded.element(term), tolerance));
         }
-        
+
     }
 
     TEST(Serialize, HostBFVCiphertextTerms) {

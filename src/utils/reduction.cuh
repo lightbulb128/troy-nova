@@ -19,7 +19,7 @@ namespace troy { namespace reduction {
     }
 
     template<typename T>
-    T max(utils::ConstSlice<T> inputs) {
+    T max(utils::ConstSlice<T> inputs, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         if (inputs.size() == 0) {
             return T();
         }
@@ -33,7 +33,7 @@ namespace troy { namespace reduction {
             return max;
         } else {
             size_t thread_count = utils::KERNEL_THREAD_COUNT;
-            utils::Array<T> max_array(thread_count, true);
+            utils::Array<T> max_array(thread_count, true, pool);
             kernel_max<<<1, thread_count>>>(inputs, max_array.reference());
             cudaStreamSynchronize(0);
             max_array.to_host_inplace();
@@ -56,7 +56,7 @@ namespace troy { namespace reduction {
     }
 
     template<typename T>
-    T min(utils::ConstSlice<T> inputs) {
+    T min(utils::ConstSlice<T> inputs, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         if (inputs.size() == 0) {
             return T();
         }
@@ -70,7 +70,7 @@ namespace troy { namespace reduction {
             return min;
         } else {
             size_t thread_count = utils::KERNEL_THREAD_COUNT;
-            utils::Array<T> min_array(thread_count, true);
+            utils::Array<T> min_array(thread_count, true, pool);
             kernel_min<<<1, thread_count>>>(inputs, min_array.reference());
             cudaStreamSynchronize(0);
             min_array.to_host_inplace();
@@ -91,7 +91,7 @@ namespace troy { namespace reduction {
     }
 
     template<typename T>
-    T sum(utils::ConstSlice<T> inputs) {
+    T sum(utils::ConstSlice<T> inputs, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         if (inputs.size() == 0) {
             return T();
         }
@@ -103,7 +103,7 @@ namespace troy { namespace reduction {
             return sum;
         } else {
             size_t thread_count = utils::KERNEL_THREAD_COUNT;
-            utils::Array<T> sum_array(thread_count, true);
+            utils::Array<T> sum_array(thread_count, true, pool);
             kernel_sum<<<1, thread_count>>>(inputs, sum_array.reference());
             cudaStreamSynchronize(0);
             sum_array.to_host_inplace();
@@ -124,7 +124,7 @@ namespace troy { namespace reduction {
     }
 
     template<typename T>
-    size_t nonzero_count(utils::ConstSlice<T> inputs) {
+    size_t nonzero_count(utils::ConstSlice<T> inputs, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         if (inputs.size() == 0) {
             return 0;
         }
@@ -136,7 +136,7 @@ namespace troy { namespace reduction {
             return count;
         } else {
             size_t thread_count = utils::KERNEL_THREAD_COUNT;
-            utils::Array<size_t> count_array(thread_count, true);
+            utils::Array<size_t> count_array(thread_count, true, pool);
             kernel_nonzero_count<<<1, thread_count>>>(inputs, count_array.reference());
             cudaStreamSynchronize(0);
             count_array.to_host_inplace();
