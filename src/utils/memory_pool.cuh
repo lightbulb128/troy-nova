@@ -33,6 +33,7 @@ namespace troy {namespace utils {
         std::multimap<size_t, void*> unused;
         std::multimap<void*, size_t> allocated;
         size_t total_allocated;
+        size_t device_index;
 
         inline static void runtime_error(const char* prompt, cudaError_t status) {
             std::string msg = prompt;
@@ -48,9 +49,17 @@ namespace troy {namespace utils {
             }
         }
 
+        inline void set_device() {
+            cudaError_t status = cudaSetDevice(device_index);
+            if (status != cudaSuccess) {
+                runtime_error("[MemoryPool::destroy] cudaSetDevice failed.", status);
+            }
+        }
+
         inline void* try_allocate(size_t required) {
             // here we must already have the lock
             size_t free, total;
+            set_device();
             cudaError_t status = cudaMemGetInfo(&free, &total);
             if (status != cudaSuccess) {
                 runtime_error("[MemoryPool::try_allocate] cudaMemGetInfo failed", status);
@@ -58,6 +67,7 @@ namespace troy {namespace utils {
             if (free < required + PRESERVED_MEMORY_BYTES) {
                 release_unused();
                 // try again
+                set_device();
                 status = cudaMemGetInfo(&free, &total);
                 if (status != cudaSuccess) {
                     runtime_error("[MemoryPool::try_allocate] cudaMemGetInfo failed", status);
@@ -67,6 +77,7 @@ namespace troy {namespace utils {
                 }
             }
             void* ptr = nullptr;
+            set_device();
             status = cudaMalloc(&ptr, required);
             if (status != cudaSuccess) {
                 runtime_error("[MemoryPool::try_allocate] cudaMalloc failed", status);
@@ -89,10 +100,10 @@ namespace troy {namespace utils {
     public:
 
         // User shouldn't call this but call Create() instead
-        inline MemoryPool(size_t device = 0) {
+        inline MemoryPool(size_t device_index = 0): device_index(device_index) {
             total_allocated = 0;
             cudaDeviceProp props;
-            cudaError_t status = cudaGetDeviceProperties(&props, device);
+            cudaError_t status = cudaGetDeviceProperties(&props, device_index);
             if (status != cudaSuccess) {
                 runtime_error("[MemoryPool::MemoryPool] cudaGetDeviceProperties failed.", status);
             }
@@ -117,6 +128,7 @@ namespace troy {namespace utils {
         inline void release_unused() {
             std::unique_lock lock(mutex);
             for (auto it = unused.begin(); it != unused.end();) {
+                set_device();
                 cudaError_t status = cudaFree(it->second);
                 if (status != cudaSuccess) {
                     runtime_error("[MemoryPool::release_unused] cudaFree failed.", status);
@@ -181,6 +193,7 @@ namespace troy {namespace utils {
         std::set<void*> zombie;
         size_t total_allocated;
         bool destroyed;
+        size_t device_index;
 
         inline static void runtime_error(const char* prompt, cudaError_t status) {
             std::string msg = prompt;
@@ -196,9 +209,17 @@ namespace troy {namespace utils {
             }
         }
 
+        inline void set_device() {
+            cudaError_t status = cudaSetDevice(device_index);
+            if (status != cudaSuccess) {
+                runtime_error("[MemoryPool::destroy] cudaSetDevice failed.", status);
+            }
+        }
+
         inline void* try_allocate(size_t required) {
             // here we must already have the lock
             size_t free, total;
+            set_device();
             cudaError_t status = cudaMemGetInfo(&free, &total);
             if (status != cudaSuccess) {
                 runtime_error("[MemoryPool::try_allocate] cudaMemGetInfo failed", status);
@@ -206,6 +227,7 @@ namespace troy {namespace utils {
             if (free < required + PRESERVED_MEMORY_BYTES) {
                 release_unused();
                 // try again
+                set_device();
                 status = cudaMemGetInfo(&free, &total);
                 if (status != cudaSuccess) {
                     runtime_error("[MemoryPool::try_allocate] cudaMemGetInfo failed", status);
@@ -215,6 +237,7 @@ namespace troy {namespace utils {
                 }
             }
             void* ptr = nullptr;
+            set_device();
             status = cudaMalloc(&ptr, required);
             if (status != cudaSuccess) {
                 runtime_error("[MemoryPool::try_allocate] cudaMalloc failed", status);
@@ -252,10 +275,10 @@ namespace troy {namespace utils {
     public:
 
         // User shouldn't call this but call Create() instead
-        inline MemoryPool(size_t device = 0) {
+        inline MemoryPool(size_t device_index = 0): device_index(device_index) {
             total_allocated = 0;
             cudaDeviceProp props;
-            cudaError_t status = cudaGetDeviceProperties(&props, device);
+            cudaError_t status = cudaGetDeviceProperties(&props, device_index);
             if (status != cudaSuccess) {
                 runtime_error("[MemoryPool::MemoryPool] cudaGetDeviceProperties failed.", status);
             }
@@ -290,6 +313,7 @@ namespace troy {namespace utils {
         inline void release_unused() {
             std::unique_lock lock(mutex);
             for (auto it = unused.begin(); it != unused.end();) {
+                set_device();
                 cudaError_t status = cudaFree(it->second);
                 if (status != cudaSuccess) {
                     runtime_error("[MemoryPool::release_unused] cudaFree failed.", status);
@@ -308,6 +332,7 @@ namespace troy {namespace utils {
             std::unique_lock lock(mutex);
             // first release all unused
             for (auto it = unused.begin(); it != unused.end();) {
+                set_device();
                 cudaError_t status = cudaFree(it->second);
                 if (status != cudaSuccess) {
                     runtime_error("[MemoryPool::destroy] cudaFree unused failed.", status);
@@ -322,6 +347,7 @@ namespace troy {namespace utils {
             }
             // for all the remaining in allocated, move them to zombies
             for (auto it = allocated.begin(); it != allocated.end();) {
+                set_device();
                 cudaError_t status = cudaFree(it->first);
                 if (status != cudaSuccess) {
                     runtime_error("[MemoryPool::destroy] cudaFree allocated failed.", status);
@@ -378,7 +404,15 @@ namespace troy {namespace utils {
 
         static std::shared_ptr<MemoryPool> global_pool;
         static std::mutex global_pool_mutex;
+        size_t device_index;
 
+        inline static void runtime_error(const char* prompt, cudaError_t status) {
+            std::string msg = prompt;
+            msg += ": ";
+            msg += cudaGetErrorString(status);
+            throw std::runtime_error(msg);
+        }
+        
         inline static void ensure_global_pool() {
             std::unique_lock lock(global_pool_mutex);
             if (global_pool == nullptr) {
@@ -386,13 +420,30 @@ namespace troy {namespace utils {
             }
         }
 
+        inline void set_device() {
+            cudaError_t status = cudaSetDevice(device_index);
+            if (status != cudaSuccess) {
+                runtime_error("[MemoryPool::destroy] cudaSetDevice failed.", status);
+            }
+        }
+
     public:
 
         // User shouldn't call this but call Create() instead
-        inline MemoryPool(size_t _device = 0) {}
+        inline MemoryPool(size_t device_index = 0): device_index(device_index) {
+            // see if the device exists
+            cudaDeviceProp props; 
+            cudaError_t status = cudaGetDeviceProperties(&props, device_index);
+            if (status != cudaSuccess) {
+                std::string msg = "[MemoryPool::MemoryPool] cudaGetDeviceProperties failed: ";
+                msg += cudaGetErrorString(status);
+                throw std::runtime_error(msg);
+            }
+        }
 
-        inline static void* Allocate(size_t required) {
+        inline void* allocate(size_t required) {
             void* ptr = nullptr;
+            set_device();
             cudaError_t status = cudaMalloc(&ptr, required);
             if (status != cudaSuccess) {
                 std::string msg = "[MemoryPool::Allocate] cudaMalloc failed: ";
@@ -402,25 +453,14 @@ namespace troy {namespace utils {
             return ptr;
         }
 
-        inline static void Free(void* ptr) {
+        inline void release(void* ptr) {
+            set_device();
             cudaError_t status = cudaFree(ptr);
             if (status != cudaSuccess) {
                 std::string msg = "[MemoryPool::Free] cudaFree failed: ";
                 msg += cudaGetErrorString(status);
                 throw std::runtime_error(msg);
             }
-        }
-
-        inline static void ReleaseUnused() {}
-
-        inline static void Destroy() {}
-
-        inline void* allocate(size_t required) {
-            return Allocate(required);
-        }
-
-        inline void release(void* ptr) {
-            Free(ptr);
         }
 
         inline void destroy() {
@@ -430,6 +470,20 @@ namespace troy {namespace utils {
         inline void release_unused() {
             // do nothing
         }
+
+        inline static void* Allocate(size_t required) {
+            ensure_global_pool();
+            return global_pool->allocate(required);
+        }
+
+        inline static void Free(void* ptr) {
+            ensure_global_pool();
+            global_pool->release(ptr);
+        }
+
+        inline static void ReleaseUnused() {}
+
+        inline static void Destroy() {}
 
         inline static MemoryPoolHandle GlobalPool() {
             ensure_global_pool();
