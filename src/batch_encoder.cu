@@ -277,7 +277,7 @@ namespace troy {
         }
     }
 
-    void BatchEncoder::decode_polynomial(const Plaintext& plaintext, std::vector<uint64_t>& destination, MemoryPoolHandle pool) const {
+    void BatchEncoder::decode_polynomial(const Plaintext& plaintext, std::vector<uint64_t>& destination) const {
         destination.resize(plaintext.data().size());
         Slice<uint64_t>(destination.data(), destination.size(), false, nullptr)
             .copy_from_slice(plaintext.data().const_reference());

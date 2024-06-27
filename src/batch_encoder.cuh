@@ -68,10 +68,10 @@ namespace troy {
             return destination;
         }
 
-        void decode_polynomial(const Plaintext& plaintext, std::vector<uint64_t>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
-        inline std::vector<uint64_t> decode_polynomial_new(const Plaintext& plaintext, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+        void decode_polynomial(const Plaintext& plaintext, std::vector<uint64_t>& destination) const;
+        inline std::vector<uint64_t> decode_polynomial_new(const Plaintext& plaintext) const {
             std::vector<uint64_t> destination(slot_count());
-            decode_polynomial(plaintext, destination, pool);
+            decode_polynomial(plaintext, destination);
             return destination;
         }
 

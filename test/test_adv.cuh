@@ -41,6 +41,13 @@ namespace tool {
             return GeneralVector(std::move(vec));
         }
 
+        inline static GeneralVector random_complex_repeated(size_t size, double component_max_absolute) {
+            // random sample one and repeat size
+            double real = (double)rand() / (double)RAND_MAX * 2 * component_max_absolute - component_max_absolute;
+            double imag = (double)rand() / (double)RAND_MAX * 2 * component_max_absolute - component_max_absolute;
+            return GeneralVector(vector<complex<double>>(size, complex<double>(real, imag)));
+        }
+
         inline static GeneralVector random_integers(size_t size, uint64_t modulus) {
             vector<uint64_t> vec(size);
             for (size_t i = 0; i < size; i++) {
@@ -49,12 +56,36 @@ namespace tool {
             return GeneralVector(std::move(vec));
         }
 
+        inline static GeneralVector random_integer_repeated(size_t size, uint64_t modulus) {
+            // random sample one and repeat size
+            uint64_t value = rand() % modulus;
+            return GeneralVector(vector<uint64_t>(size, value));
+        }
+
         inline static GeneralVector random_doubles(size_t size, double max_absolute) {
             vector<double> vec(size);
             for (size_t i = 0; i < size; i++) {
                 vec[i] = (double)rand() / (double)RAND_MAX * 2 * max_absolute - max_absolute;
             }
             return GeneralVector(std::move(vec));
+        }
+
+        inline static GeneralVector random_double_repeated(size_t size, double max_absolute) {
+            // random sample one and repeat size
+            double value = (double)rand() / (double)RAND_MAX * 2 * max_absolute - max_absolute;
+            return GeneralVector(vector<double>(size, value));
+        }
+
+        inline static GeneralVector zeros_double(size_t size) {
+            return GeneralVector(vector<double>(size, 0));
+        }
+
+        inline static GeneralVector zeros_integer(size_t size) {
+            return GeneralVector(vector<uint64_t>(size, 0));
+        }
+
+        inline static GeneralVector zeros_complex(size_t size) {
+            return GeneralVector(vector<complex<double>>(size, 0));
         }
 
         inline GeneralVector subvector(size_t low, size_t high) {
@@ -273,12 +304,12 @@ namespace tool {
             return *ckks_;
         }
 
-        inline void to_device_inplace() {
+        inline void to_device_inplace(MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
             if (batch_) {
-                batch_->to_device_inplace();
+                batch_->to_device_inplace(pool);
             }
             if (ckks_) {
-                ckks_->to_device_inplace();
+                ckks_->to_device_inplace(pool);
             }
         }
 
@@ -286,41 +317,41 @@ namespace tool {
             return batch_ ? batch_->slot_count() : ckks_->slot_count();
         }
 
-        inline Plaintext encode_simd(const GeneralVector& vec, std::optional<ParmsID> parms_id = std::nullopt, double scale = 1<<20) const {
+        inline Plaintext encode_simd(const GeneralVector& vec, std::optional<ParmsID> parms_id = std::nullopt, double scale = 1<<20, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             if (vec.is_complexes()) {
-                return this->ckks().encode_complex64_simd_new(vec.complexes(), parms_id, scale);
+                return this->ckks().encode_complex64_simd_new(vec.complexes(), parms_id, scale, pool);
             } else if (vec.is_integers()) {
-                return this->batch().encode_new(vec.integers());
+                return this->batch().encode_new(vec.integers(), pool);
             } else {
                 throw std::invalid_argument("[GeneralEncoder::encode] Cannot encode SIMD for double");
             }
         }
 
-        inline Plaintext encode_polynomial(const GeneralVector& vec, std::optional<ParmsID> parms_id = std::nullopt, double scale = 1<<20) const {
+        inline Plaintext encode_polynomial(const GeneralVector& vec, std::optional<ParmsID> parms_id = std::nullopt, double scale = 1<<20, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             if (vec.is_doubles()) {
-                return this->ckks().encode_float64_polynomial_new(vec.doubles(), parms_id, scale);
+                return this->ckks().encode_float64_polynomial_new(vec.doubles(), parms_id, scale, pool);
             } else if (vec.is_integers()) {
-                return this->batch().encode_polynomial_new(vec.integers());
+                return this->batch().encode_polynomial_new(vec.integers(), pool);
             } else {
                 throw std::invalid_argument("[GeneralEncoder::encode] Cannot encode polynomial for complexes");
             }
         }
 
-        inline GeneralVector decode_simd(const Plaintext& plain) const {
+        inline GeneralVector decode_simd(const Plaintext& plain, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             if (batch_) {
-                return GeneralVector(batch_->decode_new(plain));
+                return GeneralVector(batch_->decode_new(plain, pool));
             } else if (ckks_) {
-                return GeneralVector(ckks_->decode_complex64_simd_new(plain));
+                return GeneralVector(ckks_->decode_complex64_simd_new(plain, pool));
             } else {
                 throw std::invalid_argument("[GeneralEncoder::decode] Encoder not initialized");
             }
         }
 
-        inline GeneralVector decode_polynomial(const Plaintext& plain) const {
+        inline GeneralVector decode_polynomial(const Plaintext& plain, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             if (batch_) {
                 return GeneralVector(batch_->decode_polynomial_new(plain));
             } else if (ckks_) {
-                return GeneralVector(ckks_->decode_float64_polynomial_new(plain));
+                return GeneralVector(ckks_->decode_float64_polynomial_new(plain, pool));
             } else {
                 throw std::invalid_argument("[GeneralEncoder::decode] Encoder not initialized");
             }
@@ -360,10 +391,59 @@ namespace tool {
             }
         }
 
+        inline GeneralVector random_coefficient_repeated(size_t size, uint64_t t, double max) {
+            if (batch_) {
+                return GeneralVector::random_integer_repeated(size, t);
+            } else if (ckks_) {
+                return GeneralVector::random_double_repeated(size, max);
+            } else {
+                throw std::invalid_argument("[GeneralEncoder::random_coefficient_repeated] Encoder not initialized");
+            }
+        }
+
+        inline GeneralVector random_coefficient_repeated_full(uint64_t t, double max) {
+            return this->random_coefficient_repeated(ckks_ ? this->slot_count() * 2 : this->slot_count(), t, max);
+        }
+
+        inline GeneralVector random_slot_repeated(size_t size, uint64_t t, double max) {
+            if (batch_) {
+                return GeneralVector::random_integer_repeated(size, t);
+            } else if (ckks_) {
+                return GeneralVector::random_complex_repeated(size, max);
+            } else {
+                throw std::invalid_argument("[GeneralEncoder::random_slot_repeated] Encoder not initialized");
+            }
+        }
+
+        inline GeneralVector random_slot_repeated_full(uint64_t t, double max) {
+            return this->random_slot_repeated(this->slot_count(), t, max);
+        }
+
+        inline GeneralVector zeros_polynomial() {
+            if (batch_) {
+                return GeneralVector::zeros_integer(this->slot_count());
+            } else if (ckks_) {
+                return GeneralVector::zeros_double(this->slot_count() * 2);
+            } else {
+                throw std::invalid_argument("[GeneralEncoder::zeros_polynomial] Encoder not initialized");
+            }
+        }
+
+        inline GeneralVector zeros_simd() {
+            if (batch_) {
+                return GeneralVector::zeros_integer(this->slot_count());
+            } else if (ckks_) {
+                return GeneralVector::zeros_complex(this->slot_count());
+            } else {
+                throw std::invalid_argument("[GeneralEncoder::zeros_simd] Encoder not initialized");
+            }
+        }
+
     };
 
     class GeneralHeContext {
     private:
+        SchemeType scheme_;
         HeContextPointer he_context_;
         Encryptor* encryptor_;
         Evaluator* evaluator_;
@@ -375,14 +455,19 @@ namespace tool {
         double input_max_;
         double scale_;
         double tolerance_;
+        MemoryPoolHandle pool_;
 
     public:
         GeneralHeContext(bool device, SchemeType scheme, size_t n, size_t log_t, vector<size_t> log_qi, 
             bool expand_mod_chain, uint64_t seed, double input_max = 0, double scale = 0, double tolerance = 1e-4,
-            bool to_device_after_keygeneration = false, bool use_special_prime_for_encryption = false
+            bool to_device_after_keygeneration = false, bool use_special_prime_for_encryption = false,
+            MemoryPoolHandle pool = MemoryPool::GlobalPool()
         );
         ~GeneralHeContext();
 
+        inline SchemeType scheme() const {
+            return scheme_;
+        }
         inline HeContextPointer context() const {
             return he_context_;
         }
@@ -428,6 +513,25 @@ namespace tool {
         inline GeneralVector random_polynomial_full() const {
             return encoder_->random_polynomial_full(t_, input_max_);
         }
+        inline GeneralVector random_coefficient_repeated(size_t size) const {
+            return encoder_->random_coefficient_repeated(size, t_, input_max_);
+        }
+        inline GeneralVector random_coefficient_repeated_full() const {
+            return encoder_->random_coefficient_repeated_full(t_, input_max_);
+        }
+        inline GeneralVector random_slot_repeated(size_t size) const {
+            return encoder_->random_slot_repeated(size, t_, input_max_);
+        }
+        inline GeneralVector random_slot_repeated_full() const {
+            return encoder_->random_slot_repeated_full(t_, input_max_);
+        }
+        inline GeneralVector zeros_polynomial() const {
+            return encoder_->zeros_polynomial();
+        }
+        inline GeneralVector zeros_simd() const {
+            return encoder_->zeros_simd();
+        }
+
         inline GeneralVector negate(const GeneralVector& vec) const {
             return vec.negate(t_);
         }

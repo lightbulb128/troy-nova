@@ -2060,8 +2060,8 @@ namespace troy {
         }
         if (encrypted.is_ntt_form()) {
             Ciphertext transformed;
-            this->transform_from_ntt(encrypted, transformed);
-            return this->extract_lwe_new(transformed, term);
+            this->transform_from_ntt(encrypted, transformed, pool);
+            return this->extract_lwe_new(transformed, term, pool);
         }
         // else
         ContextDataPointer context_data = this->get_context_data("[Evaluator::extract_lwe_new]", encrypted.parms_id());
@@ -2191,7 +2191,7 @@ namespace troy {
                     odd.const_reference(), shift, odd.polynomial_count(), 
                     poly_modulus_degree, coeff_modulus, temp.reference()
                 );
-                this->sub(even, temp, odd);
+                this->sub(even, temp, odd, pool);
                 this->add_inplace(even, temp);
                 if (ntt_form) {
                     this->transform_to_ntt_inplace(odd);

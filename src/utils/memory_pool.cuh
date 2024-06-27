@@ -103,7 +103,7 @@ namespace troy {namespace utils {
             return device_index;
         }
 
-        // User shouldn't call this but call Create() instead
+        // User shouldn't call this but call create() instead
         inline MemoryPool(size_t device_index = 0): device_index(device_index) {
             total_allocated = 0;
             cudaDeviceProp props;
@@ -171,7 +171,7 @@ namespace troy {namespace utils {
             return global_pool;
         }
 
-        inline static MemoryPoolHandle Create(size_t device = 0) {
+        inline static MemoryPoolHandle create(size_t device = 0) {
             return std::make_shared<MemoryPool>(device);
         }
 
@@ -197,6 +197,7 @@ namespace troy {namespace utils {
         std::set<void*> zombie;
         size_t total_allocated;
         bool destroyed;
+        bool denying;
         size_t device_index;
 
         inline static void runtime_error(const char* prompt, cudaError_t status) {
@@ -281,7 +282,7 @@ namespace troy {namespace utils {
         inline size_t get_device() const {
             return device_index;
         }
-        // User shouldn't call this but call Create() instead
+        // User shouldn't call this but call create() instead
         inline MemoryPool(size_t device_index = 0): device_index(device_index) {
             total_allocated = 0;
             cudaDeviceProp props;
@@ -290,6 +291,11 @@ namespace troy {namespace utils {
                 runtime_error("[MemoryPool::MemoryPool] cudaGetDeviceProperties failed.", status);
             }
             destroyed = false;
+            denying = false;
+        }
+
+        inline void deny(bool set = true) {
+            denying = set;
         }
 
         inline ~MemoryPool() {
@@ -302,10 +308,12 @@ namespace troy {namespace utils {
         }
 
         inline void* allocate(size_t required) {
+            if (denying) {
+                throw std::runtime_error("[MemoryPool::get] DEBUG: The pool is denying allocation.");
+            }
             if (destroyed) {
                 throw std::runtime_error("[MemoryPool::get] The singleton has been destroyed.");
             }
-
             std::unique_lock lock(mutex);
             auto iterator = unused.lower_bound(required);
             if (iterator == unused.end() || iterator->first >= required * 2) {
@@ -369,6 +377,9 @@ namespace troy {namespace utils {
         }
 
         inline void release(void* ptr) { // just an alias
+            if (denying) {
+                throw std::runtime_error("[MemoryPool::release] DEBUG: The pool is denying allocation.");
+            }
             give_back(ptr);
         }
 
@@ -397,7 +408,7 @@ namespace troy {namespace utils {
             return global_pool;
         }
 
-        inline static MemoryPoolHandle Create(size_t device = 0) {
+        inline static MemoryPoolHandle create(size_t device = 0) {
             return std::make_shared<MemoryPool>(device);
         }
 
@@ -440,7 +451,7 @@ namespace troy {namespace utils {
             return device_index;
         }
 
-        // User shouldn't call this but call Create() instead
+        // User shouldn't call this but call create() instead
         inline MemoryPool(size_t device_index = 0): device_index(device_index) {
             // see if the device exists
             cudaDeviceProp props; 
@@ -501,7 +512,7 @@ namespace troy {namespace utils {
             return global_pool;
         }
 
-        inline static MemoryPoolHandle Create(size_t device = 0) {
+        inline static MemoryPoolHandle create(size_t device = 0) {
             return std::make_shared<MemoryPool>(device);
         }
 
