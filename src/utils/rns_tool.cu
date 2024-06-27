@@ -441,6 +441,7 @@ namespace troy {namespace utils {
                 this->inv_q_last_mod_q(),
                 input
             );
+            cudaStreamSynchronize(0);
         } else {
             host_divide_and_round_q_last_inplace(*this, input);
         }
@@ -508,6 +509,7 @@ namespace troy {namespace utils {
                 input,
                 temp
             );
+            cudaStreamSynchronize(0);
         } else {
             host_divide_and_round_q_last_ntt_inplace_step1(self, input, temp);
         }
@@ -570,6 +572,7 @@ namespace troy {namespace utils {
                 input,
                 temp
             );
+            cudaStreamSynchronize(0);
         } else {
             host_divide_and_round_q_last_ntt_inplace_step2(self, input, temp);
         }
@@ -698,6 +701,7 @@ namespace troy {namespace utils {
                 destination,
                 temp.const_reference()
             );
+            cudaStreamSynchronize(0);
         } else {
             host_fast_b_conv_sk_step1(*this, input, destination, temp.const_reference());
         }
@@ -801,6 +805,7 @@ namespace troy {namespace utils {
                 input,
                 destination
             );
+            cudaStreamSynchronize(0);
         } else {
             host_sm_mrq(*this, input, destination);
         }
@@ -863,6 +868,7 @@ namespace troy {namespace utils {
                 input,
                 destination
             );
+            cudaStreamSynchronize(0);
         } else {
             host_fast_floor(*this, input, destination);
         }
@@ -946,6 +952,7 @@ namespace troy {namespace utils {
                 destination,
                 temp_t_gamma
             );
+            cudaStreamSynchronize(0);
         } else {
             host_decrypt_scale_and_round_step1(self, destination, temp_t_gamma);
         }
@@ -1064,6 +1071,7 @@ namespace troy {namespace utils {
                 self.inv_q_last_mod_q(),
                 input
             );
+            cudaStreamSynchronize(0);
         } else {
             host_mod_t_and_divide_q_last_inplace_step1(self, input, neg_c_last_mod_t);
         }
@@ -1196,6 +1204,7 @@ namespace troy {namespace utils {
                 input.as_const(),
                 delta_mod_q_i.reference()
             );
+            cudaStreamSynchronize(0);
             utils::ntt_negacyclic_harvey_p(delta_mod_q_i.reference(), coeff_count, rns_ntt_tables.const_slice(0, base_q_size - 1));
             kernel_mod_t_and_divide_q_last_ntt_inplace_step1_inner2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 self.base_q().base(),
@@ -1204,7 +1213,7 @@ namespace troy {namespace utils {
                 input,
                 delta_mod_q_i.const_reference()
             );
-
+            cudaStreamSynchronize(0);
         } else {
             host_mod_t_and_divide_q_last_ntt_inplace_step1(self, input, neg_c_last_mod_t, rns_ntt_tables);
         }

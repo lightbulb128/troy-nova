@@ -63,6 +63,7 @@ namespace troy {namespace scaling_variant {
                 destination,
                 subtract
             );
+            cudaStreamSynchronize(0);
         }
     }
 
@@ -182,6 +183,7 @@ namespace troy {namespace scaling_variant {
                 add_to_destination,
                 subtract
             );
+            cudaStreamSynchronize(0);
         }
     }
 
@@ -233,6 +235,7 @@ namespace troy {namespace scaling_variant {
                 plain_coeff_count, coeff_modulus_size,
                 plain, temp, plain_upper_half_threshold, plain_upper_half_increment
             );
+            cudaStreamSynchronize(0);
         }
     }
 
@@ -275,6 +278,7 @@ namespace troy {namespace scaling_variant {
                 plain_coeff_count, coeff_count, coeff_modulus_size,
                 plain, temp, plain_upper_half_threshold, plain_upper_half_increment
             );
+            cudaStreamSynchronize(0);
         }
     }
 

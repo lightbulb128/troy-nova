@@ -109,6 +109,7 @@ namespace troy {namespace utils {
             size_t total = (pcount * tables.size()) << log_degree;
             size_t block_count = ceil_div<size_t>(total, KERNEL_THREAD_COUNT);
             kernel_ntt_multiply_inv_degree<<<block_count, KERNEL_THREAD_COUNT>>>(operand, pcount, log_degree, tables);
+            cudaStreamSynchronize(0);
         } else {
             host_ntt_multiply_inv_degree(operand, pcount, log_degree, tables);
         }
@@ -327,6 +328,7 @@ namespace troy {namespace utils {
                 kernel_ntt_transfer_to_rev_layers<<<block_count, thread_count>>>(
                     0, log_degree, operand, pcount, log_degree, tables, use_inv_root_powers
                 );
+                cudaStreamSynchronize(0);
             } else {
                 for (size_t layer_lower = 0; layer_lower < log_degree; layer_lower += NTT_KERNEL_THREAD_COUNT_LOG2) {
                     size_t layer_upper = std::min(layer_lower + NTT_KERNEL_THREAD_COUNT_LOG2, log_degree);
@@ -336,6 +338,7 @@ namespace troy {namespace utils {
                     kernel_ntt_transfer_to_rev_layers<<<block_count, NTT_KERNEL_THREAD_COUNT>>>(
                         layer_lower, layer_upper, operand, pcount, log_degree, tables, use_inv_root_powers
                     );
+                    cudaStreamSynchronize(0);
                 }
             }
         }
@@ -551,6 +554,7 @@ namespace troy {namespace utils {
                 kernel_ntt_transfer_from_rev_layers<<<block_count, thread_count>>>(
                     0, log_degree, operand, pcount, log_degree, tables, use_inv_root_powers
                 );
+                cudaStreamSynchronize(0);
             } else {
                 for (size_t layer_lower = 0; layer_lower < log_degree; layer_lower += NTT_KERNEL_THREAD_COUNT_LOG2) {
                     size_t layer_upper = std::min(layer_lower + NTT_KERNEL_THREAD_COUNT_LOG2, log_degree);
@@ -560,6 +564,7 @@ namespace troy {namespace utils {
                     kernel_ntt_transfer_from_rev_layers<<<block_count, NTT_KERNEL_THREAD_COUNT>>>(
                         layer_lower, layer_upper, operand, pcount, log_degree, tables, use_inv_root_powers
                     );
+                    cudaStreamSynchronize(0);
                 }
             }
         }
@@ -612,6 +617,7 @@ namespace troy {namespace utils {
             size_t total = (pcount * tables.size()) << log_degree;
             size_t block_count = ceil_div<size_t>(total, KERNEL_THREAD_COUNT);
             kernel_ntt_transfer_last_reduce<<<block_count, KERNEL_THREAD_COUNT>>>(operand, pcount, log_degree, tables);
+            cudaStreamSynchronize(0);
         } else {
             host_ntt_transfer_last_reduce(operand, pcount, log_degree, tables);
         }

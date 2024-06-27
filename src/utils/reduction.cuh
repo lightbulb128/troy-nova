@@ -35,6 +35,7 @@ namespace troy { namespace reduction {
             size_t thread_count = utils::KERNEL_THREAD_COUNT;
             utils::Array<T> max_array(thread_count, true);
             kernel_max<<<1, thread_count>>>(inputs, max_array.reference());
+            cudaStreamSynchronize(0);
             max_array.to_host_inplace();
             return max(max_array.const_reference());
         }
@@ -71,6 +72,7 @@ namespace troy { namespace reduction {
             size_t thread_count = utils::KERNEL_THREAD_COUNT;
             utils::Array<T> min_array(thread_count, true);
             kernel_min<<<1, thread_count>>>(inputs, min_array.reference());
+            cudaStreamSynchronize(0);
             min_array.to_host_inplace();
             return min(min_array.const_reference());
         }
@@ -103,6 +105,7 @@ namespace troy { namespace reduction {
             size_t thread_count = utils::KERNEL_THREAD_COUNT;
             utils::Array<T> sum_array(thread_count, true);
             kernel_sum<<<1, thread_count>>>(inputs, sum_array.reference());
+            cudaStreamSynchronize(0);
             sum_array.to_host_inplace();
             return sum(sum_array.const_reference());
         }
@@ -135,6 +138,7 @@ namespace troy { namespace reduction {
             size_t thread_count = utils::KERNEL_THREAD_COUNT;
             utils::Array<size_t> count_array(thread_count, true);
             kernel_nonzero_count<<<1, thread_count>>>(inputs, count_array.reference());
+            cudaStreamSynchronize(0);
             count_array.to_host_inplace();
             return sum(count_array.const_reference());
         }

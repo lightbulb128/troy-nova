@@ -148,6 +148,7 @@ namespace troy {namespace utils {
         if (device) {
             size_t block_count = ceil_div<size_t>(from.size(), KERNEL_THREAD_COUNT);
             kernel_rnsbase_decompose_array<<<block_count, KERNEL_THREAD_COUNT>>>(self.base(), from, result);
+            cudaStreamSynchronize(0);
         } else {
             host_rnsbase_decompose_array(self, from, result);
         }
@@ -236,6 +237,7 @@ namespace troy {namespace utils {
                 self.base(), self.base_product(), self.punctured_product(), self.inv_punctured_product_mod_base(),
                 from, result, temp_mpi
             );
+            cudaStreamSynchronize(0);
         } else {
             host_rnsbase_compose_array(self, from, result, temp_mpi);
         }
@@ -272,6 +274,7 @@ namespace troy {namespace utils {
         if (device) {
             size_t block_count = ceil_div<size_t>(from.size(), KERNEL_THREAD_COUNT);
             kernel_rnsbase_compose_rearrange_array<<<block_count, KERNEL_THREAD_COUNT>>>(self.size(), from, result);
+            cudaStreamSynchronize(0);
         } else {
             host_rnsbase_compose_rearrange_array(self, from, result);
         }
@@ -341,6 +344,7 @@ namespace troy {namespace utils {
                 self.input_base().base(), self.input_base().inv_punctured_product_mod_base(),
                 input, temp
             );
+            cudaStreamSynchronize(0);
         } else {
             host_fast_convert_array_step1(self.input_base(), input, temp);
         }
@@ -395,6 +399,7 @@ namespace troy {namespace utils {
                 self.base_change_matrix(),
                 temp, output
             );
+            cudaStreamSynchronize(0);
         } else {
             host_fast_convert_array_step2(self, temp, output);
         }
@@ -474,6 +479,7 @@ namespace troy {namespace utils {
                 self.input_base().base(), self.input_base().inv_punctured_product_mod_base(),
                 input, temp, v
             );
+            cudaStreamSynchronize(0);
         } else {
             host_exact_convey_array_step1(self.input_base(), input, temp, v);
         }
@@ -544,6 +550,7 @@ namespace troy {namespace utils {
                 self.base_change_matrix(),
                 temp, v, output
             );
+            cudaStreamSynchronize(0);
         } else {
             host_exact_convey_array_step2(self, temp, v, output);
         }

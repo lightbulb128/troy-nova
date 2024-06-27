@@ -245,6 +245,7 @@ namespace troy::linear {
                 Q_div_t_mod_qi_.const_reference(), Q_mod_t_, 
                 t_half_, t_bit_length_, modulus_index, destination
             );
+            cudaStreamSynchronize(0);
         }
     }
 
@@ -320,6 +321,7 @@ namespace troy::linear {
                 Q_div_t_mod_qi_.const_reference(), Q_mod_t_, 
                 t_half_, t_bit_length_, modulus_index, destination
             );
+            cudaStreamSynchronize(0);
         }
     }
 
@@ -366,6 +368,7 @@ namespace troy::linear {
             kernel_centralize_at_component<T><<<block_count, KERNEL_THREAD_COUNT>>>(
                 source, parms.coeff_modulus().at(modulus_index), t_half_, mod_t_mask_, destination
             );
+            cudaStreamSynchronize(0);
         }
     }
 
@@ -512,6 +515,7 @@ namespace troy::linear {
                 base_on_gamma.const_reference(), gamma_.as_const_pointer(),
                 destination
             );
+            cudaStreamSynchronize(0);
         }
     }
 

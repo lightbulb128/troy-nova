@@ -25,6 +25,7 @@ namespace troy {
             } else {
                 kernel_assemble_lwe_scatter_c0<<<1, c0.size()>>>(poly_modulus_degree, rlwec0, c0);
             }
+            cudaStreamSynchronize(0);
         }
     }
 

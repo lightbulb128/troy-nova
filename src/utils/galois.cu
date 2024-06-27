@@ -164,6 +164,7 @@ namespace troy {namespace utils {
                 moduli,
                 result
             );
+            cudaStreamSynchronize(0);
         } else {
             host_apply_ps(*this, polys, pcount, galois_element, moduli, result);
         }
@@ -212,6 +213,7 @@ namespace troy {namespace utils {
                 result,
                 permutation_table
             );
+            cudaStreamSynchronize(0);
         } else {
             host_apply_ntt_ps(
                 polys, pcount, coeff_modulus_size, 
