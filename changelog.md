@@ -26,3 +26,7 @@
 ## 2024-06-26
 
 - Implement `invariant_noist_budget` in `Decryptor`, available for BFV and BGV.
+
+## 2024-06-27
+
+- Allow user to create `MemoryPoolHandle`s and supply them to API calls.
