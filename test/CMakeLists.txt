@@ -66,8 +66,6 @@ if(TROY_BENCH)
         test_adv.cu
     )
     target_link_libraries(troybench troy)
-    
-    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/bench/compare.py ${CMAKE_CURRENT_BINARY_DIR}/compare.py COPYONLY)
 
     add_executable(bench_matmul)
     target_sources(bench_matmul PRIVATE 

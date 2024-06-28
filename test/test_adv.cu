@@ -65,11 +65,37 @@ namespace tool {
     }
 
     GeneralHeContext::~GeneralHeContext() {
-        delete this->encoder_;
-        delete this->key_generator_;
-        delete this->encryptor_;
-        delete this->decryptor_;
-        delete this->evaluator_;
+        if (this->encoder_) {
+            delete this->encoder_;
+            delete this->key_generator_;
+            delete this->encryptor_;
+            delete this->decryptor_;
+            delete this->evaluator_;
+        }
+    }
+
+    GeneralHeContext::GeneralHeContext(GeneralHeContext&& from) {
+        this->pool_ = from.pool_;
+        this->scheme_ = from.scheme_;
+        this->params_host_ = from.params_host_;
+        this->he_context_ = from.he_context_;
+        this->encoder_ = from.encoder_;
+        this->key_generator_ = from.key_generator_;
+        this->encryptor_ = from.encryptor_;
+        this->decryptor_ = from.decryptor_;
+        this->evaluator_ = from.evaluator_;
+        this->t_ = from.t_;
+        this->input_max_ = from.input_max_;
+        this->scale_ = from.scale_;
+        this->tolerance_ = from.tolerance_;
+
+        from.pool_ = nullptr;
+        from.he_context_ = nullptr;
+        from.encoder_ = nullptr;
+        from.key_generator_ = nullptr;
+        from.encryptor_ = nullptr;
+        from.decryptor_ = nullptr;
+        from.evaluator_ = nullptr;
     }
 
 }

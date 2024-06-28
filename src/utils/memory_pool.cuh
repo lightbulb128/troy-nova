@@ -9,6 +9,17 @@
 
 namespace troy {namespace utils {
 
+    inline size_t device_count() {
+        int count;
+        cudaError_t status = cudaGetDeviceCount(&count);
+        if (status != cudaSuccess) {
+            std::string msg = "[device_count] cudaGetDeviceCount failed: ";
+            msg += cudaGetErrorString(status);
+            throw std::runtime_error(msg);
+        }
+        return count;
+    }
+
     class MemoryPool;
     typedef std::shared_ptr<MemoryPool> MemoryPoolHandle;
 

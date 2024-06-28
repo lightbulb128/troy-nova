@@ -474,6 +474,10 @@ namespace tool {
             MemoryPoolHandle pool = MemoryPool::GlobalPool()
         );
         ~GeneralHeContext();
+        GeneralHeContext(const GeneralHeContext&) = delete;
+        GeneralHeContext& operator=(const GeneralHeContext&) = delete;
+        GeneralHeContext(GeneralHeContext&&);
+        GeneralHeContext& operator=(GeneralHeContext&&) = delete;
 
         inline SchemeType scheme() const {
             return scheme_;

@@ -1,6 +1,6 @@
 #include "../../src/app/matmul.cuh"
 #include "../test_adv.cuh"
-#include "timer.cuh"
+#include "../../src/utils/timer.h"
 
 using namespace troy;
 using namespace troy::linear;
@@ -9,7 +9,7 @@ using tool::GeneralHeContext;
 using tool::GeneralVector;
 using std::stringstream;
 using std::vector;
-using bench::TimerOnce;
+using troy::bench::TimerOnce;
 
 void test_matmul(const GeneralHeContext& context, size_t m, size_t r, size_t n, bool pack_lwe, bool mod_switch_to_next) {
     

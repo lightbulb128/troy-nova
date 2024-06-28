@@ -79,7 +79,7 @@ namespace troy { namespace utils {
         bool device_index() const { return memory_pool_handle_->get_device(); }
 
         Box(): pointer(nullptr), device(false), memory_pool_handle_(nullptr) {}
-        Box(T* object, bool device, MemoryPoolHandle memory_pool_handle = MemoryPool::GlobalPool()) : pointer(object), device(device), memory_pool_handle_(memory_pool_handle) {
+        Box(T* object, bool device, MemoryPoolHandle memory_pool_handle = MemoryPool::GlobalPool()) : pointer(object), device(device), memory_pool_handle_(device ? memory_pool_handle : nullptr) {
             if (device && !memory_pool_handle_) throw std::runtime_error("[Box::Box] Memory pool handle is required for device memory");
         }
         Box(Box&& other) : pointer(other.pointer), device(other.device), memory_pool_handle_(other.memory_pool_handle_) { other.pointer = nullptr;}
@@ -302,7 +302,7 @@ namespace troy { namespace utils {
         bool device_index() const { return memory_pool_handle_->get_device(); }
 
         Array() : len(0), device(false), pointer(nullptr), memory_pool_handle_(nullptr) {}
-        Array(size_t count, bool device, MemoryPoolHandle memory_pool_handle = MemoryPool::GlobalPool()) : len(count), device(device), memory_pool_handle_(memory_pool_handle) {
+        Array(size_t count, bool device, MemoryPoolHandle memory_pool_handle = MemoryPool::GlobalPool()) : len(count), device(device), memory_pool_handle_(device ? memory_pool_handle : nullptr) {
             if (device && !memory_pool_handle) throw std::runtime_error("[Array::Array] Memory pool handle is required for device memory");
             if (count == 0) {
                 pointer = nullptr;
@@ -387,7 +387,7 @@ namespace troy { namespace utils {
         __host__ __device__ ConstPointer<T> const_at(size_t index) const { return ConstPointer<T>(pointer + index, device, memory_pool_handle_); }
 
         inline Array clone(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            Array cloned(len, device, pool);
+            Array cloned(len, device, device ? pool : nullptr);
             if (pointer && len > 0) {
                 if (device) {
                     kernel_provider::copy_device_to_device(*pool, cloned.pointer, pointer, len);

@@ -1,13 +1,13 @@
 #include "../../src/utils/ntt.cuh"
 #include "../../src/coeff_modulus.cuh"
-#include "timer.cuh"
+#include "../../src/utils/timer.h"
 
 using troy::utils::NTTTables;
 using troy::utils::Box;
 using troy::utils::Array;
 using troy::Modulus;
 using troy::PlainModulus;
-using bench::Timer;
+using troy::bench::Timer;
 
 int main(int argc, char** argv) {
 

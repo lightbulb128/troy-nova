@@ -1,8 +1,34 @@
 #include "../test_adv.cuh"
 #include "../argparse.h"
-#include "timer.cuh"
+#include "../../src/utils/timer.h"
+#include <iostream>
+#include <thread>
+#include <future>
 
 namespace bench {
+
+    using namespace troy;
+
+    std::string bool_to_string(bool b) {
+        return b ? "true" : "false";
+    }
+    std::string concat_by_comma(const std::vector<std::string>& v, bool none_if_none = true) {
+        if (v.size() == 0) return none_if_none ? "none" : "";
+        std::string s;
+        for (size_t i = 0; i < v.size(); i++) {
+            s += v[i];
+            if (i != v.size() - 1) s += ", ";
+        }
+        return s;
+    }
+    std::string list_usize_to_string(const std::vector<size_t>& v) {
+        std::string s = "[";
+        for (size_t i = 0; i < v.size(); i++) {
+            s += std::to_string(v[i]);
+            if (i != v.size() - 1) s += ", ";
+        }
+        return s + "]";
+    }
 
     struct Arguments {
         bool help = false;
@@ -19,6 +45,9 @@ namespace bench {
         double scale = 1 << 30;
         double tolerance = 0.1;
         size_t repeat = 200;
+        size_t threads = 1;
+        bool multiple_pools = false;
+        bool multiple_devices = false;
 
         bool no_test_correct = false;
         bool no_bench_encode = false;
@@ -34,6 +63,8 @@ namespace bench {
         bool no_bench_rotate_columns = false;
         bool no_bench_rotate_vector = false;
         bool no_bench_complex_conjugate = false;
+
+        Arguments(const Arguments&) = default;
 
         Arguments(int argc, char** argv) {
             ArgumentParser parser(argc, argv);
@@ -64,6 +95,10 @@ namespace bench {
             scale = parser.get_float<double>("-s").value_or(parser.get_float<double>("--scale").value_or(scale));
             tolerance = parser.get_float<double>("-T").value_or(parser.get_float<double>("--tolerance").value_or(tolerance));
             repeat = parser.get_uint<size_t>("-R").value_or(parser.get_uint<size_t>("--repeat").value_or(repeat));
+            threads = parser.get_uint<size_t>("-c").value_or(parser.get_uint<size_t>("--threads").value_or(threads));
+
+            multiple_pools = parser.get_bool_store_true("-mp").value_or(parser.get_bool_store_true("--multiple-pools").value_or(false));
+            multiple_devices = parser.get_bool_store_true("-md").value_or(parser.get_bool_store_true("--multiple-devices").value_or(false));
 
             no_test_correct = parser.get_bool_store_true("--no-test-correct").value_or(false);
             no_bench_encode = parser.get_bool_store_true("--no-bench-encode").value_or(false);
@@ -80,6 +115,20 @@ namespace bench {
             no_bench_rotate_vector = parser.get_bool_store_true("--no-bench-rotate-vector").value_or(false);
             no_bench_complex_conjugate = parser.get_bool_store_true("--no-bench-complex-conjugate").value_or(false);
 
+            if (threads < 1) {
+                throw std::invalid_argument("threads must be at least 1");
+            }
+            if (threads == 1) {
+                if (multiple_pools || multiple_devices) {
+                    std::cout << "Warning: multiple-pools and multiple-devices require more than 1 thread. Setting both to false." << std::endl;
+                    multiple_pools = false;
+                    multiple_devices = false;
+                }
+            }
+            if (!multiple_pools && multiple_devices) {
+                std::cout << "Warning: multiple-devices requires multiple-pools. Setting multiple-pools to true." << std::endl;
+                multiple_pools = true;
+            }
         }
 
         static void print_help() {
@@ -107,6 +156,11 @@ namespace bench {
             std::cout << "  -R, --repeat                Repeat count (default: 200)" << std::endl;
 
             std::cout << std::endl;
+            std::cout << "  -c, --threads               Number of threads (default: 1)" << std::endl;
+            std::cout << "  -mp, --multiple-pools       Use multiple memory pools. Only meaningful for device test." << std::endl;
+            std::cout << "  -md, --multiple-devices     Use multiple devices.  Only meaningful for device test." << std::endl;
+
+            std::cout << std::endl;
             std::cout << "  --no-test-correct           Skip correctness test" << std::endl;
             // no explain
             std::cout << "  --no-bench-encode" << std::endl;
@@ -122,7 +176,48 @@ namespace bench {
             std::cout << "  --no-bench-rotate-columns" << std::endl;
             std::cout << "  --no-bench-rotate-vector" << std::endl;
             std::cout << "  --no-bench-complex-conjugate" << std::endl;
+        }
 
+        void print_arguments() {
+            std::cout << "[Arguments]" << std::endl;
+            
+            std::vector<std::string> run_on; 
+            if (host) run_on.push_back("host");
+            if (device) run_on.push_back("device");
+            std::cout << "  run-on              = " << concat_by_comma(run_on) << std::endl;
+
+            std::cout << "  threads             = " << threads << std::endl;
+        
+            if (device) {
+                std::cout << "  multiple-pools      = " << bool_to_string(multiple_pools) << std::endl;
+                std::cout << "  multiple-devices    = " << bool_to_string(multiple_devices) << std::endl;
+                if (multiple_devices) {
+                    int device_count = 0;
+                    cudaError_t success = cudaGetDeviceCount(&device_count);
+                    if (success != cudaSuccess) {
+                        throw std::runtime_error("cudaGetDeviceCount failed");
+                    }
+                    std::cout << "  device-count        = " << device_count << std::endl;
+                }
+            }
+
+            std::vector<std::string> schemes;
+            if (scheme_bfv) schemes.push_back("BFV");
+            if (scheme_ckks) schemes.push_back("CKKS");
+            if (scheme_bgv) schemes.push_back("BGV");
+            std::cout << "  schemes             = " << concat_by_comma(schemes) << std::endl;
+
+            std::cout << "  poly-modulus-degree = " << poly_modulus_degree << std::endl;
+            std::cout << "  log-t               = " << log_t << std::endl;
+            std::cout << "  log-q               = " << list_usize_to_string(log_q) << std::endl;
+            std::cout << "  seed                = " << "0x" << std::hex << seed << std::dec << std::endl;
+            if (scheme_ckks) {
+                std::cout << "  input-max           = " << input_max << std::endl;
+                std::cout << "  scale               = " << scale << std::endl;
+                std::cout << "  tolerance           = " << tolerance << std::endl;
+            }
+            std::cout << "  repeat              = " << repeat << std::endl;
+            std::cout << "  no-test-correct     = " << bool_to_string(no_test_correct) << std::endl;
         }
     };
 
@@ -130,6 +225,9 @@ namespace bench {
     using tool::GeneralEncoder;
     using tool::GeneralVector;
     using tool::GeneralHeContext;
+    using troy::bench::Timer;
+    using troy::bench::TimerThreaded;
+    using std::string;
 
     void assert_true(bool condition, const string& message) {
         if (!condition) {
@@ -137,382 +235,565 @@ namespace bench {
             exit(1);
         }
     }
+
+    class Benchmark {
+
+        private:
+            std::vector<std::shared_ptr<GeneralHeContext>> contexts;
+            std::vector<MemoryPoolHandle> pools;
+            string name;
+            size_t repeat;
+            Arguments args;
+            SchemeType scheme;
+            bool device;
+
+        public:
+
+            Benchmark(bool device, const string& name, SchemeType scheme, const Arguments& args):
+                name(name), repeat(args.repeat), args(args), scheme(scheme), device(device)
+            {
+                contexts.clear();
+                pools.clear();
+                if (!device) {
+                    // only one pool, which is nullptr
+                    pools = { nullptr };
+                    // only one context
+                    auto context = std::make_shared<GeneralHeContext>(false, scheme, args.poly_modulus_degree, args.log_t, args.log_q, false, args.seed, args.input_max, args.scale, args.tolerance, false, false, nullptr);
+                    contexts.push_back(context);
+                } else {
+                    if (args.multiple_devices) {
+                        int device_count = 0;
+                        cudaError_t success = cudaGetDeviceCount(&device_count);
+                        if (success != cudaSuccess) {
+                            throw std::runtime_error("cudaGetDeviceCount failed");
+                        }
+                        // pools count equal to threads count, each's device index is modulo device count
+                        for (int i = 0; i < args.threads; i++) {
+                            pools.push_back(MemoryPool::create(i % device_count));
+                        }
+                        // contexts count equal to device count
+                        for (int i = 0; i < device_count; i++) {
+                            auto context = std::make_shared<GeneralHeContext>(true, scheme, args.poly_modulus_degree, args.log_t, args.log_q, false, args.seed, args.input_max, args.scale, args.tolerance, false, false, pools[i]);
+                            contexts.push_back(context);
+                        }
+                    } else if (args.multiple_pools) {
+                        // pools count equal to threads count, each's device index is 0
+                        for (int i = 0; i < args.threads; i++) {
+                            pools.push_back(MemoryPool::create(0));
+                        }
+                        // only one context
+                        auto context = std::make_shared<GeneralHeContext>(true, scheme, args.poly_modulus_degree, args.log_t, args.log_q, false, args.seed, args.input_max, args.scale, args.tolerance, false, false, MemoryPool::GlobalPool());
+                        contexts.push_back(context);
+                    } else {
+                        // one pool which is globalpool
+                        pools = { MemoryPool::GlobalPool() };
+                        // only one context
+                        auto context = std::make_shared<GeneralHeContext>(true, scheme, args.poly_modulus_degree, args.log_t, args.log_q, false, args.seed, args.input_max, args.scale, args.tolerance, false, false, MemoryPool::GlobalPool());
+                        contexts.push_back(context);
+                    }
+                }
+            }
+
+            MemoryPoolHandle get_pool(size_t thread_id) const {
+                if (device && (args.multiple_devices || args.multiple_pools)) {
+                    return pools[thread_id];
+                } else {
+                    return pools[0];
+                }
+            }
+
+            const GeneralHeContext& get_context(size_t thread_id) const {
+                if (args.multiple_devices) {
+                    return *contexts[thread_id % contexts.size()];
+                } else {
+                    return *contexts[0];
+                }
+            }
+
+            size_t get_repeat(size_t thread_id) const {
+                size_t divided = repeat / args.threads;
+                if (thread_id < repeat % args.threads) {
+                    return divided + 1;
+                } else {
+                    return divided;
+                }
+            }
+
+            template <typename L>
+            void run_threads_and_print_times(const L& lambda) {
+                std::vector<std::future<Timer>> futures;
+                for (size_t i = 0; i < args.threads; i++) {
+                    futures.push_back(std::async(lambda, i));
+                }
+                std::vector<Timer> timers;
+                for (size_t i = 0; i < args.threads; i++) {
+                    timers.push_back(futures[i].get());
+                }
+                if (timers.size() > 1) {
+                    TimerThreaded::PrintDivided(timers, repeat);
+                } else {
+                    timers[0].print_divided(repeat);
+                }
+            }
+
+            void test_encode_simd() {
+                auto thread_lambda = [this](size_t thread_index) {
+                    double scale = args.scale;
+                    const GeneralHeContext& context = get_context(thread_index);
+                    MemoryPoolHandle pool = get_pool(thread_index);
+                    size_t repeat = get_repeat(thread_index);
+                    Timer timer;
+                    size_t timer_encode = timer.register_timer(name + ".EncodeSimd");
+                    size_t timer_decode = timer.register_timer(name + ".DecodeSimd");
+                    for (size_t i = 0; i < repeat; i++) {
+                        GeneralVector message = context.random_simd_full();
+                        timer.tick(timer_encode);
+                        Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
+                        timer.tock(timer_encode);
+                        timer.tick(timer_decode);
+                        GeneralVector decoded = context.encoder().decode_simd(plain, pool);
+                        timer.tock(timer_decode);
+                        assert_true(context.near_equal(message, decoded), "test_encode_simd failed.");
+                    }
+                    return timer;
+                };
+                run_threads_and_print_times(thread_lambda);
+            }
+
+            void test_encode_polynomial() {
+                auto thread_lambda = [this](size_t thread_index) {
+                    double scale = args.scale;
+                    const GeneralHeContext& context = get_context(thread_index);
+                    MemoryPoolHandle pool = get_pool(thread_index);
+                    size_t repeat = get_repeat(thread_index);
+                    Timer timer;
+                    size_t timer_encode = timer.register_timer(name + ".EncodePoly");
+                    size_t timer_decode = timer.register_timer(name + ".DecodePoly");
+                    for (size_t i = 0; i < repeat; i++) {
+                        GeneralVector message = context.random_polynomial_full();
+                        timer.tick(timer_encode);
+                        Plaintext plain = context.encoder().encode_polynomial(message, std::nullopt, scale, pool);
+                        timer.tock(timer_encode);
+                        timer.tick(timer_decode);
+                        GeneralVector decoded = context.encoder().decode_polynomial(plain, pool);
+                        timer.tock(timer_decode);
+                        if (i == 0 && args.no_test_correct) {
+                            assert_true(context.near_equal(message, decoded), "test_encode_polynomial failed.");
+                        }
+                    }
+                    return timer;
+                };
+                run_threads_and_print_times(thread_lambda);
+            }
+
+            void test_encrypt() {
+                auto thread_lambda = [this](size_t thread_index) {
+                    double scale = args.scale;
+                    const GeneralHeContext& context = get_context(thread_index);
+                    MemoryPoolHandle pool = get_pool(thread_index);
+                    size_t repeat = get_repeat(thread_index);
+                    Timer timer;
+                    size_t timer_enc_asym = timer.register_timer(name + ".EncryptAsym");
+                    size_t timer_enc_sym = timer.register_timer(name + ".EncryptSym");
+                    size_t timer_dec = timer.register_timer(name + ".Decrypt");
+                    GeneralVector message = context.random_simd_full();
+                    Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
+                    for (size_t i = 0; i < repeat; i++) {
+                        timer.tick(timer_enc_asym);
+                        Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain, nullptr, pool);
+                        timer.tock(timer_enc_asym);
+                        timer.tick(timer_enc_sym);
+                        Ciphertext cipher_sym = context.encryptor().encrypt_symmetric_new(plain, true, nullptr, pool);
+                        timer.tock(timer_enc_sym);
+                        timer.tick(timer_dec);
+                        Plaintext plain_dec = context.decryptor().decrypt_new(cipher, pool);
+                        timer.tock(timer_dec);
+                        
+                        if (i == 0 && args.no_test_correct) {
+                            auto decoded = context.encoder().decode_simd(plain_dec, pool);
+                            assert_true(context.near_equal(message, decoded), "test_encrypt/asymmetric failed.");
+                            cipher_sym.expand_seed(context.context());
+                            decoded = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_sym, pool), pool);
+                            assert_true(context.near_equal(message, decoded), "test_encrypt/symmetric failed.");
+                        }
+                    }
+                    return timer;
+                };
+                run_threads_and_print_times(thread_lambda);
+            }
+
+            void test_negate() {
+                auto thread_lambda = [this](size_t thread_index) {
+                    double scale = args.scale;
+                    const GeneralHeContext& context = get_context(thread_index);
+                    MemoryPoolHandle pool = get_pool(thread_index);
+                    size_t repeat = get_repeat(thread_index);
+                    Timer timer;
+                    size_t timer_neg = timer.register_timer(name + ".Negate");
+                    GeneralVector message = context.random_simd_full();
+                    Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
+                    Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain, nullptr, pool);
+                    Ciphertext result; 
+                    for (size_t i = 0; i < repeat; i++) {
+                        timer.tick(timer_neg);
+                        Ciphertext cipher_neg = context.evaluator().negate_new(cipher, pool);
+                        // context.evaluator().add(cipher, cipher, result);
+                        timer.tock(timer_neg);
+                        if (i == 0 && args.no_test_correct) {
+                            auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_neg, pool), pool);
+                            assert_true(context.near_equal(context.negate(message), decrypted), "test_negate failed.");
+                        }
+                    }
+                    return timer;
+                };
+                run_threads_and_print_times(thread_lambda);
+            }
+
+            void test_translate() {
+                auto thread_lambda = [this](size_t thread_index) {
+                    double scale = args.scale;
+                    const GeneralHeContext& context = get_context(thread_index);
+                    MemoryPoolHandle pool = get_pool(thread_index);
+                    size_t repeat = get_repeat(thread_index);
+                    Timer timer;
+                    size_t timer_add = timer.register_timer(name + ".Add");
+                    size_t timer_sub = timer.register_timer(name + ".Sub");
+                    GeneralVector message = context.random_simd_full();
+                    Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
+                    Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain, nullptr, pool);
+                    Ciphertext result; 
+                    for (size_t i = 0; i < repeat; i++) {
+                        timer.tick(timer_add);
+                        Ciphertext cipher_add = context.evaluator().add_new(cipher, cipher, pool);
+                        // context.evaluator().add(cipher, cipher, result);
+                        timer.tock(timer_add);
+                        timer.tick(timer_sub);
+                        Ciphertext cipher_sub = context.evaluator().sub_new(cipher, cipher, pool);
+                        timer.tock(timer_sub);
+                        if (i == 0 && args.no_test_correct) {
+                            auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_add, pool), pool);
+                            assert_true(context.near_equal(context.add(message, message), decrypted), "test_translate/add failed.");
+                            decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_sub, pool), pool);
+                            assert_true(context.near_equal(context.sub(message, message), decrypted), "test_translate/sub failed.");
+                        }
+                    }
+                    return timer;
+                };
+                run_threads_and_print_times(thread_lambda);
+            }
+
+            void test_translate_plain() {
+                auto thread_lambda = [this](size_t thread_index) {
+                    double scale = args.scale;
+                    const GeneralHeContext& context = get_context(thread_index);
+                    MemoryPoolHandle pool = get_pool(thread_index);
+                    size_t repeat = get_repeat(thread_index);
+                    Timer timer;
+                    size_t timer_add = timer.register_timer(name + ".AddPlain");
+                    size_t timer_sub = timer.register_timer(name + ".SubPlain");
+                    GeneralVector message = context.random_simd_full();
+                    Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
+                    Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain, nullptr, pool);
+                    for (size_t i = 0; i < repeat; i++) {
+                        timer.tick(timer_add);
+                        Ciphertext cipher_add = context.evaluator().add_plain_new(cipher, plain, pool);
+                        timer.tock(timer_add);
+                        timer.tick(timer_sub);
+                        Ciphertext cipher_sub = context.evaluator().sub_plain_new(cipher, plain, pool);
+                        timer.tock(timer_sub);
+                        if (i == 0 && args.no_test_correct) {
+                            auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_add, pool), pool);
+                            assert_true(context.near_equal(context.add(message, message), decrypted), "test_translate_plain/add failed.");
+                            decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_sub, pool), pool);
+                            assert_true(context.near_equal(context.sub(message, message), decrypted), "test_translate_plain/sub failed.");
+                        }
+                    }
+                    return timer;
+                };
+                run_threads_and_print_times(thread_lambda);
+            }
+
+            void test_multiply_relinearize() {
+                auto thread_lambda = [this](size_t thread_index) {
+                    double scale = args.scale;
+                    const GeneralHeContext& context = get_context(thread_index);
+                    MemoryPoolHandle pool = get_pool(thread_index);
+                    size_t repeat = get_repeat(thread_index);
+                    Timer timer;
+                    size_t timer_mul = timer.register_timer(name + ".Multiply");
+                    size_t timer_square = timer.register_timer(name + ".Square");
+                    size_t timer_relin = timer.register_timer(name + ".Relinearize");
+                    RelinKeys relin_keys = context.key_generator().create_relin_keys(false, 2, pool);
+                    GeneralVector message = context.random_simd_full();
+                    Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
+                    Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain, nullptr, pool);
+                    for (size_t i = 0; i < repeat; i++) {
+                        timer.tick(timer_mul);
+                        Ciphertext cipher_mul = context.evaluator().multiply_new(cipher, cipher, pool);
+                        timer.tock(timer_mul);
+                        timer.tick(timer_square);
+                        Ciphertext cipher_square = context.evaluator().square_new(cipher, pool);
+                        timer.tock(timer_square);
+                        timer.tick(timer_relin);
+                        Ciphertext cipher_relin = context.evaluator().relinearize_new(cipher_mul, relin_keys, pool);
+                        timer.tock(timer_relin);
+                        if (i == 0 && args.no_test_correct) {
+                            auto truth = context.mul(message, message);
+                            auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_mul, pool), pool);
+                            assert_true(context.near_equal(truth, decrypted), "test_multiply_relinearize/multiply failed.");
+                            decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_relin, pool), pool);
+                            assert_true(context.near_equal(truth, decrypted), "test_multiply_relinearize/relin failed.");
+                            decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_square, pool), pool);
+                            assert_true(context.near_equal(truth, decrypted), "test_multiply_relinearize/square failed.");
+                        }
+                    }
+                    return timer;
+                };
+                run_threads_and_print_times(thread_lambda);
+            }
+
+            void test_multiply_plain() {
+                auto thread_lambda = [this](size_t thread_index) {
+                    double scale = args.scale;
+                    const GeneralHeContext& context = get_context(thread_index);
+                    MemoryPoolHandle pool = get_pool(thread_index);
+                    size_t repeat = get_repeat(thread_index);
+                    Timer timer;
+                    size_t timer_mul = timer.register_timer(name + ".MultiplyPlain");
+                    GeneralVector message = context.random_simd_full();
+                    Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
+                    Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain, nullptr, pool);
+                    for (size_t i = 0; i < repeat; i++) {
+                        timer.tick(timer_mul);
+                        Ciphertext cipher_mul = context.evaluator().multiply_plain_new(cipher, plain, pool);
+                        timer.tock(timer_mul);
+                        if (i == 0 && args.no_test_correct) {
+                            auto truth = context.mul(message, message);
+                            auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_mul, pool), pool);
+                            assert_true(context.near_equal(truth, decrypted), "test_multiply_plain failed.");
+                        }
+                    }
+                    return timer;
+                };
+                run_threads_and_print_times(thread_lambda);
+            }
+
+            void test_mod_switch_to_next() {
+                bool can_run = get_context(0).context()->first_context_data().value()->next_context_data().has_value();
+                if (!can_run) return;
+                auto thread_lambda = [this](size_t thread_index) {
+                    double scale = args.scale;
+                    const GeneralHeContext& context = get_context(thread_index);
+                    MemoryPoolHandle pool = get_pool(thread_index);
+                    size_t repeat = get_repeat(thread_index);
+                    Timer timer;
+                    size_t timer_mod = timer.register_timer(name + ".ModSwitchToNext");
+                    GeneralVector message = context.random_simd_full();
+                    Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
+                    Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain, nullptr, pool);
+                    for (size_t i = 0; i < repeat; i++) {
+                        timer.tick(timer_mod);
+                        Ciphertext cipher_mod = context.evaluator().mod_switch_to_next_new(cipher, pool);
+                        timer.tock(timer_mod);
+                        if (i == 0 && args.no_test_correct) {
+                            auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_mod, pool), pool);
+                            assert_true(context.near_equal(message, decrypted), "test_mod_switch_to_next failed.");
+                        }
+                    }
+                    return timer;
+                };
+                run_threads_and_print_times(thread_lambda);
+            }
+
+            void test_rescale_to_next() {
+                bool is_ckks = get_context(0).params_host().scheme() == SchemeType::CKKS;
+                if (!is_ckks) return;
+                bool can_run = get_context(0).context()->first_context_data().value()->next_context_data().has_value();
+                if (!can_run) return;
+                auto thread_lambda = [this](size_t thread_index) {
+                    double scale = args.scale;
+                    const GeneralHeContext& context = get_context(thread_index);
+                    MemoryPoolHandle pool = get_pool(thread_index);
+                    size_t repeat = get_repeat(thread_index);
+                    Timer timer;
+                    size_t timer_rescale = timer.register_timer(name + ".RescaleToNext");
+                    GeneralVector message = context.random_simd_full();
+                    const EncryptionParameters& parms = context.params_host();
+                    auto coeff_modulus = parms.coeff_modulus();
+                    double expanded_scale = scale * coeff_modulus[coeff_modulus.size() - 2].value();
+                    Plaintext plain = context.encoder().encode_simd(message, std::nullopt, expanded_scale, pool);
+                    Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain, nullptr, pool);
+                    for (size_t i = 0; i < repeat; i++) {
+                        timer.tick(timer_rescale);
+                        Ciphertext cipher_rescale = context.evaluator().rescale_to_next_new(cipher, pool);
+                        timer.tock(timer_rescale);
+                        if (i == 0 && args.no_test_correct) {
+                            auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_rescale, pool), pool);
+                            assert_true(context.near_equal(message, decrypted), "test_rescale_to_next failed.");
+                        }
+                    }
+                    return timer;
+                };
+                run_threads_and_print_times(thread_lambda);
+            }
+
+            void test_rotate_rows(size_t rotate_count) {
+                bool is_ckks = get_context(0).params_host().scheme() == SchemeType::CKKS;
+                if (is_ckks) return;
+                auto thread_lambda = [this, rotate_count](size_t thread_index) {
+                    double scale = args.scale;
+                    const GeneralHeContext& context = get_context(thread_index);
+                    MemoryPoolHandle pool = get_pool(thread_index);
+                    size_t repeat = get_repeat(thread_index);
+                    Timer timer;
+                    size_t timer_rotate = timer.register_timer(name + ".RotateRows(" + std::to_string(rotate_count) + ")");
+                    GaloisKeys glk = context.key_generator().create_galois_keys(false, pool);
+                    GeneralVector message = context.random_simd_full();
+                    Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
+                    Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain, nullptr, pool);
+                    for (size_t i = 0; i < repeat; i++) {
+                        timer.tick(timer_rotate);
+                        Ciphertext cipher_rotate = context.evaluator().rotate_rows_new(cipher, rotate_count, glk, pool);
+                        timer.tock(timer_rotate);
+                        if (i == 0 && args.no_test_correct) {
+                            auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_rotate, pool), pool);
+                            assert_true(context.near_equal(message.rotate(rotate_count), decrypted), "test_rotate_rows failed.");
+                        }
+                    }
+                    return timer;
+                };
+                run_threads_and_print_times(thread_lambda);
+            }
+
+            void test_rotate_columns() {
+                bool is_ckks = get_context(0).params_host().scheme() == SchemeType::CKKS;
+                if (is_ckks) return;
+                auto thread_lambda = [this](size_t thread_index) {
+                    double scale = args.scale;
+                    const GeneralHeContext& context = get_context(thread_index);
+                    MemoryPoolHandle pool = get_pool(thread_index);
+                    size_t repeat = get_repeat(thread_index);
+                    Timer timer;
+                    size_t timer_rotate = timer.register_timer(name + ".RotateColumns");
+                    GaloisKeys glk = context.key_generator().create_galois_keys(false, pool);
+                    GeneralVector message = context.random_simd_full();
+                    Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
+                    Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain, nullptr, pool);
+                    for (size_t i = 0; i < repeat; i++) {
+                        timer.tick(timer_rotate);
+                        Ciphertext cipher_rotate = context.evaluator().rotate_columns_new(cipher, glk, pool);
+                        timer.tock(timer_rotate);
+                        if (i == 0 && args.no_test_correct) {
+                            auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_rotate, pool), pool);
+                            assert_true(context.near_equal(message.conjugate(), decrypted), "test_rotate_columns failed.");
+                        }
+                    }
+                    return timer;
+                };
+                run_threads_and_print_times(thread_lambda);
+            }
+
+            void test_rotate_vector(size_t rotate_count) {
+                bool is_ckks = get_context(0).params_host().scheme() == SchemeType::CKKS;
+                if (!is_ckks) return;
+                auto thread_lambda = [this, rotate_count](size_t thread_index) {
+                    double scale = args.scale;
+                    const GeneralHeContext& context = get_context(thread_index);
+                    MemoryPoolHandle pool = get_pool(thread_index);
+                    size_t repeat = get_repeat(thread_index);
+                    Timer timer;
+                    size_t timer_rotate = timer.register_timer(name + ".RotateVector(" + std::to_string(rotate_count) + ")");
+                    GaloisKeys glk = context.key_generator().create_galois_keys(false, pool);
+                    GeneralVector message = context.random_simd_full();
+                    Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
+                    Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain, nullptr, pool);
+                    for (size_t i = 0; i < repeat; i++) {
+                        timer.tick(timer_rotate);
+                        Ciphertext cipher_rotate = context.evaluator().rotate_vector_new(cipher, rotate_count, glk, pool);
+                        timer.tock(timer_rotate);
+                        if (i == 0 && args.no_test_correct) {
+                            auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_rotate, pool), pool);
+                            assert_true(context.near_equal(message.rotate(rotate_count), decrypted), "test_rotate_vector failed.");
+                        }
+                    }
+                    return timer;
+                };
+                run_threads_and_print_times(thread_lambda);
+            }
+
+            void test_complex_conjugate() {
+                bool is_ckks = get_context(0).params_host().scheme() == SchemeType::CKKS;
+                if (!is_ckks) return;
+                auto thread_lambda = [this](size_t thread_index) {
+                    double scale = args.scale;
+                    const GeneralHeContext& context = get_context(thread_index);
+                    MemoryPoolHandle pool = get_pool(thread_index);
+                    size_t repeat = get_repeat(thread_index);
+                    Timer timer;
+                    size_t timer_conj = timer.register_timer(name + ".Conjugate");
+                    GaloisKeys glk = context.key_generator().create_galois_keys(false, pool);
+                    GeneralVector message = context.random_simd_full();
+                    Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
+                    Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain, nullptr, pool);
+                    for (size_t i = 0; i < repeat; i++) {
+                        timer.tick(timer_conj);
+                        Ciphertext cipher_conj = context.evaluator().complex_conjugate_new(cipher, glk, pool);
+                        timer.tock(timer_conj);
+                        if (i == 0 && args.no_test_correct) {
+                            auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_conj, pool), pool);
+                            assert_true(context.near_equal(message.conjugate(), decrypted), "test_complex_conjugate failed.");
+                        }
+                    }
+                    return timer;
+                };
+                run_threads_and_print_times(thread_lambda);
+            }
+
+            void test_suite() {
+                bool is_ckks = scheme == SchemeType::CKKS;
+                if (!args.no_bench_encode) test_encode_simd();
+                if (!args.no_bench_encode) test_encode_polynomial();
+                if (!args.no_bench_encrypt) test_encrypt();
+                if (!args.no_bench_negate) test_negate();
+                if (!args.no_bench_translate) test_translate();
+                if (!args.no_bench_translate_plain) test_translate_plain();
+                if (!args.no_bench_multiply_relinearize) test_multiply_relinearize();
+                if (!args.no_bench_multiply_plain) test_multiply_plain();
+                if (!args.no_bench_mod_switch_to_next) test_mod_switch_to_next();
+                if (is_ckks)
+                    if (!args.no_bench_rescale_to_next) test_rescale_to_next();
+                if (!is_ckks) {
+                    if (!args.no_bench_rotate_rows) test_rotate_rows(1);
+                    if (!args.no_bench_rotate_rows) test_rotate_rows(7);
+                    if (!args.no_bench_rotate_columns) test_rotate_columns();
+                } else {
+                    if (!args.no_bench_rotate_vector) test_rotate_vector(1);
+                    if (!args.no_bench_rotate_vector) test_rotate_vector(7);
+                    if (!args.no_bench_complex_conjugate) test_complex_conjugate();
+                }
+            }
+
+        
+    };
     
-    void test_encode_simd(const Arguments& args, const string& name, const GeneralHeContext& context, size_t repeat = 100) {
-        double scale = context.scale();
-        Timer timer;
-        size_t timer_encode = timer.register_timer(name + ".EncodeSimd");
-        size_t timer_decode = timer.register_timer(name + ".DecodeSimd");
-        for (size_t i = 0; i < repeat; i++) {
-            GeneralVector message = context.random_simd_full();
-            timer.tick(timer_encode);
-            Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale);
-            timer.tock(timer_encode);
-            timer.tick(timer_decode);
-            GeneralVector decoded = context.encoder().decode_simd(plain);
-            timer.tock(timer_decode);
-            assert_true(context.near_equal(message, decoded), "test_encode_simd failed.");
-        }
-        timer.print_divided(repeat);
-    }
-
-    void test_encode_polynomial(const Arguments& args, const string& name, const GeneralHeContext& context, size_t repeat = 100) {
-        double scale = context.scale();
-        Timer timer;
-        size_t timer_encode = timer.register_timer(name + ".EncodePoly");
-        size_t timer_decode = timer.register_timer(name + ".DecodePoly");
-        for (size_t i = 0; i < repeat; i++) {
-            GeneralVector message = context.random_polynomial_full();
-            timer.tick(timer_encode);
-            Plaintext plain = context.encoder().encode_polynomial(message, std::nullopt, scale);
-            timer.tock(timer_encode);
-            timer.tick(timer_decode);
-            GeneralVector decoded = context.encoder().decode_polynomial(plain);
-            timer.tock(timer_decode);
-            if (i == 0 && args.no_test_correct) {
-                assert_true(context.near_equal(message, decoded), "test_encode_polynomial failed.");
-            }
-        }
-        timer.print_divided(repeat);
-    }
-
-    void test_encrypt(const Arguments& args, const string& name, const GeneralHeContext& context, size_t repeat = 100) {
-        double scale = context.scale();
-        Timer timer;
-        size_t timer_enc_asym = timer.register_timer(name + ".EncryptAsym");
-        size_t timer_enc_sym = timer.register_timer(name + ".EncryptSym");
-        size_t timer_dec = timer.register_timer(name + ".Decrypt");
-        GeneralVector message = context.random_simd_full();
-        Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale);
-        for (size_t i = 0; i < repeat; i++) {
-            timer.tick(timer_enc_asym);
-            Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain);
-            timer.tock(timer_enc_asym);
-            timer.tick(timer_enc_sym);
-            Ciphertext cipher_sym = context.encryptor().encrypt_symmetric_new(plain, true);
-            timer.tock(timer_enc_sym);
-            timer.tick(timer_dec);
-            Plaintext plain_dec = context.decryptor().decrypt_new(cipher);
-            timer.tock(timer_dec);
-            
-            if (i == 0 && args.no_test_correct) {
-                auto decoded = context.encoder().decode_simd(plain_dec);
-                assert_true(context.near_equal(message, decoded), "test_encrypt/asymmetric failed.");
-                cipher_sym.expand_seed(context.context());
-                decoded = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_sym));
-                assert_true(context.near_equal(message, decoded), "test_encrypt/symmetric failed.");
-            }
-        }
-        timer.print_divided(repeat);
-    }
-
-    void test_negate(const Arguments& args, const string& name, const GeneralHeContext& context, size_t repeat = 100) {
-        double scale = context.scale();
-        Timer timer;
-        size_t timer_neg = timer.register_timer(name + ".Negate");
-        GeneralVector message = context.random_simd_full();
-        Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale);
-        Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain);
-        Ciphertext result; 
-        for (size_t i = 0; i < repeat; i++) {
-            timer.tick(timer_neg);
-            Ciphertext cipher_neg = context.evaluator().negate_new(cipher);
-            // context.evaluator().add(cipher, cipher, result);
-            timer.tock(timer_neg);
-            if (i == 0 && args.no_test_correct) {
-                auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_neg));
-                assert_true(context.near_equal(context.negate(message), decrypted), "test_negate failed.");
-            }
-        }
-        timer.print_divided(repeat);
-    }
-
-    void test_translate(const Arguments& args, const string& name, const GeneralHeContext& context, size_t repeat = 100) {
-        double scale = context.scale();
-        Timer timer;
-        size_t timer_add = timer.register_timer(name + ".Add");
-        size_t timer_sub = timer.register_timer(name + ".Sub");
-        GeneralVector message = context.random_simd_full();
-        Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale);
-        Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain);
-        Ciphertext result; 
-        for (size_t i = 0; i < repeat; i++) {
-            timer.tick(timer_add);
-            Ciphertext cipher_add = context.evaluator().add_new(cipher, cipher);
-            // context.evaluator().add(cipher, cipher, result);
-            timer.tock(timer_add);
-            timer.tick(timer_sub);
-            Ciphertext cipher_sub = context.evaluator().sub_new(cipher, cipher);
-            timer.tock(timer_sub);
-            if (i == 0 && args.no_test_correct) {
-                auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_add));
-                assert_true(context.near_equal(context.add(message, message), decrypted), "test_translate/add failed.");
-                decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_sub));
-                assert_true(context.near_equal(context.sub(message, message), decrypted), "test_translate/sub failed.");
-            }
-        }
-        timer.print_divided(repeat);
-    }
-
-    void test_translate_plain(const Arguments& args, const string& name, const GeneralHeContext& context, size_t repeat = 100) {
-        double scale = context.scale();
-        Timer timer;
-        size_t timer_add = timer.register_timer(name + ".AddPlain");
-        size_t timer_sub = timer.register_timer(name + ".SubPlain");
-        GeneralVector message = context.random_simd_full();
-        Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale);
-        Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain);
-        for (size_t i = 0; i < repeat; i++) {
-            timer.tick(timer_add);
-            Ciphertext cipher_add = context.evaluator().add_plain_new(cipher, plain);
-            timer.tock(timer_add);
-            timer.tick(timer_sub);
-            Ciphertext cipher_sub = context.evaluator().sub_plain_new(cipher, plain);
-            timer.tock(timer_sub);
-            if (i == 0 && args.no_test_correct) {
-                auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_add));
-                assert_true(context.near_equal(context.add(message, message), decrypted), "test_translate_plain/add failed.");
-                decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_sub));
-                assert_true(context.near_equal(context.sub(message, message), decrypted), "test_translate_plain/sub failed.");
-            }
-        }
-        timer.print_divided(repeat);
-    }
-
-    void test_multiply_relinearize(const Arguments& args, const string& name, const GeneralHeContext& context, size_t repeat = 100) {
-        double scale = context.scale();
-        Timer timer;
-        size_t timer_mul = timer.register_timer(name + ".Multiply");
-        size_t timer_square = timer.register_timer(name + ".Square");
-        size_t timer_relin = timer.register_timer(name + ".Relinearize");
-        RelinKeys relin_keys = context.key_generator().create_relin_keys(false);
-        GeneralVector message = context.random_simd_full();
-        Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale);
-        Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain);
-        for (size_t i = 0; i < repeat; i++) {
-            timer.tick(timer_mul);
-            Ciphertext cipher_mul = context.evaluator().multiply_new(cipher, cipher);
-            timer.tock(timer_mul);
-            timer.tick(timer_square);
-            Ciphertext cipher_square = context.evaluator().square_new(cipher);
-            timer.tock(timer_square);
-            timer.tick(timer_relin);
-            Ciphertext cipher_relin = context.evaluator().relinearize_new(cipher_mul, relin_keys);
-            timer.tock(timer_relin);
-            if (i == 0 && args.no_test_correct) {
-                auto truth = context.mul(message, message);
-                auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_mul));
-                assert_true(context.near_equal(truth, decrypted), "test_multiply_relinearize/multiply failed.");
-                decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_relin));
-                assert_true(context.near_equal(truth, decrypted), "test_multiply_relinearize/relin failed.");
-                decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_square));
-                assert_true(context.near_equal(truth, decrypted), "test_multiply_relinearize/square failed.");
-            }
-
-        }
-        timer.print_divided(repeat);
-    }
-
-    void test_multiply_plain(const Arguments& args, const string& name, const GeneralHeContext& context, size_t repeat = 100) {
-        double scale = context.scale();
-        Timer timer;
-        size_t timer_mul = timer.register_timer(name + ".MultiplyPlain");
-        GeneralVector message = context.random_simd_full();
-        Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale);
-        Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain);
-        for (size_t i = 0; i < repeat; i++) {
-            timer.tick(timer_mul);
-            Ciphertext cipher_mul = context.evaluator().multiply_plain_new(cipher, plain);
-            timer.tock(timer_mul);
-            if (i == 0 && args.no_test_correct) {
-                auto truth = context.mul(message, message);
-                auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_mul));
-                assert_true(context.near_equal(truth, decrypted), "test_multiply_plain failed.");
-            }
-        }
-        timer.print_divided(repeat);
-    }
-
-    void test_mod_switch_to_next(const Arguments& args, const string& name, const GeneralHeContext& context, size_t repeat = 100) {
-        double scale = context.scale();
-        Timer timer;
-        size_t timer_mod = timer.register_timer(name + ".ModSwitchToNext");
-        GeneralVector message = context.random_simd_full();
-        Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale);
-        Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain);
-        if (!context.context()->get_context_data(cipher.parms_id()).value()->next_context_data().has_value()) {
-            return; // no next context so cannot test
-        }
-        for (size_t i = 0; i < repeat; i++) {
-            timer.tick(timer_mod);
-            Ciphertext cipher_mod = context.evaluator().mod_switch_to_next_new(cipher);
-            timer.tock(timer_mod);
-            if (i == 0 && args.no_test_correct) {
-                auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_mod));
-                assert_true(context.near_equal(message, decrypted), "test_mod_switch_to_next failed.");
-            }
-        }
-        timer.print_divided(repeat);
-    }
-
-    void test_rescale_to_next(const Arguments& args, const string& name, const GeneralHeContext& context, size_t repeat = 100) {
-        bool is_ckks = context.params_host().scheme() == SchemeType::CKKS;
-        if (!is_ckks) return;
-        double scale = context.scale();
-        Timer timer;
-        size_t timer_rescale = timer.register_timer(name + ".RescaleToNext");
-        GeneralVector message = context.random_simd_full();
-        const EncryptionParameters& parms = context.params_host();
-        auto coeff_modulus = parms.coeff_modulus();
-        double expanded_scale = scale * coeff_modulus[coeff_modulus.size() - 2].value();
-        Plaintext plain = context.encoder().encode_simd(message, std::nullopt, expanded_scale);
-        Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain);
-        if (!context.context()->get_context_data(cipher.parms_id()).value()->next_context_data().has_value()) {
-            return; // no next context so cannot test
-        }
-        for (size_t i = 0; i < repeat; i++) {
-            timer.tick(timer_rescale);
-            Ciphertext cipher_rescale = context.evaluator().rescale_to_next_new(cipher);
-            timer.tock(timer_rescale);
-            if (i == 0 && args.no_test_correct) {
-                auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_rescale));
-                assert_true(context.near_equal(message, decrypted), "test_rescale_to_next failed.");
-            }
-        }
-        timer.print_divided(repeat);
-    }
-
-    void test_rotate_rows(const Arguments& args, const string& name, const GeneralHeContext& context, size_t rotate_count, size_t repeat = 100) {
-        bool is_ckks = context.params_host().scheme() == SchemeType::CKKS;
-        if (is_ckks) return;
-        double scale = context.scale();
-        Timer timer;
-        size_t timer_rotate = timer.register_timer(name + ".RotateRows(" + std::to_string(rotate_count) + ")");
-        GaloisKeys glk = context.key_generator().create_galois_keys(false);
-        GeneralVector message = context.random_simd_full();
-        Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale);
-        Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain);
-        for (size_t i = 0; i < repeat; i++) {
-            timer.tick(timer_rotate);
-            Ciphertext cipher_rotate = context.evaluator().rotate_rows_new(cipher, rotate_count, glk);
-            timer.tock(timer_rotate);
-            if (i == 0 && args.no_test_correct) {
-                auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_rotate));
-                assert_true(context.near_equal(message.rotate(rotate_count), decrypted), "test_rotate_rows failed.");
-            }
-        }
-        timer.print_divided(repeat);
-    }
-
-    void test_rotate_columns(const Arguments& args, const string& name, const GeneralHeContext& context, size_t repeat = 100) {
-        bool is_ckks = context.params_host().scheme() == SchemeType::CKKS;
-        if (is_ckks) return;
-        double scale = context.scale();
-        Timer timer;
-        size_t timer_rotate = timer.register_timer(name + ".RotateColumns");
-        GaloisKeys glk = context.key_generator().create_galois_keys(false);
-        GeneralVector message = context.random_simd_full();
-        Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale);
-        Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain);
-        for (size_t i = 0; i < repeat; i++) {
-            timer.tick(timer_rotate);
-            Ciphertext cipher_rotate = context.evaluator().rotate_columns_new(cipher, glk);
-            timer.tock(timer_rotate);
-            if (i == 0 && args.no_test_correct) {
-                auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_rotate));
-                assert_true(context.near_equal(message.conjugate(), decrypted), "test_rotate_columns failed.");
-            }
-        }
-        timer.print_divided(repeat);
-    }
-
-    void test_rotate_vector(const Arguments& args, const string& name, const GeneralHeContext& context, size_t rotate_count, size_t repeat = 100) {
-        bool is_ckks = context.params_host().scheme() == SchemeType::CKKS;
-        if (!is_ckks) return;
-        double scale = context.scale();
-        Timer timer;
-        size_t timer_rotate = timer.register_timer(name + ".RotateVector(" + std::to_string(rotate_count) + ")");
-        GaloisKeys glk = context.key_generator().create_galois_keys(false);
-        GeneralVector message = context.random_simd_full();
-        Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale);
-        Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain);
-        for (size_t i = 0; i < repeat; i++) {
-            timer.tick(timer_rotate);
-            Ciphertext cipher_rotate = context.evaluator().rotate_vector_new(cipher, rotate_count, glk);
-            timer.tock(timer_rotate);
-            if (i == 0 && args.no_test_correct) {
-                auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_rotate));
-                assert_true(context.near_equal(message.rotate(rotate_count), decrypted), "test_rotate_vector failed.");
-            }
-        }
-        timer.print_divided(repeat);
-    }
-
-    void test_complex_conjugate(const Arguments& args, const string& name, const GeneralHeContext& context, size_t repeat = 100) {
-        bool is_ckks = context.params_host().scheme() == SchemeType::CKKS;
-        if (!is_ckks) return;
-        double scale = context.scale();
-        Timer timer;
-        size_t timer_conj = timer.register_timer(name + ".Conjugate");
-        GaloisKeys glk = context.key_generator().create_galois_keys(false);
-        GeneralVector message = context.random_simd_full();
-        Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale);
-        Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain);
-        for (size_t i = 0; i < repeat; i++) {
-            timer.tick(timer_conj);
-            Ciphertext cipher_conj = context.evaluator().complex_conjugate_new(cipher, glk);
-            timer.tock(timer_conj);
-            if (i == 0 && args.no_test_correct) {
-                auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_conj));
-                assert_true(context.near_equal(message.conjugate(), decrypted), "test_complex_conjugate failed.");
-            }
-        }
-        timer.print_divided(repeat);
-    }
-
-    void test_suite(const Arguments& args, const string& name, const GeneralHeContext& context, size_t repeat_count) {
-        bool is_ckks = context.params_host().scheme() == SchemeType::CKKS;
-        if (!args.no_bench_encode) test_encode_simd(args, name, context, repeat_count);
-        if (!args.no_bench_encode) test_encode_polynomial(args, name, context, repeat_count);
-        if (!args.no_bench_encrypt) test_encrypt(args, name, context, repeat_count);
-        if (!args.no_bench_negate) test_negate(args, name, context, repeat_count);
-        if (!args.no_bench_translate) test_translate(args, name, context, repeat_count);
-        if (!args.no_bench_translate_plain) test_translate_plain(args, name, context, repeat_count);
-        if (!args.no_bench_multiply_relinearize) test_multiply_relinearize(args, name, context, repeat_count);
-        if (!args.no_bench_multiply_plain) test_multiply_plain(args, name, context, repeat_count);
-        if (!args.no_bench_mod_switch_to_next) test_mod_switch_to_next(args, name, context, repeat_count);
-        if (is_ckks)
-            if (!args.no_bench_rescale_to_next) test_rescale_to_next(args, name, context, repeat_count);
-        if (!is_ckks) {
-            if (!args.no_bench_rotate_rows) test_rotate_rows(args, name, context, 1, repeat_count);
-            if (!args.no_bench_rotate_rows) test_rotate_rows(args, name, context, 7, repeat_count);
-            if (!args.no_bench_rotate_columns) test_rotate_columns(args, name, context, repeat_count);
-        } else {
-            if (!args.no_bench_rotate_vector) test_rotate_vector(args, name, context, 1, repeat_count);
-            if (!args.no_bench_rotate_vector) test_rotate_vector(args, name, context, 7, repeat_count);
-            if (!args.no_bench_complex_conjugate) test_complex_conjugate(args, name, context, repeat_count);
-        }
-    }
-
     void run_all(bool device, const Arguments& args) {
-        size_t repeat = args.repeat;
 
         if (args.scheme_bfv) {
             std::cout << "[BFV]" << std::endl;
-            GeneralHeContext bfv(device, SchemeType::BFV, args.poly_modulus_degree, args.log_t, args.log_q, true, args.seed);
-            test_suite(args, "BFV", bfv, repeat);
+            Benchmark bench_bfv(device, "BFV", SchemeType::BFV, args);
+            bench_bfv.test_suite();
         }
 
         if (args.scheme_ckks) {
             std::cout << "[CKKS]" << std::endl;
-            GeneralHeContext ckks(device, SchemeType::CKKS, args.poly_modulus_degree, args.log_t, args.log_q, true, args.seed, args.input_max, args.scale, args.tolerance);
-            test_suite(args, "CKKS", ckks, repeat);
+            Benchmark bench_ckks(device, "CKKS", SchemeType::CKKS, args);
+            bench_ckks.test_suite();
         }
 
         if (args.scheme_bgv) {
             std::cout << "[BGV]" << std::endl;
-            GeneralHeContext bgv(device, SchemeType::BGV, args.poly_modulus_degree, args.log_t, args.log_q, true, args.seed);
-            test_suite(args, "BGV", bgv, repeat);
+            Benchmark bench_bgv(device, "BGV", SchemeType::BGV, args);
+            bench_bgv.test_suite();
         }
     }
 
@@ -529,12 +810,14 @@ int main(int argc, char** argv) {
         return 0;
     } 
 
+    args.print_arguments();
+
     if (args.host) {
-        cout << "========= HOST =========" << endl;
+        cout << endl << "========= HOST =========" << endl;
         bench::run_all(false, args);
     }
     if (args.device) {
-        cout << "======== DEVICE ========" << endl;
+        cout << endl << "======== DEVICE ========" << endl;
         bench::run_all(true, args);
         troy::utils::MemoryPool::Destroy();
     }

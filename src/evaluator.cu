@@ -1728,7 +1728,7 @@ namespace troy {
             this->multiply_plain_normal_inplace(encrypted, plain, pool);
         } else if (encrypted_ntt && !plain_ntt) {
             Plaintext plain_copy = plain.clone(pool);
-            this->transform_plain_to_ntt_inplace(plain_copy, encrypted.parms_id());
+            this->transform_plain_to_ntt_inplace(plain_copy, encrypted.parms_id(), pool);
             this->multiply_plain_ntt_inplace(encrypted, plain_copy);
         } else { // !encrypted_ntt && plain_ntt
             this->transform_to_ntt_inplace(encrypted);
@@ -1841,7 +1841,7 @@ namespace troy {
                     plain_coeff_count, coeff_modulus_size,
                     plain.const_poly(), temp.reference(), plain_upper_half_threshold, plain_upper_half_increment
                 );
-                context_data->rns_tool().base_q().decompose_array(temp.reference());
+                context_data->rns_tool().base_q().decompose_array(temp.reference(), pool);
                 plain.poly().copy_from_slice(temp.const_reference());
             } else {
                 // Note that in this case plain_upper_half_increment holds its value in RNS form modulo the coeff_modulus

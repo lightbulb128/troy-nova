@@ -131,6 +131,7 @@ namespace troy { namespace bench {
     };
 
     class TimerSingle {
+        friend class TimerThreaded;
     private:
         Duration accumulated;
         size_t tabs;
@@ -156,10 +157,10 @@ namespace troy { namespace bench {
             accumulated += duration;
             count++;
         }
-        inline void print(const string& prompt) {
+        inline void print(const string& prompt) const {
             print_duration(prompt, tabs, accumulated, 1);
         }
-        inline void print_divided(const string& prompt, size_t divide_override = 0) {
+        inline void print_divided(const string& prompt, size_t divide_override = 0) const {
             size_t divide = divide_override == 0 ? count : divide_override;
             print_duration(prompt, tabs, accumulated, divide);
         }
@@ -171,6 +172,7 @@ namespace troy { namespace bench {
     };
 
     class Timer {
+        friend class TimerThreaded;
         vector<TimerSingle> timers;
         vector<string> prompts;
         size_t tabs;
@@ -197,12 +199,12 @@ namespace troy { namespace bench {
         inline void tock(size_t handle = 0) {
             timers[handle].tock();
         }
-        inline void print() {
+        inline void print() const {
             for (size_t i = 0; i < timers.size(); i++) {
                 timers[i].print(prompts[i]);
             }
         }
-        inline void print_divided(size_t divide_override = 0) {
+        inline void print_divided(size_t divide_override = 0) const {
             for (size_t i = 0; i < timers.size(); i++) {
                 timers[i].print_divided(prompts[i], divide_override);
             }
@@ -215,6 +217,23 @@ namespace troy { namespace bench {
             for (size_t i = 0; i < timers.size(); i++) {
                 timers[i].reset();
             }
+        }
+    };
+
+    class TimerThreaded {
+        vector<string> prompts;
+        vector<Duration> maxs;
+        vector<Duration> averages;
+        size_t tabs;
+    public:
+        TimerThreaded(const vector<Timer>& timers);
+        void print() const;
+        void print_divided(size_t divide) const;
+        static inline void Print(const vector<Timer>& timers) {
+            TimerThreaded(timers).print();
+        }
+        static inline void PrintDivided(const vector<Timer>& timers, size_t divide) {
+            TimerThreaded(timers).print_divided(divide);
         }
     };
 
