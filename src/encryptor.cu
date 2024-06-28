@@ -42,7 +42,7 @@ namespace troy {
         // Resize destination and save results
         destination.seed() = 0;
         bool device = (is_asymmetric) ? this->public_key_->on_device() : this->secret_key_->on_device();
-        if (device) destination.to_device_inplace();
+        if (device) destination.to_device_inplace(pool);
         else destination.to_host_inplace();
         destination.resize(this->context(), parms_id, 2);
         
@@ -192,7 +192,7 @@ namespace troy {
                 ConstSlice<utils::NTTTables> ntt_tables = context_data->small_ntt_tables();
                 
                 // c_{0} = pk_{0}*u + p*e_{0} + M
-                Plaintext plain_copy = plain.clone();
+                Plaintext plain_copy = plain.clone(pool);
                 // Resize to fit the entire NTT transformed (ciphertext size) polynomial
                 // Note that the new coefficients are automatically set to 0
                 plain_copy.resize(coeff_count * coeff_modulus_size);

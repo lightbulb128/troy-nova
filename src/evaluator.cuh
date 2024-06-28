@@ -89,7 +89,7 @@ namespace troy {
         void multiply_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline void multiply(const Ciphertext& encrypted1, const Ciphertext& encrypted2, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             destination = encrypted1.clone(pool);
-            multiply_inplace(destination, encrypted2);
+            multiply_inplace(destination, encrypted2, pool);
         }
         inline Ciphertext multiply_new(const Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;
@@ -100,7 +100,7 @@ namespace troy {
         void square_inplace(Ciphertext& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline void square(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             destination = encrypted.clone(pool);
-            square_inplace(destination);
+            square_inplace(destination, pool);
         }
         inline Ciphertext square_new(const Ciphertext& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;
@@ -377,15 +377,15 @@ namespace troy {
         
         Ciphertext pack_lwe_ciphertexts_new(const std::vector<LWECiphertext>& lwe_encrypted, const GaloisKeys& automorphism_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
 
-        void negacyclic_shift(const Ciphertext& encrypted, size_t shift, Ciphertext& destination) const;
+        void negacyclic_shift(const Ciphertext& encrypted, size_t shift, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline Ciphertext negacyclic_shift_new(const Ciphertext& encrypted, size_t shift, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;
-            negacyclic_shift(encrypted, shift, destination);
+            negacyclic_shift(encrypted, shift, destination, pool);
             return destination;
         }
         inline void negacyclic_shift_inplace(Ciphertext& encrypted, size_t shift, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext cloned = encrypted.clone(pool);
-            negacyclic_shift(cloned, shift, encrypted);
+            negacyclic_shift(cloned, shift, encrypted, pool);
         }
     };
 

@@ -34,6 +34,7 @@ namespace troy {namespace utils {
         std::multimap<void*, size_t> allocated;
         size_t total_allocated;
         size_t device_index;
+        bool denying = false;
 
         inline static void runtime_error(const char* prompt, cudaError_t status) {
             std::string msg = prompt;
@@ -111,6 +112,11 @@ namespace troy {namespace utils {
             if (status != cudaSuccess) {
                 runtime_error("[MemoryPool::MemoryPool] cudaGetDeviceProperties failed.", status);
             }
+            denying = false;
+        }
+
+        inline void deny(bool set = true) {
+            denying = set;
         }
 
         inline ~MemoryPool() {
@@ -118,6 +124,9 @@ namespace troy {namespace utils {
         }
 
         inline void* allocate(size_t required) {
+            if (denying) {
+                throw std::runtime_error("[MemoryPool::get] DEBUG: The pool is denying allocation.");
+            }
             std::unique_lock lock(mutex);
             auto iterator = unused.lower_bound(required);
             if (iterator == unused.end() || iterator->first >= required * 2) {
@@ -127,6 +136,10 @@ namespace troy {namespace utils {
                 unused.erase(iterator);
                 return ptr;
             }
+        }
+
+        inline void release(void* ptr) { // just an alias
+            give_back(ptr);
         }
 
         inline void release_unused() {
@@ -198,6 +211,7 @@ namespace troy {namespace utils {
         size_t total_allocated;
         bool destroyed;
         bool denying;
+        bool is_global_pool;
         size_t device_index;
 
         inline static void runtime_error(const char* prompt, cudaError_t status) {
@@ -211,6 +225,7 @@ namespace troy {namespace utils {
             std::unique_lock lock(global_pool_mutex);
             if (global_pool == nullptr) {
                 global_pool = std::make_shared<MemoryPool>();
+                global_pool->is_global_pool = true;
             }
         }
 
@@ -292,6 +307,7 @@ namespace troy {namespace utils {
             }
             destroyed = false;
             denying = false;
+            is_global_pool = false;
         }
 
         inline void deny(bool set = true) {
@@ -300,7 +316,13 @@ namespace troy {namespace utils {
 
         inline ~MemoryPool() {
             if (allocated.size() > 0 && !destroyed) {
-                std::cerr << "[MemoryPool::~MemoryPool] The singleton was not destroyed before the program exit.\n";
+                if (is_global_pool) {
+                    // Don't attempt to cuda-free any memory because the cuda context might already be destroyed for static object.
+                    std::cerr << "[MemoryPool::~MemoryPool] The global pool was not destroyed before the program exit.\n";
+                } else {
+                    // Other pools should be safe to be destroyed.
+                    destroy();
+                }
             }
             // if (zombie.size() > 0) {
             //     std::cerr << "[MemoryPool::~MemoryPool] The zombie set is not empty. There may be memory leak.\n";
@@ -377,9 +399,6 @@ namespace troy {namespace utils {
         }
 
         inline void release(void* ptr) { // just an alias
-            if (denying) {
-                throw std::runtime_error("[MemoryPool::release] DEBUG: The pool is denying allocation.");
-            }
             give_back(ptr);
         }
 
@@ -423,6 +442,7 @@ namespace troy {namespace utils {
         static std::shared_ptr<MemoryPool> global_pool;
         static std::mutex global_pool_mutex;
         size_t device_index;
+        bool denying;
 
         inline static void runtime_error(const char* prompt, cudaError_t status) {
             std::string msg = prompt;
@@ -461,9 +481,17 @@ namespace troy {namespace utils {
                 msg += cudaGetErrorString(status);
                 throw std::runtime_error(msg);
             }
+            denying = false;
+        }
+
+        inline void deny(bool set = true) {
+            denying = set;
         }
 
         inline void* allocate(size_t required) {
+            if (denying) {
+                throw std::runtime_error("[MemoryPool::get] DEBUG: The pool is denying allocation.");
+            }
             void* ptr = nullptr;
             set_device();
             cudaError_t status = cudaMalloc(&ptr, required);

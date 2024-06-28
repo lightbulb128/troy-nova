@@ -18,6 +18,7 @@ namespace troy {namespace utils {
         
         mutable std::shared_mutex permutation_tables_rwlock;
         mutable std::vector<Array<size_t>> permutation_tables;
+        mutable std::vector<bool> initialized;
 
         static Array<size_t> generate_table_ntt(size_t coeff_count_power, size_t galois_element);
 
@@ -31,6 +32,7 @@ namespace troy {namespace utils {
             this->coeff_count_power_ = other.coeff_count_power_;
             this->coeff_count_ = other.coeff_count_;
             this->permutation_tables = std::move(other.permutation_tables);
+            this->initialized = std::move(other.initialized);
         }
 
         inline GaloisTool& operator=(const GaloisTool& other) = delete;
@@ -41,6 +43,7 @@ namespace troy {namespace utils {
             // lock the other
             std::unique_lock<std::shared_mutex> lock(other.permutation_tables_rwlock);
             this->permutation_tables = std::move(other.permutation_tables);
+            this->initialized = std::move(other.initialized);
             // unlock the other
             lock.unlock();
             return *this;
@@ -59,10 +62,12 @@ namespace troy {namespace utils {
             for (size_t i = 0; i < this->permutation_tables.size(); i++) {
                 cloned.permutation_tables.push_back(this->permutation_tables[i].clone(pool));
             }
+            cloned.initialized = this->initialized;
             return std::move(cloned);
         }
 
         inline void to_device_inplace(MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+            std::unique_lock<std::shared_mutex> lock(permutation_tables_rwlock);
             if (device) {
                 return;
             }

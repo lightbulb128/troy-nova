@@ -1,4 +1,5 @@
 #include "galois.cuh"
+#include <thread>
 
 namespace troy {namespace utils {
 
@@ -12,6 +13,7 @@ namespace troy {namespace utils {
         this->device = false;
         this->permutation_tables = std::vector<Array<size_t>>();
         this->permutation_tables.reserve(coeff_count);
+        this->initialized = std::vector<bool>(coeff_count, false);
         for (size_t i = 0; i < coeff_count; i++) {
             this->permutation_tables.push_back(Array<size_t>());
         }
@@ -87,29 +89,43 @@ namespace troy {namespace utils {
     void GaloisTool::ensure_permutation_table(size_t galois_element, MemoryPoolHandle pool) const {
         size_t index = GaloisTool::get_index_from_element(galois_element);
 
-        // acquire read lock
+        // acquire lock
         std::shared_lock<std::shared_mutex> read_lock(this->permutation_tables_rwlock);
 
         // is empty?
-        bool need = this->permutation_tables[index].size() == 0;
+        if (this->initialized[index]) {
+            // std::cerr << "[" << std::this_thread::get_id() << "] (" << index << ") read_lock check return\n";
+            return;
+        }
 
-        if (!need) return;
-
-        // release read lock
         read_lock.unlock();
+        std::this_thread::yield();
+        
+        // std::cerr << "[" << std::this_thread::get_id() << "] (" << index << ") read_lock check proceed\n";
 
-        // acquire write lock
+        // acquire lock
         std::unique_lock<std::shared_mutex> write_lock(this->permutation_tables_rwlock);
+
+        // is empty?
+        if (this->initialized[index]) {
+            // std::cerr << "[" << std::this_thread::get_id() << "] (" << index << ") write_lock check return\n";
+            return;
+        } else {
+            // std::cerr << "[" << std::this_thread::get_id() << "] (" << index << ") write_lock check proceed\n";
+        }
+
         this->permutation_tables[index] = GaloisTool::generate_table_ntt(
             this->coeff_count_power(),
             galois_element
         );
         if (this->on_device()) {
             this->permutation_tables[index].to_device_inplace(pool);
+            pool->set_device();
+            cudaDeviceSynchronize();
         }
 
-        // release write lock
-        write_lock.unlock();
+        this->initialized[index] = true;
+        // std::cerr << "[" << std::this_thread::get_id() << "] (" << index << ") write_lock done\n";
     }
 
     static void host_apply_ps(const GaloisTool& self, ConstSlice<uint64_t> polys, size_t pcount, size_t galois_element, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
@@ -195,8 +211,13 @@ namespace troy {namespace utils {
         bool device = this->on_device();
         this->ensure_permutation_table(galois_element, pool);
         // obtain read lock
+        size_t index = GaloisTool::get_index_from_element(galois_element);
         std::shared_lock<std::shared_mutex> read_lock(this->permutation_tables_rwlock);
-        ConstSlice<size_t> permutation_table = this->permutation_tables[GaloisTool::get_index_from_element(galois_element)].const_reference();
+        if (!this->initialized[index]) {
+            throw std::logic_error("[GaloisTool::apply_ntt_ps] Permutation table not initialized");
+        }
+        ConstSlice<size_t> permutation_table = this->permutation_tables[index].const_reference();
+        
         if (!utils::device_compatible(permutation_table, polys, result)) {
             throw std::invalid_argument("[GaloisTool::apply_ntt_ps] Arguments are not on the same device");
         }
@@ -220,7 +241,5 @@ namespace troy {namespace utils {
                 permutation_table
             );
         }
-        // release read lock
-        read_lock.unlock();
     }
 }}

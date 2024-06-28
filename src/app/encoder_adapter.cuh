@@ -20,7 +20,7 @@ namespace troy::linear {
             return encoder.encode_polynomial_new(elements, pool);
         }
         inline std::vector<uint64_t> decrypt_outputs(const Decryptor& decryptor, const Ciphertext& ciphertext, MemoryPoolHandle pool) const {
-            return encoder.decode_polynomial_new(decryptor.decrypt_new(ciphertext, pool), pool);
+            return encoder.decode_polynomial_new(decryptor.decrypt_new(ciphertext));
         }
     };
 

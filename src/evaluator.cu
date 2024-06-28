@@ -226,6 +226,7 @@ namespace troy {
         // (8) Use Shenoy-Kumaresan method to convert the result to base q
 
         bool device = encrypted1.on_device();
+        if (device) encrypted1.to_device_inplace(pool);
         encrypted1.resize(this->context(), context_data->parms_id(), dest_size);
         // Allocate space for a base q output of behz_extend_base_convertToNtt for encrypted1
         Buffer<uint64_t> encrypted1_q(encrypted1_size, base_q_size, coeff_count, device, pool);
@@ -241,7 +242,7 @@ namespace troy {
         Buffer<uint64_t> temp(base_Bsk_m_tilde_size, coeff_count, device, pool);
         for (size_t i = 0; i < encrypted1_size; i++) {
             // (1) Convert from base q to base Bsk U {m_tilde}
-            rns_tool.fast_b_conv_m_tilde(encrypted1.const_poly(i), temp.reference());
+            rns_tool.fast_b_conv_m_tilde(encrypted1.const_poly(i), temp.reference(), pool);
             // (2) Reduce q-overflows in with Montgomery reduction, switching base to Bsk
             rns_tool.sm_mrq(temp.const_reference(), encrypted1_Bsk.poly(i));
         }
@@ -254,7 +255,7 @@ namespace troy {
         encrypted2_q.copy_from_slice(encrypted2.polys(0, encrypted2_size));
         utils::ntt_negacyclic_harvey_lazy_ps(encrypted2_q.reference(), encrypted2_size, coeff_count, base_q_ntt_tables);
         for (size_t i = 0; i < encrypted2_size; i++) {
-            rns_tool.fast_b_conv_m_tilde(encrypted2.poly(i), temp.reference());
+            rns_tool.fast_b_conv_m_tilde(encrypted2.poly(i), temp.reference(), pool);
             rns_tool.sm_mrq(temp.const_reference(), encrypted2_Bsk.poly(i));
         }
         utils::ntt_negacyclic_harvey_lazy_ps(encrypted2_Bsk.reference(), encrypted2_size, coeff_count, base_Bsk_ntt_tables);
@@ -336,9 +337,9 @@ namespace troy {
                 temp_q_Bsk.components(base_q_size, base_q_size + base_Bsk_size)
             );
             // Step (7): divide by q and floor, producing a result in base Bsk
-            rns_tool.fast_floor(temp_q_Bsk.const_reference(), temp_Bsk.reference());
+            rns_tool.fast_floor(temp_q_Bsk.const_reference(), temp_Bsk.reference(), pool);
             // Step (8): use Shenoy-Kumaresan method to convert the result to base q and write to encrypted1
-            rns_tool.fast_b_conv_sk(temp_Bsk.const_reference(), encrypted1.poly(i));
+            rns_tool.fast_b_conv_sk(temp_Bsk.const_reference(), encrypted1.poly(i), pool);
         }
     }
     
@@ -358,8 +359,9 @@ namespace troy {
         // Determine destination.size()
         size_t dest_size = encrypted1_size + encrypted2_size - 1;
 
-        encrypted1.resize(this->context(), context_data->parms_id(), dest_size);
         bool device = encrypted1.on_device();
+        if (device) encrypted1.to_device_inplace(pool);
+        encrypted1.resize(this->context(), context_data->parms_id(), dest_size);
         Buffer<uint64_t> temp(dest_size, coeff_modulus_size, coeff_count, device, pool);
 
         Buffer<uint64_t> prod(coeff_modulus_size, coeff_count, device, pool);
@@ -413,8 +415,9 @@ namespace troy {
         // Determine destination.size()
         size_t dest_size = encrypted1_size + encrypted2_size - 1;
 
-        encrypted1.resize(this->context(), context_data->parms_id(), dest_size);
         bool device = encrypted1.on_device();
+        if (device) encrypted1.to_device_inplace(pool);
+        encrypted1.resize(this->context(), context_data->parms_id(), dest_size);
 
         Buffer<uint64_t> temp(dest_size, coeff_modulus_size, coeff_count, device, pool);
 
@@ -518,6 +521,7 @@ namespace troy {
         // (8) Use Shenoy-Kumaresan method to convert the result to base q
 
         bool device = encrypted.on_device();
+        if (device) encrypted.to_device_inplace(pool);
         encrypted.resize(this->context(), context_data->parms_id(), dest_size);
         // Allocate space for a base q output of behz_extend_base_convertToNtt for encrypted1
         Buffer<uint64_t> encrypted_q(encrypted_size, base_q_size, coeff_count, device, pool);
@@ -533,7 +537,7 @@ namespace troy {
         Buffer<uint64_t> temp(base_Bsk_m_tilde_size, coeff_count, device, pool);
         for (size_t i = 0; i < encrypted_size; i++) {
             // (1) Convert from base q to base Bsk U {m_tilde}
-            rns_tool.fast_b_conv_m_tilde(encrypted.const_poly(i), temp.reference());
+            rns_tool.fast_b_conv_m_tilde(encrypted.const_poly(i), temp.reference(), pool);
             // (2) Reduce q-overflows in with Montgomery reduction, switching base to Bsk
             rns_tool.sm_mrq(temp.const_reference(), encrypted_Bsk.poly(i));
         }
@@ -591,9 +595,9 @@ namespace troy {
                 temp_q_Bsk.components(base_q_size, base_q_size + base_Bsk_size)
             );
             // Step (7): divide by q and floor, producing a result in base Bsk
-            rns_tool.fast_floor(temp_q_Bsk.const_reference(), temp_Bsk.reference());
+            rns_tool.fast_floor(temp_q_Bsk.const_reference(), temp_Bsk.reference(), pool);
             // Step (8): use Shenoy-Kumaresan method to convert the result to base q and write to encrypted1
-            rns_tool.fast_b_conv_sk(temp_Bsk.const_reference(), encrypted.poly(i));
+            rns_tool.fast_b_conv_sk(temp_Bsk.const_reference(), encrypted.poly(i), pool);
         }
     }
 
@@ -616,8 +620,9 @@ namespace troy {
         // Determine destination.size()
         size_t dest_size = 2 * encrypted_size - 1;
 
-        encrypted.resize(this->context(), context_data->parms_id(), dest_size);
         bool device = encrypted.on_device();
+        if (device) encrypted.to_device_inplace(pool);
+        encrypted.resize(this->context(), context_data->parms_id(), dest_size);
         
         Slice<uint64_t> c0 = encrypted.poly(0);
         Slice<uint64_t> c1 = encrypted.poly(1);
@@ -652,9 +657,9 @@ namespace troy {
         
         // Determine destination.size()
         size_t dest_size = 2 * encrypted_size - 1;
-
-        encrypted.resize(this->context(), context_data->parms_id(), dest_size);
         bool device = encrypted.on_device();
+        if (device) encrypted.to_device_inplace(pool);
+        encrypted.resize(this->context(), context_data->parms_id(), dest_size);
 
         Buffer<uint64_t> temp(dest_size, coeff_modulus_size, coeff_count, device, pool);
 
@@ -1373,7 +1378,7 @@ namespace troy {
         size_t coeff_count = next_parms.poly_modulus_degree();
         size_t next_coeff_modulus_size = next_parms.coeff_modulus().size();
 
-        Ciphertext encrypted_copy = encrypted.clone();
+        Ciphertext encrypted_copy = encrypted.clone(pool);
         switch (scheme) {
             case SchemeType::BFV: {
                 for (size_t i = 0; i < encrypted_size; i++) {
@@ -1722,7 +1727,7 @@ namespace troy {
         } else if (!encrypted_ntt && !plain_ntt) {
             this->multiply_plain_normal_inplace(encrypted, plain, pool);
         } else if (encrypted_ntt && !plain_ntt) {
-            Plaintext plain_copy = plain.clone();
+            Plaintext plain_copy = plain.clone(pool);
             this->transform_plain_to_ntt_inplace(plain_copy, encrypted.parms_id());
             this->multiply_plain_ntt_inplace(encrypted, plain_copy);
         } else { // !encrypted_ntt && plain_ntt
@@ -2004,7 +2009,7 @@ namespace troy {
         this->apply_galois_inplace(encrypted, galois_tool.get_element_from_step(0), galois_keys, pool);
     }
 
-    void Evaluator::negacyclic_shift(const Ciphertext& encrypted, size_t shift, Ciphertext& destination) const {
+    void Evaluator::negacyclic_shift(const Ciphertext& encrypted, size_t shift, Ciphertext& destination, MemoryPoolHandle pool) const {
         check_no_seed("[Evaluator::negacyclic_shift]", encrypted);
         ContextDataPointer context_data = this->get_context_data("[Evaluator::negacyclic_shift]", encrypted.parms_id());
         const EncryptionParameters& parms = context_data->parms();
@@ -2012,7 +2017,7 @@ namespace troy {
         ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
         size_t coeff_modulus_size = coeff_modulus.size();
 
-        destination = encrypted.clone();
+        destination = encrypted.clone(pool);
         utils::negacyclic_shift_ps(
             encrypted.polys(0, encrypted.polynomial_count()),
             shift, encrypted.polynomial_count(), coeff_count, coeff_modulus, 
@@ -2176,7 +2181,7 @@ namespace troy {
                 rlwes[i] = this->assemble_lwe_new(lwes[index], pool);
                 this->divide_by_poly_modulus_degree_inplace(rlwes[i]);
             } else {
-                rlwes[i] = zero_rlwe;
+                rlwes[i] = zero_rlwe.clone(pool);
             }
         }
         Ciphertext temp(std::move(zero_rlwe));

@@ -98,7 +98,7 @@ namespace troy {
         if (encrypted.polynomial_count() < utils::HE_CIPHERTEXT_SIZE_MIN) {
             throw std::invalid_argument("[Decryptor::decrypt] Ciphertext is empty.");
         }
-        if (encrypted.on_device()) destination.to_device_inplace();
+        if (encrypted.on_device()) destination.to_device_inplace(pool);
         else destination.to_host_inplace();
         SchemeType scheme = this->context()->first_context_data().value()->parms().scheme();
         switch (scheme) {
@@ -124,7 +124,7 @@ namespace troy {
 
         // Make a temp destination for all the arithmetic mod qi before calling FastBConverse
         bool device = encrypted.on_device();
-        if (device) destination.to_device_inplace();
+        if (device) destination.to_device_inplace(pool);
         else destination.to_host_inplace();
         
         destination.resize_rns(*this->context_, encrypted.parms_id());
@@ -146,13 +146,13 @@ namespace troy {
         size_t coeff_count = parms.poly_modulus_degree();
 
         Plaintext temp;
-        this->bfv_decrypt_without_scaling_down(encrypted, temp);
+        this->bfv_decrypt_without_scaling_down(encrypted, temp, pool);
         
         // Add Delta / 2 and now we have something which is Delta * (m + epsilon) where epsilon < 1
         // Therefore, we can (integer) divide by Delta and the answer will round down to m.
 
         bool device = encrypted.on_device();
-        if (device) destination.to_device_inplace();
+        if (device) destination.to_device_inplace(pool);
         else destination.to_host_inplace();
 
         // Allocate a full size destination to write to
@@ -161,7 +161,7 @@ namespace troy {
 
         // Divide scaling variant using BEHZ FullRNS techniques
         context_data->rns_tool().decrypt_scale_and_round(
-            temp.const_reference(), destination.poly()
+            temp.const_reference(), destination.poly(), pool
         );
         destination.is_ntt_form() = false;
         destination.coeff_modulus_size() = coeff_modulus_size;
@@ -181,7 +181,7 @@ namespace troy {
         size_t rns_poly_uint64_count = coeff_count * coeff_modulus_size;
         
         bool device = encrypted.on_device();
-        if (device) destination.to_device_inplace();
+        if (device) destination.to_device_inplace(pool);
         else destination.to_host_inplace();
 
         // Decryption consists in finding
@@ -218,7 +218,7 @@ namespace troy {
         
         // Make a temp destination for all the arithmetic mod qi before calling FastBConverse
         bool device = encrypted.on_device();
-        if (device) destination.to_device_inplace();
+        if (device) destination.to_device_inplace(pool);
         else destination.to_host_inplace();
         Array<uint64_t> tmp_dest_modq(coeff_count * coeff_modulus_size, device, pool);
 
@@ -232,7 +232,7 @@ namespace troy {
 
         // Divide scaling variant using BEHZ FullRNS techniques
         context_data->rns_tool().decrypt_mod_t(
-            tmp_dest_modq.const_reference(), destination.poly()
+            tmp_dest_modq.const_reference(), destination.poly(), pool
         );
         
         if (encrypted.correction_factor() != 1) {
@@ -316,7 +316,7 @@ namespace troy {
         }
 
         // CRT-compose the noise
-        context_data->rns_tool().base_q().compose_array(noise_poly.reference());
+        context_data->rns_tool().base_q().compose_array(noise_poly.reference(), pool);
 
         // Next we compute the infinity norm mod parms.coeffModulus()
         Array<uint64_t> norm(coeff_modulus_size, false, nullptr);

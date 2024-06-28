@@ -439,6 +439,16 @@ namespace tool {
             }
         }
 
+        inline size_t coeff_count() {
+            if (batch_) {
+                return batch_->slot_count();
+            } else if (ckks_) {
+                return ckks_->slot_count() * 2;
+            } else {
+                throw std::invalid_argument("[GeneralEncoder::coeff_count] Encoder not initialized");
+            }
+        }
+
     };
 
     class GeneralHeContext {
@@ -546,6 +556,9 @@ namespace tool {
         }
         inline bool near_equal(const GeneralVector& vec1, const GeneralVector& vec2) const {
             return vec1.near_equal(vec2, tolerance_);
+        }
+        inline size_t coeff_count() const {
+            return encoder_->coeff_count();
         }
         
     };

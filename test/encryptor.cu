@@ -92,8 +92,6 @@ namespace encryptor {
             ASSERT_TRUE(same_vector(message_uint64, decoded_uint64));
         }
 
-        return; // TODO: remove this
-
         // encrypt zero, asymmetric
         if (ckks) for (size_t i = 0; i < slot_count; i++) message_complex64[i] = 0;
         else for (size_t i = 0; i < slot_count; i++) message_uint64[i] = 0;

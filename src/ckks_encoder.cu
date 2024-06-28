@@ -663,7 +663,7 @@ namespace troy {
         // Verify that the values are not too large to fit in coeff_modulus
         // Note that we have an extra + 1 for the sign bit
         // Don't compute logarithmis of numbers less than 1
-        double max_coeff = reduction::max(real_values);
+        double max_coeff = reduction::max(real_values, pool);
         size_t max_coeff_bit_count = static_cast<size_t>(std::ceil(std::log2(std::max(max_coeff, 1.0))));
 
         double two_pow_64 = std::pow(2.0, 64.0);
@@ -1113,6 +1113,7 @@ namespace troy {
             throw std::invalid_argument("[CKKSEncoder::decode_internal_simd] Plaintext is not in NTT form.");
         }
         size_t slots = this->slot_count();
+        bool device = plain.on_device();
         destination.resize(slots);
 
         std::optional<ContextDataPointer> context_data_optional = this->context()->get_context_data(plain.parms_id());
@@ -1125,7 +1126,6 @@ namespace troy {
         size_t coeff_modulus_size = coeff_modulus.size();
         size_t coeff_count = parms.poly_modulus_degree();
         
-        bool device = plain.on_device();
         if (!utils::same(device, this->on_device(), context_data->on_device(), plain.on_device())) {
             throw std::invalid_argument("[CKKSEncoder::decode_internal_simd] Operands must be on the same device.");
         }

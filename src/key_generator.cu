@@ -1,4 +1,5 @@
 #include "key_generator.cuh"
+#include <thread>
 
 namespace troy {
 
@@ -140,8 +141,7 @@ namespace troy {
         const EncryptionParameters& key_parms = key_context_data->parms();
         size_t coeff_count = key_parms.poly_modulus_degree();
         ConstSlice<Modulus> key_modulus = key_parms.coeff_modulus();
-        Array<Modulus> key_modulus_host = Array<Modulus>::create_and_copy_from_slice(key_modulus, pool);
-        key_modulus_host.to_host_inplace();
+        Array<Modulus> key_modulus_host = Array<Modulus>::create_and_copy_from_slice(key_modulus, false, nullptr);
         size_t decomp_mod_count = this->context()->first_context_data().value()->parms().coeff_modulus().size();
         ParmsID key_parms_id = key_context_data->parms_id();
 

@@ -305,7 +305,7 @@ namespace troy { namespace linear {
                 size_t uc = std::min(lc + output_channel_block, output_channels);
                 // printf("Decrypting block [%lu][%lu]\n", eb, lc / output_channel_block);
                 decryptor.decrypt(outputs[eb][lc / output_channel_block], encoded, pool);
-                encoder.decode_polynomial(encoded, buffer, pool);
+                encoder.decode_polynomial(encoded, buffer);
                 for (size_t b = lb; b < ub; b++) {
                     for (size_t c = lc; c < uc; c++) {
                         for (size_t i = 0; i < yh; i++) {

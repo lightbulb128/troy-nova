@@ -34,14 +34,14 @@ namespace troy {
         void decrypt(const Ciphertext& encrypted, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline Plaintext decrypt_new(const Ciphertext& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Plaintext destination;
-            decrypt(encrypted, destination);
+            decrypt(encrypted, destination, pool);
             return destination;
         }
 
         void bfv_decrypt_without_scaling_down(const Ciphertext& encrypted, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline Plaintext bfv_decrypt_without_scaling_down_new(const Ciphertext& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Plaintext destination;
-            bfv_decrypt_without_scaling_down(encrypted, destination);
+            bfv_decrypt_without_scaling_down(encrypted, destination, pool);
             return destination;
         }
 
