@@ -56,7 +56,7 @@ namespace troy {
         inline void encode_complex64_simd(
             const std::vector<std::complex<double>>& values, 
             std::optional<ParmsID> parms_id, double scale, Plaintext& destination,
-            MemoryPoolHandle pool
+            MemoryPoolHandle pool = MemoryPool::GlobalPool()
         ) const {
             ParmsID p = parms_id.value_or(context_->first_parms_id());
             encode_internal_complex_simd(values, p, scale, destination, pool);
