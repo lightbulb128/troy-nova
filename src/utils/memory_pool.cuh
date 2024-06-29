@@ -62,7 +62,7 @@ namespace troy {namespace utils {
         }
 
         inline void* try_allocate(size_t required) {
-            // here we must already have the lock
+            std::unique_lock lock(mutex);
             size_t free, total;
             set_device();
             cudaError_t status = cudaMemGetInfo(&free, &total);
@@ -70,7 +70,9 @@ namespace troy {namespace utils {
                 runtime_error("[MemoryPool::try_allocate] cudaMemGetInfo failed", status);
             }
             if (free < required + PRESERVED_MEMORY_BYTES) {
+                lock.unlock();
                 release_unused();
+                lock.lock();
                 // try again
                 set_device();
                 status = cudaMemGetInfo(&free, &total);
@@ -141,6 +143,7 @@ namespace troy {namespace utils {
             std::unique_lock lock(mutex);
             auto iterator = unused.lower_bound(required);
             if (iterator == unused.end() || iterator->first >= required * 2) {
+                lock.unlock();
                 return try_allocate(required);
             } else {
                 void* ptr = iterator->second;
@@ -241,7 +244,7 @@ namespace troy {namespace utils {
         }
 
         inline void* try_allocate(size_t required) {
-            // here we must already have the lock
+            std::unique_lock lock(mutex);
             size_t free, total;
             set_device();
             cudaError_t status = cudaMemGetInfo(&free, &total);
@@ -249,7 +252,9 @@ namespace troy {namespace utils {
                 runtime_error("[MemoryPool::try_allocate] cudaMemGetInfo failed", status);
             }
             if (free < required + PRESERVED_MEMORY_BYTES) {
+                lock.unlock();
                 release_unused();
+                lock.lock();
                 // try again
                 set_device();
                 status = cudaMemGetInfo(&free, &total);
@@ -350,6 +355,7 @@ namespace troy {namespace utils {
             std::unique_lock lock(mutex);
             auto iterator = unused.lower_bound(required);
             if (iterator == unused.end() || iterator->first >= required * 2) {
+                lock.unlock();
                 return try_allocate(required);
             } else {
                 void* ptr = iterator->second;

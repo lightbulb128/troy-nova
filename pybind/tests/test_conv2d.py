@@ -1,4 +1,4 @@
-from test import GeneralVectorDataType, GeneralEncoder, GeneralVector, GeneralHeContext
+from utils import GeneralVectorDataType, GeneralEncoder, GeneralVector, GeneralHeContext
 import pytroy
 from pytroy import SchemeType
 import numpy as np
@@ -73,7 +73,7 @@ class Heconv2dTest:
         self.tester.assertTrue(ghe.near_equal(decrypted, truth))
 
 
-def create_test_class(ghe: GeneralHeContext):
+def create_test_class(name, ghe: GeneralHeContext):
 
     class UnnamedClass(unittest.TestCase):
 
@@ -86,52 +86,29 @@ def create_test_class(ghe: GeneralHeContext):
         UnnamedClass.test_conv2d_small_no_pack = lambda self: self.tester.test_conv2d(2, 3, 6, 7, 9, 3, 5, mod_switch_to_next=False)
         UnnamedClass.test_conv2d_medium_no_pack = lambda self: self.tester.test_conv2d(2, 3, 10, 56, 56, 10, 10, mod_switch_to_next=False)
 
-    return UnnamedClass
+    return type(name, (UnnamedClass,), {})
 
 class HostTestSuite(unittest.TestSuite):
 
     def __init__(self):
         super().__init__()
-        test_case = create_test_class(GeneralHeContext(False, SchemeType.BFV, 8192, 20, [60, 40, 40, 60], True, 0x123))
+        test_case = create_test_class("HostConv2d", GeneralHeContext(False, SchemeType.BFV, 8192, 20, [60, 40, 40, 60], True, 0x123))
         self.addTest(unittest.makeSuite(test_case))
 
 class DeviceTestSuite(unittest.TestSuite):
 
     def __init__(self):
         super().__init__()
-        test_case = create_test_class(GeneralHeContext(True, SchemeType.BFV, 8192, 20, [60, 40, 40, 60], True, 0x123))
+        test_case = create_test_class("DeviceConv2d", GeneralHeContext(True, SchemeType.BFV, 8192, 20, [60, 40, 40, 60], True, 0x123))
         self.addTest(unittest.makeSuite(test_case))
 
-
-def custom_main():
-    print("There is nothing here.")
+def get_suite():
+    suite = unittest.TestSuite()
+    suite.addTest(HostTestSuite())
+    suite.addTest(DeviceTestSuite())
+    return suite
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--custom", action="store_true")
-
-    args = parser.parse_args()
-
     pytroy.initialize_kernel(0)
-
-    if args.custom:
-
-        custom_main()
-
-    else:
-
-        # run host suite
-        print("===== Running host test suite =====")
-        suite = HostTestSuite()
-        unittest.TextTestRunner().run(suite)
-        print("===== Host test OK =====")
-        print()
-
-        # run device suite
-        print("===== Running device test suite =====")
-        suite = DeviceTestSuite()
-        unittest.TextTestRunner().run(suite)
-        print("===== Device test OK =====")
-        print("")
-
+    unittest.TextTestRunner(verbosity=2).run(get_suite())
     pytroy.destroy_memory_pool()

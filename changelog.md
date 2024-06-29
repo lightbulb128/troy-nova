@@ -27,6 +27,8 @@
 
 - Implement `invariant_noist_budget` in `Decryptor`, available for BFV and BGV.
 
-## 2024-06-27
+## 2024-06-29
 
 - Allow user to create `MemoryPoolHandle`s and supply them to API calls.
+    - Add multithread tests and benchmark.
+    - Update pybind11 encapsulation and test folder structure.

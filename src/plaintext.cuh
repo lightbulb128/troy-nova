@@ -66,7 +66,7 @@ namespace troy {
             this->data_.to_host_inplace();
         }
 
-        inline Plaintext to_device(MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+        inline Plaintext to_device(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Plaintext result = this->clone(pool);
             result.to_device_inplace(pool);
             return result;

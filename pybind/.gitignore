@@ -7,3 +7,4 @@ __init__.pyi
 pytroy/
 reference.txt
 __pycache__/
+.pytest_cache/

@@ -73,12 +73,12 @@ namespace troy {
         inline void save(std::ostream& stream) const {
             sk.save(stream);
         }
-        inline void load(std::istream& stream) {
-            sk.load(stream);
+        inline void load(std::istream& stream, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+            sk.load(stream, pool);
         }
-        inline static SecretKey load_new(std::istream& stream) {
+        inline static SecretKey load_new(std::istream& stream, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
             SecretKey sk;
-            sk.load(stream);
+            sk.load(stream, pool);
             return sk;
         }
         inline size_t serialized_size() const {
