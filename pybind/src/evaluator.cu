@@ -18,24 +18,24 @@ void register_evaluator(pybind11::module& m) {
             return self.negate_new(encrypted, nullopt_default_pool(pool));
         }, py::arg("encrypted"), MEMORY_POOL_ARGUMENT)
 
-        // add(encrypted1, encrypted2, destination, pool). add_inplace requires no pool.
+        // add(encrypted1, encrypted2, destination, pool). 
         .def("add", [](const Evaluator& self, const Ciphertext& encrypted1, const Ciphertext& encrypted2, Ciphertext& destination, MemoryPoolHandleArgument pool) {
             self.add(encrypted1, encrypted2, destination, nullopt_default_pool(pool));
         }, py::arg("encrypted1"), py::arg("encrypted2"), py::arg("destination"), MEMORY_POOL_ARGUMENT)
-        .def("add_inplace", [](const Evaluator& self, Ciphertext& encrypted1, const Ciphertext& encrypted2) {
-            self.add_inplace(encrypted1, encrypted2);
-        }, py::arg("encrypted1"), py::arg("encrypted2"))
+        .def("add_inplace", [](const Evaluator& self, Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandleArgument pool) {
+            self.add_inplace(encrypted1, encrypted2, nullopt_default_pool(pool));
+        }, py::arg("encrypted1"), py::arg("encrypted2"), MEMORY_POOL_ARGUMENT)
         .def("add_new", [](const Evaluator& self, const Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandleArgument pool) {
             return self.add_new(encrypted1, encrypted2, nullopt_default_pool(pool));
         }, py::arg("encrypted1"), py::arg("encrypted2"), MEMORY_POOL_ARGUMENT)
 
-        // sub(encrypted1, encrypted2, destination, pool). sub_inplace requires no pool.
+        // sub(encrypted1, encrypted2, destination, pool)
         .def("sub", [](const Evaluator& self, const Ciphertext& encrypted1, const Ciphertext& encrypted2, Ciphertext& destination, MemoryPoolHandleArgument pool) {
             self.sub(encrypted1, encrypted2, destination, nullopt_default_pool(pool));
         }, py::arg("encrypted1"), py::arg("encrypted2"), py::arg("destination"), MEMORY_POOL_ARGUMENT)
-        .def("sub_inplace", [](const Evaluator& self, Ciphertext& encrypted1, const Ciphertext& encrypted2) {
-            self.sub_inplace(encrypted1, encrypted2);
-        }, py::arg("encrypted1"), py::arg("encrypted2"))
+        .def("sub_inplace", [](const Evaluator& self, Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandleArgument pool) {
+            self.sub_inplace(encrypted1, encrypted2, nullopt_default_pool(pool));
+        }, py::arg("encrypted1"), py::arg("encrypted2"), MEMORY_POOL_ARGUMENT)
         .def("sub_new", [](const Evaluator& self, const Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandleArgument pool) {
             return self.sub_new(encrypted1, encrypted2, nullopt_default_pool(pool));
         }, py::arg("encrypted1"), py::arg("encrypted2"), MEMORY_POOL_ARGUMENT)

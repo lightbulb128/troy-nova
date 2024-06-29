@@ -270,7 +270,7 @@ namespace troy { namespace linear {
                     evaluator.multiply_plain(a[b][i], w[i][j], prod, pool);
                     if (i==0) outVecs[j] = std::move(prod);
                     else {
-                        evaluator.add_inplace(outVecs[j], prod);
+                        evaluator.add_inplace(outVecs[j], prod, pool);
                     }
                 }
             }
@@ -296,7 +296,7 @@ namespace troy { namespace linear {
                     evaluator.multiply(a[b][i], w[i][j], prod, pool);
                     if (i==0) outVecs[j] = std::move(prod);
                     else {
-                        evaluator.add_inplace(outVecs[j], prod);
+                        evaluator.add_inplace(outVecs[j], prod, pool);
                     }
                 }
             }
@@ -322,7 +322,7 @@ namespace troy { namespace linear {
                     evaluator.multiply_plain(w[i][j], a[b][i], prod, pool);
                     if (i==0) outVecs[j] = std::move(prod);
                     else {
-                        evaluator.add_inplace(outVecs[j], prod);
+                        evaluator.add_inplace(outVecs[j], prod, pool);
                     }
                 }
             }
@@ -534,34 +534,39 @@ namespace troy { namespace linear {
             field_trace_n *= 2;
         }
 
-        Ciphertext buffer = cipher.data()[0][0];
-        Ciphertext shifted = buffer;
+        Ciphertext buffer = cipher.data()[0][0].clone(pool);
+        Ciphertext shifted = buffer.clone(pool);
         for (size_t i = 0; i < cipher.data().size(); i++) {
             for (size_t j = 0; j < cipher.data()[0].size(); j++) {
                 size_t shift = packSlots - 1;
-                Ciphertext ciphertext = cipher.data()[i][j].clone();
+                Ciphertext ciphertext = cipher.data()[i][j].clone(pool);
                 if (is_ntt) evaluator.transform_from_ntt_inplace(ciphertext);
                 if (shift != 0) {
-                    evaluator.negacyclic_shift(ciphertext, 2 * slot_count - shift, buffer);
+                    evaluator.negacyclic_shift(ciphertext, 2 * slot_count - shift, buffer, pool);
                 } else {
-                    buffer = ciphertext;
+                    buffer = ciphertext.clone(pool);
                 }
+                
                 evaluator.divide_by_poly_modulus_degree_inplace(buffer, slot_count / packSlots);
                 if (is_ntt) evaluator.transform_to_ntt_inplace(buffer);
+                
                 evaluator.field_trace_inplace(buffer, autoKey, field_trace_logn, pool);
                 if (is_ntt) evaluator.transform_from_ntt_inplace(buffer);
+                
                 shift = currentSlot;
                 if (shift != 0) {
-                    evaluator.negacyclic_shift(buffer, shift, shifted);
+                    evaluator.negacyclic_shift(buffer, shift, shifted, pool);
                 } else {
-                    shifted = buffer;
+                    shifted = buffer.clone(pool);
                 }
+
                 if (currentSet == false) {
-                    current = shifted;
+                    current = shifted.clone(pool);
                     currentSet = true;
                 } else {
-                    evaluator.add_inplace(current, shifted);
+                    evaluator.add_inplace(current, shifted, pool);
                 }
+
                 currentSlot += 1;
                 if (currentSlot == packSlots) {
                     currentSlot = 0; currentSet = false;
@@ -628,7 +633,7 @@ namespace troy { namespace linear {
                     for (size_t i = li; i < ui; i++)
                         for (size_t j = lj; j < uj; j++) 
                             required[rid++] = (i - li) * input_block * output_block + (j - lj) * input_block + input_block - 1;
-                    x[di][dj].save_terms(stream, context, required);
+                    x[di][dj].save_terms(stream, context, required, pool);
                     dj += 1;
                 }
                 di += 1;

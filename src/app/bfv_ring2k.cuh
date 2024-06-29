@@ -108,7 +108,18 @@ namespace troy::linear {
 
             inline HeContextPointer context() const noexcept { return context_; }
             inline size_t t_bit_length() const noexcept { return t_bit_length_; }
+            inline T t_mask() const noexcept { 
+                if constexpr (std::is_same_v<T, uint32_t>) {
+                    if (t_bit_length_ == 32) return static_cast<T>(-1); else return (static_cast<T>(1) << t_bit_length_) - 1;
+                } else if constexpr (std::is_same_v<T, uint64_t>) {
+                    if (t_bit_length_ == 64) return static_cast<T>(-1); else return (static_cast<T>(1) << t_bit_length_) - 1;
+                } else {
+                    static_assert(std::is_same_v<T, __uint128_t>);
+                    if (t_bit_length_ == 128) return static_cast<T>(-1); else return (static_cast<T>(1) << t_bit_length_) - 1;
+                }
+            }
             inline bool on_device() const noexcept { return context_->on_device(); }
+            inline size_t slot_count() const { return context_->first_context_data_pointer()->parms().poly_modulus_degree();}
 
             PolynomialEncoderRing2k(HeContextPointer context, size_t t_bit_length);
             std::optional<std::shared_ptr<PolynomialEncoderRNSHelper<T>>> get_helper(const ParmsID& parms_id) const {

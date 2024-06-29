@@ -456,7 +456,7 @@ namespace troy::linear {
 
         // 2-1 FastBase convert from baseQ to {gamma}
         Array<uint64_t> base_on_gamma(coeff_count, device, pool);
-        base_Q_to_gamma_.fast_convert_array(tmp.const_reference(), base_on_gamma.reference());
+        base_Q_to_gamma_.fast_convert_array(tmp.const_reference(), base_on_gamma.reference(), pool);
         // 2-2 Then multiply with -Q^{-1} mod gamma
         troy::utils::multiply_uint64operand_inplace(
             base_on_gamma.reference(), neg_inv_Q_mod_gamma_.as_const_pointer(),

@@ -32,6 +32,17 @@ namespace troy { namespace linear {
             return inner[i];
         }
 
+        inline Plain2d clone(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            Plain2d result;
+            for (const std::vector<Plaintext>& row : inner) {
+                std::vector<Plaintext>& new_row = result.new_row();
+                for (const Plaintext& plain : row) {
+                    new_row.push_back(plain.clone(pool));
+                }
+            }
+            return result;
+        }
+
         inline size_t rows() const {
             return inner.size();
         }
@@ -72,7 +83,7 @@ namespace troy { namespace linear {
 
 
         Cipher2d translate(const Evaluator& evaluator, const Cipher2d& other, bool subtract, MemoryPoolHandle pool) const;
-        void translate_inplace(const Evaluator& evaluator, const Cipher2d& other, bool subtract);
+        void translate_inplace(const Evaluator& evaluator, const Cipher2d& other, bool subtract, MemoryPoolHandle pool);
         Cipher2d translate_plain(const Evaluator& evaluator, const Plain2d& other, bool subtract, MemoryPoolHandle pool) const;
         void translate_plain_inplace(const Evaluator& evaluator, const Plain2d& other, bool subtract, MemoryPoolHandle pool);
 
@@ -92,6 +103,17 @@ namespace troy { namespace linear {
         }
         inline std::vector<Ciphertext>& operator[](size_t i) {
             return inner[i];
+        }
+
+        inline Cipher2d clone(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            Cipher2d result;
+            for (const std::vector<Ciphertext>& row : inner) {
+                std::vector<Ciphertext>& new_row = result.new_row();
+                for (const Ciphertext& plain : row) {
+                    new_row.push_back(plain.clone(pool));
+                }
+            }
+            return result;
         }
 
         inline size_t rows() const {
@@ -184,8 +206,8 @@ namespace troy { namespace linear {
         inline Cipher2d add(const Evaluator& evaluator, const Cipher2d& other, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             return translate(evaluator, other, false, pool);
         }
-        inline void add_inplace(const Evaluator& evaluator, const Cipher2d& other) {
-            translate_inplace(evaluator, other, false);
+        inline void add_inplace(const Evaluator& evaluator, const Cipher2d& other, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+            translate_inplace(evaluator, other, false, pool);
         }
         inline Cipher2d add_plain(const Evaluator& evaluator, const Plain2d& other, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             return translate_plain(evaluator, other, false, pool);
@@ -196,8 +218,8 @@ namespace troy { namespace linear {
         inline Cipher2d sub(const Evaluator& evaluator, const Cipher2d& other, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             return translate(evaluator, other, true, pool);
         }
-        inline void sub_inplace(const Evaluator& evaluator, const Cipher2d& other) {
-            translate_inplace(evaluator, other, true);
+        inline void sub_inplace(const Evaluator& evaluator, const Cipher2d& other, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+            translate_inplace(evaluator, other, true, pool);
         }
         inline Cipher2d sub_plain(const Evaluator& evaluator, const Plain2d& other, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             return translate_plain(evaluator, other, true, pool);

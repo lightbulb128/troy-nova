@@ -314,6 +314,17 @@ namespace bfv_ring2k {
                 vector<uint64_t> result = encoder.scale_down_new(decrypted);
                 ASSERT_TRUE(same_vector(madd, result));
             }
+
+            {
+                // mod switch down
+                vector<uint64_t> m0 = random_sampler<T>(poly_modulus_degree, t_bit_length);
+                Plaintext p0 = encoder.scale_up_new(m0, std::nullopt);
+                Ciphertext c0 = encryptor.encrypt_asymmetric_new(p0);
+                Ciphertext c1 = evaluator.mod_switch_to_next_new(c0);
+                Plaintext decrypted = decryptor.bfv_decrypt_without_scaling_down_new(c1);
+                vector<uint64_t> result = encoder.scale_down_new(decrypted);
+                ASSERT_TRUE(same_vector(m0, result));
+            }
         }
     }
 

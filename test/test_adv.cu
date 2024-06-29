@@ -2,54 +2,63 @@
 
 namespace tool {
 
-    GeneralHeContext::GeneralHeContext(bool device, SchemeType scheme, size_t n, size_t log_t, vector<size_t> log_qi, 
-        bool expand_mod_chain, uint64_t seed, double input_max, double scale, double tolerance,
-        bool to_device_after_keygeneration, bool use_special_prime_for_encryption, MemoryPoolHandle pool)
-    {
-        this->pool_ = pool;
-        this->scheme_ = scheme;
-        if (scheme == SchemeType::CKKS && (input_max == 0 || scale == 0)) {
+    GeneralHeContext::GeneralHeContext(GeneralHeContextParameters args) {
+        this->pool_ = args.pool;
+        this->scheme_ = args.scheme;
+        if (args.scheme == SchemeType::CKKS && (args.input_max == 0 || args.scale == 0)) {
             throw std::invalid_argument("input_max and scale must be set for CKKS");
         }
         // create enc params
-        EncryptionParameters parms(scheme);
-        parms.set_poly_modulus_degree(n);
+        EncryptionParameters parms(args.scheme);
+        parms.set_poly_modulus_degree(args.n);
         // create modulus
-        if (scheme != SchemeType::CKKS) {
-            log_qi.push_back(log_t);
-            auto moduli = CoeffModulus::create(n, log_qi);
+        if (args.ring2k_log_t != 0) args.simd_log_t = 20;
+        if (args.scheme != SchemeType::CKKS) {
+            if (args.simd_log_t == 0) args.simd_log_t = 20;
+            args.log_qi.push_back(args.simd_log_t);
+            auto moduli = CoeffModulus::create(args.n, args.log_qi);
             parms.set_plain_modulus(moduli[moduli.size() - 1]);
             parms.set_coeff_modulus(moduli.const_slice(0, moduli.size() - 1));
         } else {
-            auto moduli = CoeffModulus::create(n, log_qi);
+            auto moduli = CoeffModulus::create(args.n, args.log_qi);
             parms.set_coeff_modulus(moduli);
         }
-        parms.set_use_special_prime_for_encryption(use_special_prime_for_encryption);
+        parms.set_use_special_prime_for_encryption(args.use_special_prime_for_encryption);
         this->params_host_ = parms;
         // create gadgets
-        bool ckks = scheme == SchemeType::CKKS;
-        auto context = HeContext::create(parms, expand_mod_chain, SecurityLevel::Nil, seed);
-        auto encoder = ckks ? new GeneralEncoder(CKKSEncoder(context)) : new GeneralEncoder(BatchEncoder(context));
-        if (device && !to_device_after_keygeneration) { 
-            context->to_device_inplace(pool);
-            encoder->to_device_inplace(pool);
+        bool ckks = args.scheme == SchemeType::CKKS;
+        auto context = HeContext::create(parms, args.expand_mod_chain, SecurityLevel::Nil, args.seed);
+        GeneralEncoder* encoder;
+        if (ckks) encoder = new GeneralEncoder(CKKSEncoder(context));
+        else if (args.ring2k_log_t != 0) {
+            if (args.ring2k_log_t > 64) encoder = new GeneralEncoder(PolynomialEncoderRing2k<uint128_t>(context, args.ring2k_log_t));
+            else if (args.ring2k_log_t > 32) encoder = new GeneralEncoder(PolynomialEncoderRing2k<uint64_t>(context, args.ring2k_log_t));
+            else encoder = new GeneralEncoder(PolynomialEncoderRing2k<uint32_t>(context, args.ring2k_log_t));
+        } else {
+            encoder = new GeneralEncoder(BatchEncoder(context));
         }
 
-        auto key_generator = new KeyGenerator(context, pool);
-        auto public_key = key_generator->create_public_key(false, pool);
+        if (args.device && !args.to_device_after_keygeneration) { 
+            context->to_device_inplace(args.pool);
+            encoder->to_device_inplace(args.pool);
+        }
+
+        auto key_generator = new KeyGenerator(context, args.pool);
+        auto public_key = key_generator->create_public_key(false, args.pool);
         auto encryptor = new Encryptor(context);
         encryptor->set_public_key(public_key);
         encryptor->set_secret_key(key_generator->secret_key());
-        auto decryptor = new Decryptor(context, key_generator->secret_key(), pool);
+        auto decryptor = new Decryptor(context, key_generator->secret_key(), args.pool);
         auto evaluator = new Evaluator(context);
         uint64_t t = ckks ? 0 : parms.plain_modulus()->value();
+        this->ring_mask_ = (args.ring2k_log_t == 128) ? (static_cast<uint128_t>(-1)) : ((static_cast<uint128_t>(1) << args.ring2k_log_t) - 1);
         
-        if (device && to_device_after_keygeneration) { 
-            context->to_device_inplace(pool);
-            encoder->to_device_inplace(pool);
-            key_generator->to_device_inplace(pool);
-            encryptor->to_device_inplace(pool);
-            decryptor->to_device_inplace(pool);
+        if (args.device && args.to_device_after_keygeneration) { 
+            context->to_device_inplace(args.pool);
+            encoder->to_device_inplace(args.pool);
+            key_generator->to_device_inplace(args.pool);
+            encryptor->to_device_inplace(args.pool);
+            decryptor->to_device_inplace(args.pool);
         }
 
         this->he_context_ = context;
@@ -59,9 +68,9 @@ namespace tool {
         this->decryptor_ = decryptor;
         this->evaluator_ = evaluator;
         this->t_ = t;
-        this->input_max_ = input_max;
-        this->scale_ = scale;
-        this->tolerance_ = tolerance;
+        this->input_max_ = args.input_max;
+        this->scale_ = args.scale;
+        this->tolerance_ = args.tolerance;
     }
 
     GeneralHeContext::~GeneralHeContext() {

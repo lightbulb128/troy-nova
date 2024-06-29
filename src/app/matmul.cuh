@@ -48,6 +48,10 @@ namespace troy { namespace linear {
         MemoryPoolHandle pool;
         bool pack_lwe;
 
+        inline void set_pool(MemoryPoolHandle pool) {
+            this->pool = pool;
+        }
+
         inline MatmulHelper(size_t batch_size, size_t input_dims, size_t output_dims, size_t slot_count, MatmulObjective objective = MatmulObjective::EncryptLeft, bool pack_lwe = true, MemoryPoolHandle pool = MemoryPool::GlobalPool()):
             batch_size(batch_size), input_dims(input_dims), output_dims(output_dims),
             slot_count(slot_count), objective(objective), pack_lwe(pack_lwe), pool(pool)

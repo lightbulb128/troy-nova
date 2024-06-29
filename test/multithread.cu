@@ -505,7 +505,7 @@ namespace multithread {
             { // add_inplace
                 Ciphertext encrypted0 = context.encryptor().encrypt_asymmetric_new(encoded0, nullptr, pool);
                 Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1, nullptr, pool);
-                context.evaluator().add_inplace(encrypted0, encrypted1);
+                context.evaluator().add_inplace(encrypted0, encrypted1, pool);
                 IF_FALSE_PRINT_RETURN(good_pool(encrypted0.pool(), pool), "add_inplace/pool");
                 Plaintext decrypted = context.decryptor().decrypt_new(encrypted0, pool);
                 GeneralVector decoded = context.encoder().decode_simd(decrypted, pool);
@@ -617,7 +617,7 @@ namespace multithread {
             { // sub_inplace
                 Ciphertext encrypted0 = context.encryptor().encrypt_asymmetric_new(encoded0, nullptr, pool);
                 Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1, nullptr, pool);
-                context.evaluator().sub_inplace(encrypted0, encrypted1);
+                context.evaluator().sub_inplace(encrypted0, encrypted1, pool);
                 IF_FALSE_PRINT_RETURN(good_pool(encrypted0.pool(), pool), "sub_inplace/pool");
                 Plaintext decrypted = context.decryptor().decrypt_new(encrypted0, pool);
                 GeneralVector decoded = context.encoder().decode_simd(decrypted, pool);

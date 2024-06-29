@@ -59,6 +59,9 @@ void register_matmul_helper(pybind11::module& m) {
         .def("size", &Plain2d::size)
         .def("rows", &Plain2d::rows)
         .def("columns", &Plain2d::columns)
+        .def("clone", [](const Plain2d& self, MemoryPoolHandleArgument pool) {
+            return self.clone(nullopt_default_pool(pool));
+        }, MEMORY_POOL_ARGUMENT)
         .def("encrypt_asymmetric", [](const Plain2d& self, const Encryptor& encryptor, MemoryPoolHandleArgument pool) {
             return self.encrypt_asymmetric(encryptor, nullopt_default_pool(pool));
         }, py::arg("encryptor"), MEMORY_POOL_ARGUMENT)
@@ -72,6 +75,9 @@ void register_matmul_helper(pybind11::module& m) {
         .def("size", &Cipher2d::size)
         .def("rows", &Cipher2d::rows)
         .def("columns", &Cipher2d::columns)
+        .def("clone", [](const Cipher2d& self, MemoryPoolHandleArgument pool) {
+            return self.clone(nullopt_default_pool(pool));
+        }, MEMORY_POOL_ARGUMENT)
         .def("expand_seed", &Cipher2d::expand_seed)
         .def("save", [](const Cipher2d& self, HeContextPointer context) {return save_he(self, context); })
         .def("load", [](Cipher2d& self, const py::bytes& str, HeContextPointer context, MemoryPoolHandleArgument pool) {
@@ -99,9 +105,9 @@ void register_matmul_helper(pybind11::module& m) {
         .def("add", [](const Cipher2d& self, const Evaluator& evaluator, const Cipher2d& other, MemoryPoolHandleArgument pool) {
             return self.add(evaluator, other, nullopt_default_pool(pool));
         }, py::arg("evaluator"), py::arg("other"), MEMORY_POOL_ARGUMENT)
-        .def("add_inplace", [](Cipher2d& self, const Evaluator& evaluator, const Cipher2d& other) {
-            self.add_inplace(evaluator, other);
-        }, py::arg("evaluator"), py::arg("other"))
+        .def("add_inplace", [](Cipher2d& self, const Evaluator& evaluator, const Cipher2d& other, MemoryPoolHandleArgument pool) {
+            self.add_inplace(evaluator, other, nullopt_default_pool(pool));
+        }, py::arg("evaluator"), py::arg("other"), MEMORY_POOL_ARGUMENT)
 
         .def("add_plain", [](const Cipher2d& self, const Evaluator& evaluator, const Plain2d& plain, MemoryPoolHandleArgument pool) {
             return self.add_plain(evaluator, plain, nullopt_default_pool(pool));
@@ -113,9 +119,9 @@ void register_matmul_helper(pybind11::module& m) {
         .def("sub", [](const Cipher2d& self, const Evaluator& evaluator, const Cipher2d& other, MemoryPoolHandleArgument pool) {
             return self.sub(evaluator, other, nullopt_default_pool(pool));
         }, py::arg("evaluator"), py::arg("other"), MEMORY_POOL_ARGUMENT)
-        .def("sub_inplace", [](Cipher2d& self, const Evaluator& evaluator, const Cipher2d& other) {
-            self.sub_inplace(evaluator, other);
-        }, py::arg("evaluator"), py::arg("other"))
+        .def("sub_inplace", [](Cipher2d& self, const Evaluator& evaluator, const Cipher2d& other, MemoryPoolHandleArgument pool) {
+            self.sub_inplace(evaluator, other, nullopt_default_pool(pool));
+        }, py::arg("evaluator"), py::arg("other"), MEMORY_POOL_ARGUMENT)
 
         .def("sub_plain", [](const Cipher2d& self, const Evaluator& evaluator, const Plain2d& plain, MemoryPoolHandleArgument pool) {
             return self.sub_plain(evaluator, plain, nullopt_default_pool(pool));
@@ -211,6 +217,7 @@ void register_matmul_helper(pybind11::module& m) {
             py::arg("slot_count"), py::arg_v("objective", MatmulObjective::EncryptLeft, "MatmulObjective.EncryptLeft"),
             py::arg("pack_lwe") = true, MEMORY_POOL_ARGUMENT
         )
+        .def("set_pool", &MatmulHelper::set_pool)
         .def("batch_size", [](const MatmulHelper& self) { return self.batch_size; })
         .def("input_dims", [](const MatmulHelper& self) { return self.input_dims; })
         .def("output_dims", [](const MatmulHelper& self) { return self.output_dims; })

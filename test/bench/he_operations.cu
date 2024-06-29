@@ -1,34 +1,15 @@
-#include "../test_adv.cuh"
+#include "../test_multithread.cuh"
 #include "../argparse.h"
 #include "../../src/utils/timer.h"
+#include "argument_helper.h"
 #include <iostream>
 #include <thread>
 #include <future>
 
-namespace bench {
+namespace bench::he_operations {
 
     using namespace troy;
-
-    std::string bool_to_string(bool b) {
-        return b ? "true" : "false";
-    }
-    std::string concat_by_comma(const std::vector<std::string>& v, bool none_if_none = true) {
-        if (v.size() == 0) return none_if_none ? "none" : "";
-        std::string s;
-        for (size_t i = 0; i < v.size(); i++) {
-            s += v[i];
-            if (i != v.size() - 1) s += ", ";
-        }
-        return s;
-    }
-    std::string list_usize_to_string(const std::vector<size_t>& v) {
-        std::string s = "[";
-        for (size_t i = 0; i < v.size(); i++) {
-            s += std::to_string(v[i]);
-            if (i != v.size() - 1) s += ", ";
-        }
-        return s + "]";
-    }
+    using namespace tool;
 
     struct Arguments {
         bool help = false;
@@ -239,84 +220,35 @@ namespace bench {
     class Benchmark {
 
         private:
-            std::vector<std::shared_ptr<GeneralHeContext>> contexts;
-            std::vector<MemoryPoolHandle> pools;
             string name;
             size_t repeat;
             Arguments args;
             SchemeType scheme;
             bool device;
+            MultithreadHeContext environment;
 
         public:
 
             Benchmark(bool device, const string& name, SchemeType scheme, const Arguments& args):
                 name(name), repeat(args.repeat), args(args), scheme(scheme), device(device)
             {
-                contexts.clear();
-                pools.clear();
-                if (!device) {
-                    // only one pool, which is nullptr
-                    pools = { nullptr };
-                    // only one context
-                    auto context = std::make_shared<GeneralHeContext>(false, scheme, args.poly_modulus_degree, args.log_t, args.log_q, false, args.seed, args.input_max, args.scale, args.tolerance, false, false, nullptr);
-                    contexts.push_back(context);
-                } else {
-                    if (args.multiple_devices) {
-                        int device_count = 0;
-                        cudaError_t success = cudaGetDeviceCount(&device_count);
-                        if (success != cudaSuccess) {
-                            throw std::runtime_error("cudaGetDeviceCount failed");
-                        }
-                        // pools count equal to threads count, each's device index is modulo device count
-                        for (int i = 0; i < args.threads; i++) {
-                            pools.push_back(MemoryPool::create(i % device_count));
-                        }
-                        // contexts count equal to device count
-                        for (int i = 0; i < device_count; i++) {
-                            auto context = std::make_shared<GeneralHeContext>(true, scheme, args.poly_modulus_degree, args.log_t, args.log_q, false, args.seed, args.input_max, args.scale, args.tolerance, false, false, pools[i]);
-                            contexts.push_back(context);
-                        }
-                    } else if (args.multiple_pools) {
-                        // pools count equal to threads count, each's device index is 0
-                        for (int i = 0; i < args.threads; i++) {
-                            pools.push_back(MemoryPool::create(0));
-                        }
-                        // only one context
-                        auto context = std::make_shared<GeneralHeContext>(true, scheme, args.poly_modulus_degree, args.log_t, args.log_q, false, args.seed, args.input_max, args.scale, args.tolerance, false, false, MemoryPool::GlobalPool());
-                        contexts.push_back(context);
-                    } else {
-                        // one pool which is globalpool
-                        pools = { MemoryPool::GlobalPool() };
-                        // only one context
-                        auto context = std::make_shared<GeneralHeContext>(true, scheme, args.poly_modulus_degree, args.log_t, args.log_q, false, args.seed, args.input_max, args.scale, args.tolerance, false, false, MemoryPool::GlobalPool());
-                        contexts.push_back(context);
-                    }
-                }
+                GeneralHeContextParameters ghep(
+                    device, scheme, args.poly_modulus_degree, args.log_t, args.log_q, true, args.seed, args.input_max,
+                    args.scale, args.tolerance, false, false
+                );
+                environment = MultithreadHeContext(args.threads, args.multiple_pools, args.multiple_devices, ghep);
             }
 
             MemoryPoolHandle get_pool(size_t thread_id) const {
-                if (device && (args.multiple_devices || args.multiple_pools)) {
-                    return pools[thread_id];
-                } else {
-                    return pools[0];
-                }
+                return environment.get_pool(thread_id);
             }
 
             const GeneralHeContext& get_context(size_t thread_id) const {
-                if (args.multiple_devices) {
-                    return *contexts[thread_id % contexts.size()];
-                } else {
-                    return *contexts[0];
-                }
+                return environment.get_context(thread_id);
             }
 
             size_t get_repeat(size_t thread_id) const {
-                size_t divided = repeat / args.threads;
-                if (thread_id < repeat % args.threads) {
-                    return divided + 1;
-                } else {
-                    return divided;
-                }
+                return environment.get_divided(repeat, thread_id);
             }
 
             template <typename L>
@@ -803,7 +735,7 @@ int main(int argc, char** argv) {
     using std::cout;
     using std::endl;
     using std::string;
-    using bench::Arguments;
+    using bench::he_operations::Arguments;
     Arguments args(argc, argv);
     if (args.help) {
         Arguments::print_help();
@@ -814,11 +746,11 @@ int main(int argc, char** argv) {
 
     if (args.host) {
         cout << endl << "========= HOST =========" << endl;
-        bench::run_all(false, args);
+        bench::he_operations::run_all(false, args);
     }
     if (args.device) {
         cout << endl << "======== DEVICE ========" << endl;
-        bench::run_all(true, args);
+        bench::he_operations::run_all(true, args);
         troy::utils::MemoryPool::Destroy();
     }
     return 0;

@@ -90,7 +90,7 @@ namespace troy { namespace linear {
         return result;
     }
 
-    void Cipher2d::translate_inplace(const Evaluator& evaluator, const Cipher2d& other, bool subtract) {
+    void Cipher2d::translate_inplace(const Evaluator& evaluator, const Cipher2d& other, bool subtract, MemoryPoolHandle pool) {
         if (this->size() != other.size()) {
             throw std::runtime_error("[Cipher2d::translate_inplace] Row size mismatch.");
         }
@@ -100,9 +100,9 @@ namespace troy { namespace linear {
             }
             for (size_t j = 0; j < (*this)[i].size(); j++) {
                 if (!subtract) {
-                    evaluator.add_inplace((*this)[i][j], other[i][j]);
+                    evaluator.add_inplace((*this)[i][j], other[i][j], pool);
                 } else {
-                    evaluator.sub_inplace((*this)[i][j], other[i][j]);
+                    evaluator.sub_inplace((*this)[i][j], other[i][j], pool);
                 }
             }
         }

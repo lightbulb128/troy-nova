@@ -141,7 +141,7 @@ namespace troy {
         utils::negate_inplace_ps(encrypted.data().reference(), poly_count, poly_degree, coeff_modulus);
     }
 
-    void Evaluator::translate_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, bool subtract) const {
+    void Evaluator::translate_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, bool subtract, MemoryPoolHandle pool) const {
         check_ciphertext("[Evaluator::translate_inplace]", encrypted1);
         check_ciphertext("[Evaluator::translate_inplace]", encrypted2);
         check_same_parms_id("[Evaluator::translate_inplace]", encrypted1, encrypted2);
@@ -156,7 +156,7 @@ namespace troy {
         size_t min_size = std::min(enc1_size, enc2_size);
         size_t coeff_count = parms.poly_modulus_degree();
 
-        if (encrypted1.correction_factor() != 1 || encrypted2.correction_factor() != 1) {
+        if (encrypted1.correction_factor() != encrypted2.correction_factor()) {
             // Balance correction factors and multiply by scalars before addition in BGV
             uint64_t f0, f1, f2;
             const Modulus& plain_modulus = parms.plain_modulus_host();
@@ -165,12 +165,12 @@ namespace troy {
                 plain_modulus, f0, f1, f2
             );
             utils::multiply_scalar_inplace_ps(encrypted1.data().reference(), f1, enc1_size, coeff_count, coeff_modulus);
-            Ciphertext encrypted2_copy = encrypted2;
+            Ciphertext encrypted2_copy = encrypted2.clone(pool);
             utils::multiply_scalar_inplace_ps(encrypted2_copy.data().reference(), f2, enc2_size, coeff_count, coeff_modulus); 
             // Set new correction factor
             encrypted1.correction_factor() = f0;
             encrypted2_copy.correction_factor() = f0;
-            this->translate_inplace(encrypted1, encrypted2_copy, subtract);
+            this->translate_inplace(encrypted1, encrypted2_copy, subtract, pool);
         } else {
             // Prepare destination
             encrypted1.resize(this->context(), context_data->parms_id(), max_size);
@@ -1608,6 +1608,9 @@ namespace troy {
                         scaling_variant::multiply_sub_plain(plain, context_data, encrypted.poly(0));
                     }
                 } else {
+                    if (plain.parms_id() != encrypted.parms_id()) {
+                        throw std::invalid_argument("[Evaluator::translate_plain_inplace] Plaintext and ciphertext parameters do not match.");
+                    }
                     if (!subtract) {
                         utils::add_inplace_p(encrypted.poly(0), plain.poly(), coeff_count, coeff_modulus);
                     } else {
@@ -2109,7 +2112,7 @@ namespace troy {
         while (poly_degree > (1 << logn)) {
             size_t galois_element = poly_degree + 1;
             this->apply_galois(encrypted, galois_element, automorphism_keys, temp, pool);
-            this->add_inplace(encrypted, temp);
+            this->add_inplace(encrypted, temp, pool);
             poly_degree >>= 1;
         }
     }
@@ -2197,7 +2200,7 @@ namespace troy {
                     poly_modulus_degree, coeff_modulus, temp.reference()
                 );
                 this->sub(even, temp, odd, pool);
-                this->add_inplace(even, temp);
+                this->add_inplace(even, temp, pool);
                 if (ntt_form) {
                     this->transform_to_ntt_inplace(odd);
                 }
@@ -2205,7 +2208,7 @@ namespace troy {
                 if (ntt_form) {
                     this->transform_from_ntt_inplace(odd);
                 }
-                this->add_inplace(even, odd);
+                this->add_inplace(even, odd, pool);
                 offset += (gap << 1);
             }
         }

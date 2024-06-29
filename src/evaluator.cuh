@@ -3,6 +3,7 @@
 #include "plaintext.cuh"
 #include "ciphertext.cuh"
 #include "kswitch_keys.cuh"
+#include "utils/memory_pool.cuh"
 #include "utils/scaling_variant.cuh"
 #include "lwe_ciphertext.cuh"
 #include <string>
@@ -14,7 +15,7 @@ namespace troy {
 
         ContextDataPointer get_context_data(const char* prompt, const ParmsID& encrypted) const;
 
-        void translate_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, bool subtract) const;
+        void translate_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, bool subtract, MemoryPoolHandle pool) const;
         
         void bfv_multiply_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool) const;
         void ckks_multiply_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool) const;
@@ -60,12 +61,12 @@ namespace troy {
             return destination;
         }
 
-        inline void add_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2) const {
-            translate_inplace(encrypted1, encrypted2, false);
+        inline void add_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            translate_inplace(encrypted1, encrypted2, false, pool);
         }
         inline void add(const Ciphertext& encrypted1, const Ciphertext& encrypted2, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             destination = encrypted1.clone(pool);
-            add_inplace(destination, encrypted2);
+            add_inplace(destination, encrypted2, pool);
         }
         inline Ciphertext add_new(const Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;
@@ -73,8 +74,8 @@ namespace troy {
             return destination;
         }
 
-        inline void sub_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2) const {
-            translate_inplace(encrypted1, encrypted2, true);
+        inline void sub_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            translate_inplace(encrypted1, encrypted2, true, pool);
         }
         inline void sub(const Ciphertext& encrypted1, const Ciphertext& encrypted2, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             destination = encrypted1.clone(pool);

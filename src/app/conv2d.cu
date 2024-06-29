@@ -181,7 +181,7 @@ namespace troy { namespace linear {
                     // muladds ++;
                     // tim.tock(t1);
                     if (i==0) cipher = std::move(prod);
-                    else evaluator.add_inplace(cipher, prod);
+                    else evaluator.add_inplace(cipher, prod, pool);
                 }
                 group.push_back(std::move(cipher));
             }
@@ -203,7 +203,7 @@ namespace troy { namespace linear {
                     Ciphertext prod;
                     evaluator.multiply(a[b][i], encoded_weights[oc][i], prod, pool);
                     if (i==0) cipher = std::move(prod);
-                    else evaluator.add_inplace(cipher, prod);
+                    else evaluator.add_inplace(cipher, prod, pool);
                 }
                 group.push_back(std::move(cipher));
             }
@@ -224,7 +224,7 @@ namespace troy { namespace linear {
                     Ciphertext prod;
                     evaluator.multiply_plain(encoded_weights[oc][i], a[b][i], prod, pool);
                     if (i==0) cipher = std::move(prod);
-                    else evaluator.add_inplace(cipher, prod);
+                    else evaluator.add_inplace(cipher, prod, pool);
                 }
                 group.push_back(std::move(cipher));
             }
