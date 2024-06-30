@@ -253,18 +253,19 @@ namespace bench::he_operations {
 
             template <typename L>
             void run_threads_and_print_times(const L& lambda) {
-                std::vector<std::future<Timer>> futures;
-                for (size_t i = 0; i < args.threads; i++) {
-                    futures.push_back(std::async(lambda, i));
-                }
-                std::vector<Timer> timers;
-                for (size_t i = 0; i < args.threads; i++) {
-                    timers.push_back(futures[i].get());
-                }
-                if (timers.size() > 1) {
-                    TimerThreaded::PrintDivided(timers, repeat);
+                if (args.threads == 1) {
+                    Timer timer_single = lambda(0);
+                    timer_single.print_divided(repeat);
                 } else {
-                    timers[0].print_divided(repeat);
+                    std::vector<std::future<Timer>> futures;
+                    for (size_t i = 0; i < args.threads; i++) {
+                        futures.push_back(std::async(lambda, i));
+                    }
+                    std::vector<Timer> timers;
+                    for (size_t i = 0; i < args.threads; i++) {
+                        timers.push_back(futures[i].get());
+                    }
+                    TimerThreaded::PrintDivided(timers, repeat);
                 }
             }
 

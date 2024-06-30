@@ -19,6 +19,7 @@ namespace bench::matmul {
     using std::vector;
     using troy::bench::Timer;
     using troy::bench::TimerThreaded;
+    using troy::bench::TimerOnce;
 
     struct Arguments {
         bool help = false;
@@ -374,7 +375,7 @@ namespace bench::matmul {
             std::vector<Plain2d> context_w_encoded = {[&helper, &context, &w]() {
                 const GeneralEncoder& encoder = context.encoder();
                 Timer timer;
-                size_t timer_handle = timer.register_timer("Encode w (1 thread)");
+                size_t timer_handle = timer.register_timer("Ecd w (1 thread)");
                 timer.tick(timer_handle);
                 Plain2d w_encoded;
                 if (encoder.is_batch()) {
@@ -401,11 +402,6 @@ namespace bench::matmul {
             bool pack_lwes = args.pack_lwes;
             size_t mod_switch_down_levels = args.mod_switch_down_levels;
 
-            Timer total_timer;
-            size_t total_timer_handle = total_timer.register_timer("Total");
-            total_timer.tick(total_timer_handle);
-
-            // encode bias
             ParmsID s_parms_id;
             if (context.encoder().is_ring32() || context.encoder().is_ring64() || context.encoder().is_ring128()) {
                 ContextDataPointer pointer = context.context()->first_context_data_pointer();
@@ -414,51 +410,13 @@ namespace bench::matmul {
                 }
                 s_parms_id = pointer->parms_id();
             }
-            auto lambda_encode_bias = [this, &s, m_divided, n, &s_parms_id](size_t thread_id, const MatmulHelper& helper) {
-                const GeneralHeContext& context = environment.get_context(thread_id);
-                const GeneralEncoder& encoder = context.encoder();
-                Timer timer;
-                size_t timer_single_handle = timer.register_timer("Encode bias");
-                timer.tick(timer_single_handle);
-                Plain2d s_encoded;
-                size_t offset = thread_id * m_divided * n;
-                if (encoder.is_batch()) {
-                    s_encoded = std::move(helper.encode_outputs_uint64s(encoder.batch(), s.integers().data() + offset));
-                } else if (encoder.is_ckks()) {
-                    s_encoded = std::move(helper.encode_outputs_doubles(encoder.ckks(), s.doubles().data() + offset, std::nullopt, context.scale() * context.scale()));
-                } else if (encoder.is_ring32()) {
-                    s_encoded = std::move(helper.encode_outputs_ring2k<uint32_t>(encoder.poly32(), s.uint32s().data() + offset, s_parms_id));
-                } else if (encoder.is_ring64()) {
-                    s_encoded = std::move(helper.encode_outputs_ring2k<uint64_t>(encoder.poly64(), s.uint64s().data() + offset, s_parms_id));
-                } else if (encoder.is_ring128()) {
-                    s_encoded = std::move(helper.encode_outputs_ring2k<uint128_t>(encoder.poly128(), s.uint128s().data() + offset, s_parms_id));
-                } else {
-                    throw std::runtime_error("Unsupported encoder");
-                }
-                timer.tock(timer_single_handle);
-                return std::make_pair(std::move(s_encoded), std::move(timer));
-            };
 
-            // run encode_bias threads
-            std::vector<Plain2d> s_encoded;
+            Timer total_timer;
+            size_t total_timer_handle = total_timer.register_timer("Total");
+            total_timer.tick(total_timer_handle);
+
+            TimerOnce thread_timer;
             std::vector<Timer> timers;
-            if (threads == 1) {
-                auto [s_encoded_single, timer_single] = lambda_encode_bias(0, thread_helpers[0]);
-                s_encoded.push_back(s_encoded_single);
-                timers.push_back(timer_single);
-            } else {
-                std::vector<std::future<std::pair<Plain2d, Timer>>> futures;
-                for (size_t i = 0; i < threads; i++) {
-                    futures.push_back(std::async(std::launch::async, lambda_encode_bias, i, thread_helpers[i]));
-                }
-                for (size_t i = 0; i < threads; i++) {
-                    auto [s_encoded_single, timer_single] = futures[i].get();
-                    s_encoded.push_back(s_encoded_single);
-                    timers.push_back(timer_single);
-                }
-            }
-            if (timers.size() == 1) timers[0].print();
-            else TimerThreaded::Print(timers);
             timers.clear();
 
             // encode and encrypt inputs
@@ -470,9 +428,9 @@ namespace bench::matmul {
                 size_t m_lower = thread_id * m_divided;
                 size_t m_upper = std::min((thread_id + 1) * m_divided, m);
 
-                Timer timer;
+                Timer timer; timer.tab(1);
 
-                size_t timer_single_handle = timer.register_timer("Encode inputs");
+                size_t timer_single_handle = timer.register_timer("Ecd x");
                 timer.tick(timer_single_handle);
                 size_t offset = m_lower * r;
                 Plain2d x_encoded;
@@ -491,13 +449,13 @@ namespace bench::matmul {
                 }
                 timer.tock(timer_single_handle);
 
-                timer_single_handle = timer.register_timer("Encrypt inputs");
+                timer_single_handle = timer.register_timer("Enc [x]");
                 timer.tick(timer_single_handle);
                 Cipher2d x_encrypted = x_encoded.encrypt_symmetric(encryptor, environment.get_pool(thread_id));
                 timer.tock(timer_single_handle);
 
                 stringstream x_serialized;
-                timer_single_handle = timer.register_timer("Serialize inputs");
+                timer_single_handle = timer.register_timer("Ser [x]");
                 timer.tick(timer_single_handle);
                 x_encrypted.save(x_serialized, he);
                 timer.tock(timer_single_handle);
@@ -522,13 +480,15 @@ namespace bench::matmul {
                     timers.push_back(timer_single);
                 }
             }
+            thread_timer.finish("Client-Enc[x]");
             if (timers.size() == 1) timers[0].print();
             else TimerThreaded::Print(timers);
             timers.clear();
+            thread_timer.restart();
 
             // calculate matmul and serialize ys
-            auto lambda_matmul = [this, m_divided, m, r, n, pack_lwes, mod_switch_down_levels](
-                size_t thread_id, std::string x_serialized, const MatmulHelper& helper, const GaloisKeys& automorphism_key, const Plain2d& w_encoded, const Plain2d& s_encoded
+            auto lambda_matmul = [this, m_divided, m, r, n, &s, pack_lwes, mod_switch_down_levels, &s_parms_id](
+                size_t thread_id, std::string x_serialized, const MatmulHelper& helper, const GaloisKeys& automorphism_key, const Plain2d& w_encoded
             ) {
                 const GeneralHeContext& context = environment.get_context(thread_id);
                 HeContextPointer he = context.context();
@@ -539,9 +499,28 @@ namespace bench::matmul {
                 MemoryPoolHandle pool = environment.get_pool(thread_id);
                 size_t m_upper = std::min((thread_id + 1) * m_divided, m);
 
-                Timer timer;
+                Timer timer; timer.tab(1);
+                
+                size_t timer_single_handle = timer.register_timer("Ecd s");
+                timer.tick(timer_single_handle);
+                Plain2d s_encoded;
+                size_t offset = thread_id * m_divided * n;
+                if (encoder.is_batch()) {
+                    s_encoded = std::move(helper.encode_outputs_uint64s(encoder.batch(), s.integers().data() + offset));
+                } else if (encoder.is_ckks()) {
+                    s_encoded = std::move(helper.encode_outputs_doubles(encoder.ckks(), s.doubles().data() + offset, std::nullopt, context.scale() * context.scale()));
+                } else if (encoder.is_ring32()) {
+                    s_encoded = std::move(helper.encode_outputs_ring2k<uint32_t>(encoder.poly32(), s.uint32s().data() + offset, s_parms_id));
+                } else if (encoder.is_ring64()) {
+                    s_encoded = std::move(helper.encode_outputs_ring2k<uint64_t>(encoder.poly64(), s.uint64s().data() + offset, s_parms_id));
+                } else if (encoder.is_ring128()) {
+                    s_encoded = std::move(helper.encode_outputs_ring2k<uint128_t>(encoder.poly128(), s.uint128s().data() + offset, s_parms_id));
+                } else {
+                    throw std::runtime_error("Unsupported encoder");
+                }
+                timer.tock(timer_single_handle);
 
-                size_t timer_single_handle = timer.register_timer("Deserialize inputs");
+                timer_single_handle = timer.register_timer("Deser [x]");
                 timer.tick(timer_single_handle);
                 stringstream x_serialized_stream(x_serialized);
                 Cipher2d x_encrypted = Cipher2d::load_new(x_serialized_stream, he, pool);
@@ -562,19 +541,19 @@ namespace bench::matmul {
                 }
 
                 if (pack_lwes) {
-                    timer_single_handle = timer.register_timer("Pack outputs");
+                    timer_single_handle = timer.register_timer("Pack LWEs");
                     timer.tick(timer_single_handle);
                     y_encrypted = helper.pack_outputs(evaluator, automorphism_key, y_encrypted);
                     timer.tock(timer_single_handle);
                 }
 
-                timer_single_handle = timer.register_timer("Add bias");
+                timer_single_handle = timer.register_timer("Add s");
                 timer.tick(timer_single_handle);
                 y_encrypted.add_plain_inplace(evaluator, s_encoded, pool);
                 timer.tock(timer_single_handle);
 
                 stringstream y_serialized;
-                timer_single_handle = timer.register_timer("Serialize outputs");
+                timer_single_handle = timer.register_timer("Ser [y]");
                 timer.tick(timer_single_handle);
                 helper.serialize_outputs(evaluator, y_encrypted, y_serialized);
                 timer.tock(timer_single_handle);;
@@ -586,7 +565,7 @@ namespace bench::matmul {
             // run threads
             std::vector<std::string> y_serialized;
             if (threads == 1) {
-                auto [y_serialized_single, timer_single] = lambda_matmul(0, x_serialized[0], thread_helpers[0], context_automorphism_keys[0], context_w_encoded[0], s_encoded[0]);
+                auto [y_serialized_single, timer_single] = lambda_matmul(0, x_serialized[0], thread_helpers[0], context_automorphism_keys[0], context_w_encoded[0]);
                 y_serialized.push_back(y_serialized_single);
                 timers.push_back(timer_single);
             } else {
@@ -595,7 +574,7 @@ namespace bench::matmul {
                     size_t context_id = environment.get_context_index(i);
                     futures.push_back(std::async(std::launch::async, lambda_matmul, i, 
                         x_serialized[i], thread_helpers[i], context_automorphism_keys[context_id], 
-                        context_w_encoded[context_id], s_encoded[i]
+                        context_w_encoded[context_id]
                     ));
                 }
                 for (size_t i = 0; i < threads; i++) {
@@ -604,9 +583,11 @@ namespace bench::matmul {
                     timers.push_back(timer_single);
                 }
             }
+            thread_timer.finish("Server-Matmul");
             if (timers.size() == 1) timers[0].print();
             else TimerThreaded::Print(timers);
             timers.clear();
+            thread_timer.restart();
 
             // decrypt and decode outputs
             GeneralVector y_decoded = GeneralVector::zeros_like(s, m * n);
@@ -619,15 +600,15 @@ namespace bench::matmul {
                 size_t m_lower = thread_id * m_divided;
                 size_t m_upper = std::min((thread_id + 1) * m_divided, m);
 
-                Timer timer;
+                Timer timer; timer.tab(1);
 
-                size_t timer_single_handle = timer.register_timer("Deserialize outputs");
+                size_t timer_single_handle = timer.register_timer("Deser [y]");
                 timer.tick(timer_single_handle);
                 stringstream y_serialized_stream(y_serialized);
                 Cipher2d y_encrypted = helper.deserialize_outputs(context.evaluator(), y_serialized_stream);
                 timer.tock(timer_single_handle);
 
-                timer_single_handle = timer.register_timer("Decrypt outputs");
+                timer_single_handle = timer.register_timer("Dec [y]");
                 timer.tick(timer_single_handle);
                 GeneralVector y_decoded_single(vector<double>({}));
                 if (encoder.is_batch()) {
@@ -678,6 +659,7 @@ namespace bench::matmul {
                     timers.push_back(futures[i].get());
                 }
             }
+            thread_timer.finish("Client-Dec[y]");
             if (timers.size() == 1) timers[0].print();
             else TimerThreaded::Print(timers);
             timers.clear();
