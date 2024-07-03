@@ -49,6 +49,14 @@ namespace troy {
         
         KeyGenerator(HeContextPointer context, MemoryPoolHandle pool = MemoryPool::GlobalPool());
         KeyGenerator(HeContextPointer context, const SecretKey& secret_key, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+        KeyGenerator(const KeyGenerator& copy) = delete;
+        inline KeyGenerator(KeyGenerator&& source) {
+            std::unique_lock<std::shared_mutex> lock(secret_key_array_mutex);
+            context_ = source.context_;
+            secret_key_ = std::move(source.secret_key_);
+            secret_key_array_ = std::move(source.secret_key_array_);
+            lock.unlock();
+        }
 
         inline PublicKey create_public_key(bool save_seed, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             return generate_pk(save_seed, nullptr, pool);

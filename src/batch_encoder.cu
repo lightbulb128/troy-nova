@@ -7,7 +7,7 @@ namespace troy {
     using utils::Slice; 
     using utils::ConstSlice;
 
-    BatchEncoder::BatchEncoder(HeContextPointer context, MemoryPoolHandle pool) {
+    BatchEncoder::BatchEncoder(HeContextPointer context) {
         if (context->on_device()) {
             throw std::invalid_argument("[BatchEncoder::BatchEncoder] Cannot create from device context.");
         }

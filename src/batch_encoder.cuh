@@ -13,7 +13,7 @@ namespace troy {
 
     public:
 
-        BatchEncoder(HeContextPointer context, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+        BatchEncoder(HeContextPointer context);
 
         inline bool on_device() const noexcept {
             return matrix_reps_index_map.on_device();

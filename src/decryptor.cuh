@@ -23,6 +23,13 @@ namespace troy {
     public:
         
         Decryptor(HeContextPointer context, const SecretKey& secret_key, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+        Decryptor(const Decryptor& copy) = delete;
+        inline Decryptor(Decryptor&& source) {
+            std::unique_lock<std::shared_mutex> lock(secret_key_array_mutex);
+            context_ = source.context_;
+            secret_key_array_ = std::move(source.secret_key_array_);
+            lock.unlock();
+        }
 
         inline bool on_device() const {return secret_key_array_.on_device();}
         inline void to_device_inplace(MemoryPoolHandle pool = MemoryPool::GlobalPool()) {secret_key_array_.to_device_inplace(pool);}
