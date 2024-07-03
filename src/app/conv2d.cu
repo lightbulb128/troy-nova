@@ -89,7 +89,7 @@ namespace troy { namespace linear {
                         }
                     }
                 }
-                Plaintext pt; encoder.encode_polynomial(spread, pt);
+                Plaintext pt; encoder.encode_polynomial(spread, pt, pool);
                 current_channel.push_back(std::move(pt));
             }
             encoded_weights.data().push_back(std::move(current_channel));
@@ -142,7 +142,7 @@ namespace troy { namespace linear {
                             }
                         }
                         // printf("encode lb=%lu, ub=%lu, ih=%lu, iw=%lu, lci=%lu, uci=%lu, vecsize=%lu\n", lb, ub, ih, iw, lci, uci, vec.size());
-                        Plaintext pt; encoder.encode_polynomial(vec, pt);
+                        Plaintext pt; encoder.encode_polynomial(vec, pt, pool);
                         // printf("encode ok\n");
                         group.push_back(std::move(pt));
                     }
@@ -159,7 +159,7 @@ namespace troy { namespace linear {
         const uint64_t* inputs
     ) const {
         Plain2d plain = encode_inputs(encoder, inputs);
-        return plain.encrypt_symmetric(encryptor);
+        return plain.encrypt_symmetric(encryptor, pool);
     }
 
     Cipher2d Conv2dHelper::conv2d(const Evaluator& evaluator, const Cipher2d& a, const Plain2d& encoded_weights) const {
@@ -177,11 +177,11 @@ namespace troy { namespace linear {
                 for (size_t i = 0; i < a[b].size(); i++) {
                     Ciphertext prod;
                     // tim.tick(t1);
-                    evaluator.multiply_plain(a[b][i], encoded_weights[oc][i], prod);
+                    evaluator.multiply_plain(a[b][i], encoded_weights[oc][i], prod, pool);
                     // muladds ++;
                     // tim.tock(t1);
                     if (i==0) cipher = std::move(prod);
-                    else evaluator.add_inplace(cipher, prod);
+                    else evaluator.add_inplace(cipher, prod, pool);
                 }
                 group.push_back(std::move(cipher));
             }
@@ -201,9 +201,9 @@ namespace troy { namespace linear {
                 Ciphertext cipher;
                 for (size_t i = 0; i < a[b].size(); i++) {
                     Ciphertext prod;
-                    evaluator.multiply(a[b][i], encoded_weights[oc][i], prod);
+                    evaluator.multiply(a[b][i], encoded_weights[oc][i], prod, pool);
                     if (i==0) cipher = std::move(prod);
-                    else evaluator.add_inplace(cipher, prod);
+                    else evaluator.add_inplace(cipher, prod, pool);
                 }
                 group.push_back(std::move(cipher));
             }
@@ -222,9 +222,9 @@ namespace troy { namespace linear {
                 Ciphertext cipher;
                 for (size_t i = 0; i < a[b].size(); i++) {
                     Ciphertext prod;
-                    evaluator.multiply_plain(encoded_weights[oc][i], a[b][i], prod);
+                    evaluator.multiply_plain(encoded_weights[oc][i], a[b][i], prod, pool);
                     if (i==0) cipher = std::move(prod);
-                    else evaluator.add_inplace(cipher, prod);
+                    else evaluator.add_inplace(cipher, prod, pool);
                 }
                 group.push_back(std::move(cipher));
             }
@@ -270,7 +270,7 @@ namespace troy { namespace linear {
                         }
                     }
                 }
-                Plaintext encoded; encoder.encode_polynomial(mask, encoded);
+                Plaintext encoded; encoder.encode_polynomial(mask, encoded, pool);
                 group.push_back(std::move(encoded));
             }
             ret.data().push_back(std::move(group));
@@ -304,7 +304,7 @@ namespace troy { namespace linear {
             for (size_t lc = 0; lc < output_channels; lc += output_channel_block) {
                 size_t uc = std::min(lc + output_channel_block, output_channels);
                 // printf("Decrypting block [%lu][%lu]\n", eb, lc / output_channel_block);
-                decryptor.decrypt(outputs[eb][lc / output_channel_block], encoded);
+                decryptor.decrypt(outputs[eb][lc / output_channel_block], encoded, pool);
                 encoder.decode_polynomial(encoded, buffer);
                 for (size_t b = lb; b < ub; b++) {
                     for (size_t c = lc; c < uc; c++) {
@@ -377,7 +377,7 @@ namespace troy { namespace linear {
         for (size_t b = 0; b < totalBatch_size; b++) {
             std::vector<Ciphertext> row(output_channels);
             for (size_t oc = 0; oc < ceil_div(output_channels, output_channel_block); oc++) 
-                row[oc].load_terms(stream, evaluator.context(), required);
+                row[oc].load_terms(stream, evaluator.context(), required, pool);
             ret.data().push_back(std::move(row));
         }
         return ret;

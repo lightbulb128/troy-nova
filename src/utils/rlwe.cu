@@ -16,7 +16,8 @@ namespace troy {namespace rlwe {
         const ParmsID& parms_id,
         bool is_ntt_form,
         RandomGenerator& u_prng,
-        Ciphertext& destination
+        Ciphertext& destination,
+        MemoryPoolHandle pool
     ) {
 
         destination.seed() = 0;
@@ -45,7 +46,7 @@ namespace troy {namespace rlwe {
         }
 
         // make destination have right size and parms_id
-        if (device) destination.to_device_inplace();
+        if (device) destination.to_device_inplace(pool);
         else destination.to_host_inplace();
         destination.resize(context, parms_id, encrypted_size);
         destination.is_ntt_form() = is_ntt_form;
@@ -56,7 +57,7 @@ namespace troy {namespace rlwe {
         // where e[j] <-- chi, u <-- R_3
 
         // Create u <-- Ring_3
-        Array<uint64_t> u(coeff_count * coeff_modulus_size, device);
+        Array<uint64_t> u(coeff_count * coeff_modulus_size, device, pool);
         u_prng.sample_poly_ternary(u.reference(), coeff_count, coeff_modulus);
         
         // c[j] = u * public_key[j]
@@ -97,11 +98,12 @@ namespace troy {namespace rlwe {
         HeContextPointer context,
         const ParmsID& parms_id,
         bool is_ntt_form,
-        Ciphertext& destination
+        Ciphertext& destination,
+        MemoryPoolHandle pool
     ) {
         RandomGenerator& u_prng = context->random_generator();
         asymmetric_with_u_prng(
-            public_key, context, parms_id, is_ntt_form, u_prng, destination
+            public_key, context, parms_id, is_ntt_form, u_prng, destination, pool
         );
     }
     
@@ -112,7 +114,8 @@ namespace troy {namespace rlwe {
         bool is_ntt_form,
         utils::RandomGenerator& c1_prng,
         bool save_seed,
-        Ciphertext& destination
+        Ciphertext& destination,
+        MemoryPoolHandle pool
     ) {
         
         destination.seed() = 0;
@@ -140,8 +143,9 @@ namespace troy {namespace rlwe {
         }
 
         // make destination have right size and parms_id
-        if (device) destination.to_device_inplace();
+        if (device) destination.to_device_inplace(pool);
         else destination.to_host_inplace();
+
         destination.resize(context, parms_id, encrypted_size);
         destination.is_ntt_form() = is_ntt_form;
         destination.scale() = 1.0;
@@ -170,7 +174,7 @@ namespace troy {namespace rlwe {
 
 
         // Sample e <-- chi
-        Array<uint64_t> noise(coeff_count * coeff_modulus_size, device);
+        Array<uint64_t> noise(coeff_count * coeff_modulus_size, device, pool);
         context_prng.sample_poly_centered_binomial(noise.reference(), coeff_count, coeff_modulus);
 
         // Calculate -(as+ e) (mod q) and store in c[0] in BFV/CKKS
@@ -212,11 +216,12 @@ namespace troy {namespace rlwe {
         const ParmsID& parms_id,
         bool is_ntt_form,
         bool save_seed,
-        Ciphertext& destination
+        Ciphertext& destination,
+        MemoryPoolHandle pool
     ) {
         RandomGenerator& c1_prng = context->random_generator();
         symmetric_with_c1_prng(
-            secret_key, context, parms_id, is_ntt_form, c1_prng, save_seed, destination
+            secret_key, context, parms_id, is_ntt_form, c1_prng, save_seed, destination, pool
         );
     }
 

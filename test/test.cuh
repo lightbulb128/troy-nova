@@ -78,7 +78,7 @@ inline bool same_vector(utils::ConstSlice<T> a, utils::ConstSlice<T> b) {
 template<typename T>
 inline bool same_vector(const std::vector<T>& a, utils::ConstSlice<T> b) {
     return same_vector(
-        utils::ConstSlice(a.data(), a.size(), false),
+        utils::ConstSlice(a.data(), a.size(), false, nullptr),
         b
     );
 }
@@ -87,15 +87,15 @@ template<typename T>
 inline bool same_vector(utils::ConstSlice<T> a, const std::vector<T>& b) {
     return same_vector(
         a,
-        utils::ConstSlice(b.data(), b.size(), false)
+        utils::ConstSlice(b.data(), b.size(), false, nullptr)
     );
 }
 
 template<typename T>
 inline bool same_vector(const std::vector<T>& a, const std::vector<T>& b) {
     return same_vector(
-        utils::ConstSlice(a.data(), a.size(), false),
-        utils::ConstSlice(b.data(), b.size(), false)
+        utils::ConstSlice(a.data(), a.size(), false, nullptr),
+        utils::ConstSlice(b.data(), b.size(), false, nullptr)
     );
 }
 

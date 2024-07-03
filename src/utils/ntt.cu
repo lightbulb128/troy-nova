@@ -29,7 +29,7 @@ namespace troy {namespace utils {
 
         // Populate tables with powers of root in specific orders.
         
-        Array<MultiplyUint64Operand> root_powers(coeff_count, false);
+        Array<MultiplyUint64Operand> root_powers(coeff_count, false, nullptr);
         MultiplyUint64Operand root_operand(root, modulus);
         uint64_t power = root;
         for (size_t i = 1; i < coeff_count; i++) {
@@ -41,7 +41,7 @@ namespace troy {namespace utils {
         }
         root_powers[0] = MultiplyUint64Operand(1, modulus);
 
-        Array<MultiplyUint64Operand> inv_root_powers(coeff_count, false);
+        Array<MultiplyUint64Operand> inv_root_powers(coeff_count, false, nullptr);
         root_operand = MultiplyUint64Operand(inv_root, modulus);
         power = inv_root;
         for (size_t i = 1; i < coeff_count; i++) {
@@ -102,13 +102,14 @@ namespace troy {namespace utils {
     void ntt_multiply_inv_degree(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables) {
         bool device = operand.on_device();
         // same device
-        if (device != tables.on_device()) {
+        if (!device_compatible(operand, tables)) {
             throw std::invalid_argument("[ntt_multiply_inv_degree] Operand and tables must be on the same device.");
         }
         if (device) {
             size_t total = (pcount * tables.size()) << log_degree;
             size_t block_count = ceil_div<size_t>(total, KERNEL_THREAD_COUNT);
             kernel_ntt_multiply_inv_degree<<<block_count, KERNEL_THREAD_COUNT>>>(operand, pcount, log_degree, tables);
+            cudaStreamSynchronize(0);
         } else {
             host_ntt_multiply_inv_degree(operand, pcount, log_degree, tables);
         }
@@ -311,7 +312,7 @@ namespace troy {namespace utils {
     void ntt_transfer_to_rev(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers) {
         bool device = operand.on_device();
         // same device
-        if (device != tables.on_device()) {
+        if (!device_compatible(operand, tables)) {
             throw std::invalid_argument("[ntt_transfer_to_rev] Operand and tables must be on the same device.");
         }
         if (!device) {
@@ -327,6 +328,7 @@ namespace troy {namespace utils {
                 kernel_ntt_transfer_to_rev_layers<<<block_count, thread_count>>>(
                     0, log_degree, operand, pcount, log_degree, tables, use_inv_root_powers
                 );
+                cudaStreamSynchronize(0);
             } else {
                 for (size_t layer_lower = 0; layer_lower < log_degree; layer_lower += NTT_KERNEL_THREAD_COUNT_LOG2) {
                     size_t layer_upper = std::min(layer_lower + NTT_KERNEL_THREAD_COUNT_LOG2, log_degree);
@@ -336,6 +338,7 @@ namespace troy {namespace utils {
                     kernel_ntt_transfer_to_rev_layers<<<block_count, NTT_KERNEL_THREAD_COUNT>>>(
                         layer_lower, layer_upper, operand, pcount, log_degree, tables, use_inv_root_powers
                     );
+                    cudaStreamSynchronize(0);
                 }
             }
         }
@@ -535,7 +538,7 @@ namespace troy {namespace utils {
     void ntt_transfer_from_rev(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers) {
         bool device = operand.on_device();
         // same device
-        if (device != tables.on_device()) {
+        if (!device_compatible(operand, tables)) {
             throw std::invalid_argument("[ntt_transfer_from_rev] Operand and tables must be on the same device.");
         }
         if (!device) {
@@ -551,6 +554,7 @@ namespace troy {namespace utils {
                 kernel_ntt_transfer_from_rev_layers<<<block_count, thread_count>>>(
                     0, log_degree, operand, pcount, log_degree, tables, use_inv_root_powers
                 );
+                cudaStreamSynchronize(0);
             } else {
                 for (size_t layer_lower = 0; layer_lower < log_degree; layer_lower += NTT_KERNEL_THREAD_COUNT_LOG2) {
                     size_t layer_upper = std::min(layer_lower + NTT_KERNEL_THREAD_COUNT_LOG2, log_degree);
@@ -560,6 +564,7 @@ namespace troy {namespace utils {
                     kernel_ntt_transfer_from_rev_layers<<<block_count, NTT_KERNEL_THREAD_COUNT>>>(
                         layer_lower, layer_upper, operand, pcount, log_degree, tables, use_inv_root_powers
                     );
+                    cudaStreamSynchronize(0);
                 }
             }
         }
@@ -605,13 +610,14 @@ namespace troy {namespace utils {
     void ntt_transfer_last_reduce(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables) {
         bool device = operand.on_device();
         // same device=
-        if (device != tables.on_device()) {
+        if (!device_compatible(operand, tables)) {
             throw std::invalid_argument("[ntt_transfer_last_reduce] Operand and tables must be on the same device.");
         }
         if (device) {
             size_t total = (pcount * tables.size()) << log_degree;
             size_t block_count = ceil_div<size_t>(total, KERNEL_THREAD_COUNT);
             kernel_ntt_transfer_last_reduce<<<block_count, KERNEL_THREAD_COUNT>>>(operand, pcount, log_degree, tables);
+            cudaStreamSynchronize(0);
         } else {
             host_ntt_transfer_last_reduce(operand, pcount, log_degree, tables);
         }

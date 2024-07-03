@@ -60,20 +60,11 @@ namespace matmul {
         Plain2d w_encoded = helper.encode_weights(encoder, w.integers().data());
         Plain2d s_encoded = helper.encode_outputs(encoder, s.integers().data());
 
-        std::cerr << x_encoded.rows() << " " << x_encoded.columns() << std::endl;
-        std::cerr << "x[0][0] = " << GeneralVector(encoder.decode_polynomial_new(x_encoded[0][0])) << std::endl;
-
         Cipher2d x_encrypted = x_encoded.encrypt_asymmetric(encryptor);
-
-        std::cerr << x_encrypted.rows() << " " << x_encoded.columns() << std::endl;
-        std::cerr << "x[0][0] = " << GeneralVector(encoder.decode_polynomial_new(decryptor.decrypt_new(x_encrypted[0][0]))) << std::endl;
 
         stringstream x_serialized;
         x_encrypted.save(x_serialized, he);
         x_encrypted = Cipher2d::load_new(x_serialized, he);
-
-        std::cerr << x_encrypted.rows() << " " << x_encoded.columns() << std::endl;
-        std::cerr << "x[0][0] = " << GeneralVector(encoder.decode_polynomial_new(decryptor.decrypt_new(x_encrypted[0][0]))) << std::endl;
 
         Cipher2d y_encrypted = helper.conv2d(evaluator, x_encrypted, w_encoded);
         if (mod_switch_to_next) {
@@ -112,11 +103,11 @@ namespace matmul {
             }
         }
 
-        GeneralVector decrypted(std::move(y_decrypted));
-        GeneralVector truthv(std::move(y_truth));
+        GeneralVector decrypted(std::move(y_decrypted), false);
+        GeneralVector truthv(std::move(y_truth), false);
 
-        std::cerr << "Truth:     " << truthv << std::endl;
-        std::cerr << "Decrypted: " << decrypted << std::endl;
+        // std::cerr << "Truth:     " << truthv << std::endl;
+        // std::cerr << "Decrypted: " << decrypted << std::endl;
         
         ASSERT_TRUE(truthv.near_equal(decrypted, 0));
     }

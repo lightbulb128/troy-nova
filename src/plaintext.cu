@@ -19,7 +19,7 @@ namespace troy {
         serialize::save_object(stream, this->coeff_modulus_size());
     }
 
-    void Plaintext::load(std::istream& stream) {
+    void Plaintext::load(std::istream& stream, MemoryPoolHandle pool) {
         serialize::load_object(stream, this->parms_id());
         serialize::load_object(stream, this->scale());
         serialize::load_object(stream, this->coeff_count_);
@@ -31,7 +31,7 @@ namespace troy {
         this->data().resize(size);
         serialize::load_array(stream, this->data().raw_pointer(), size);
         if (device) {
-            this->data().to_device_inplace();
+            this->data().to_device_inplace(pool);
         }
         serialize::load_bool(stream, this->is_ntt_form());
         serialize::load_object(stream, this->poly_modulus_degree());

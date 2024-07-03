@@ -9,7 +9,7 @@ namespace troy {
             throw std::invalid_argument("ParmsID not found");
         }
         const EncryptionParameters& prev_parms = prev_parms_iter->second->parms();
-        EncryptionParameters next_parms = prev_parms.clone();
+        EncryptionParameters next_parms = prev_parms.clone(nullptr);
         next_parms.set_coeff_modulus(
             prev_parms.coeff_modulus().const_slice(0, prev_parms.coeff_modulus().size() - 1)
         );
@@ -51,11 +51,14 @@ namespace troy {
         // Note that this happens even if parameters are not valid
         HeContext he; 
         he.security_level_ = sec_level;
+        if (parms.on_device()) {
+            throw std::logic_error("[HeContext::create] Cannot create HeContext from device parameters");
+        }
         
         // First create key_parms_id_.
         std::unordered_map<ParmsID, ContextDataPointer, std::TroyHashParmsID>& context_data_map
             = he.context_data_map_;
-        ContextData key_context_data = ContextData(parms.clone());
+        ContextData key_context_data = ContextData(parms.clone(nullptr));
         key_context_data.validate(sec_level);
         ParmsID key_parms_id = parms.parms_id();
         context_data_map.emplace(
@@ -128,7 +131,7 @@ namespace troy {
         return std::make_shared<HeContext>(std::move(he));
     }
 
-    void HeContext::to_device_inplace() {
+    void HeContext::to_device_inplace(MemoryPoolHandle pool) {
         if (this->on_device()) {
             return;
         }
@@ -136,7 +139,7 @@ namespace troy {
         // iterate over context datas
         for (auto& [parms_id, context_data_ptr] : this->context_data_map_) {
             // cast as mutable
-            std::const_pointer_cast<ContextData>(context_data_ptr)->to_device_inplace();
+            std::const_pointer_cast<ContextData>(context_data_ptr)->to_device_inplace(pool);
         }
         this->device = true;
     }

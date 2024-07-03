@@ -18,6 +18,26 @@ namespace troy { namespace utils {
         return a == b && b == c && c == d;
     }
 
+    template <typename T0, typename T1>
+    inline bool device_compatible(const T0& t0, const T1& t1) {
+        if (t0.on_device() != t1.on_device()) return false;
+        if (t0.on_device()) {
+            return t0.device_index() == t1.device_index();
+        } else {
+            return true;
+        }
+    }
+
+    template <typename T0, typename T1, typename T2>
+    inline bool device_compatible(const T0& t0, const T1& t1, const T2& t2) {
+        return device_compatible(t0, t1) && device_compatible(t0, t2);
+    }
+
+    template <typename T0, typename T1, typename T2, typename T3>
+    inline bool device_compatible(const T0& t0, const T1& t1, const T2& t2, const T3& t3) {
+        return device_compatible(t0, t1) && device_compatible(t0, t2) && device_compatible(t0, t3);
+    }
+
     template <typename T>
     inline T ceil_div(T a, T b) {
         return (a + b - 1) / b;
@@ -582,7 +602,7 @@ namespace troy { namespace utils {
         size_t max_index = (operand1.size() < result.size()) ? operand1.size() : result.size();
         for (size_t i = 0; i < max_index; i++) {
             uint64_t temp_result[2] = { 0, 0 };
-            multiply_uint64_uint64(operand1[i], operand2, Slice<uint64_t>(temp_result, 2, on_device()));
+            multiply_uint64_uint64(operand1[i], operand2, Slice<uint64_t>(temp_result, 2, on_device(), nullptr));
             uint64_t temp = 0;
             carry = temp_result[1] + static_cast<uint64_t>(add_uint64_carry(temp_result[0], static_cast<uint64_t>(carry), 0, temp));
             result[i] = temp;
@@ -616,7 +636,7 @@ namespace troy { namespace utils {
             size_t carry = 0;
             for (size_t operand2_index = 0; operand2_index < operand2_index_max; operand2_index++) {
             uint64_t temp_result[2] = { 0, 0 };
-                multiply_uint64_uint64(operand1[operand1_index], operand2[operand2_index], Slice<uint64_t>(temp_result, 2, on_device()));
+                multiply_uint64_uint64(operand1[operand1_index], operand2[operand2_index], Slice<uint64_t>(temp_result, 2, on_device(), nullptr));
                 carry = temp_result[1] + static_cast<uint64_t>(add_uint64_carry(temp_result[0], carry, 0, temp_result[0]));  // Wrapping add?
                 uint64_t temp = 0;
                 carry += static_cast<uint64_t>(add_uint64_carry(result[operand1_index + operand2_index], temp_result[0], 0, temp));  // Wrapping add?
@@ -634,12 +654,12 @@ namespace troy { namespace utils {
     }
 
     __host__
-    void divide_uint_inplace(Slice<uint64_t> numerator, ConstSlice<uint64_t> denominator, Slice<uint64_t> quotient);
+    void divide_uint_inplace(Slice<uint64_t> numerator, ConstSlice<uint64_t> denominator, Slice<uint64_t> quotient, MemoryPoolHandle pool = MemoryPool::GlobalPool());
 
     __host__
-    inline void divide_uint(ConstSlice<uint64_t> numerator, ConstSlice<uint64_t> denominator, Slice<uint64_t> quotient, Slice<uint64_t> remainder) {
+    inline void divide_uint(ConstSlice<uint64_t> numerator, ConstSlice<uint64_t> denominator, Slice<uint64_t> quotient, Slice<uint64_t> remainder, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         set_uint(numerator, remainder.size(), remainder);
-        divide_uint_inplace(remainder, denominator, quotient);
+        divide_uint_inplace(remainder, denominator, quotient, pool);
     }
 
     __host__ __device__
@@ -655,7 +675,7 @@ namespace troy { namespace utils {
     }
 
     __host__
-    void divide_uint192_uint64_inplace(Slice<uint64_t> numerator, uint64_t denominator, Slice<uint64_t> quotient);
+    void divide_uint192_uint64_inplace(Slice<uint64_t> numerator, uint64_t denominator, Slice<uint64_t> quotient, MemoryPoolHandle pool = MemoryPool::GlobalPool());
 
     __host__ __device__
     inline int compare_uint(ConstSlice<uint64_t> operand1, ConstSlice<uint64_t> operand2) {
@@ -715,13 +735,13 @@ namespace troy { namespace utils {
     }
 
     __host__
-    inline void multiply_many_uint64(ConstSlice<uint64_t> operands, Slice<uint64_t> result) {
+    inline void multiply_many_uint64(ConstSlice<uint64_t> operands, Slice<uint64_t> result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         if (operands.size() == 0) {
             return;
         }
         set_zero_uint(result);
         result[0] = operands[0];
-        Array<uint64_t> temp_mpi(operands.size(), on_device());
+        Array<uint64_t> temp_mpi(operands.size(), on_device(), pool);
         for (size_t i = 1; i < operands.size(); i++) {
             multiply_uint_uint64(result.as_const(), operands[i], temp_mpi.reference());
             set_uint(temp_mpi.const_reference(), i + 1, result);

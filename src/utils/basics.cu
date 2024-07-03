@@ -4,7 +4,7 @@ namespace troy {namespace utils {
 
 
     __host__
-    void divide_uint_inplace(Slice<uint64_t> numerator, ConstSlice<uint64_t> denominator, Slice<uint64_t> quotient) {
+    void divide_uint_inplace(Slice<uint64_t> numerator, ConstSlice<uint64_t> denominator, Slice<uint64_t> quotient, MemoryPoolHandle pool) {
         // assert!(numerator.len() == denominator.len());
         // assert!(numerator.len() == quotient.len());
         size_t uint64_count = quotient.size();
@@ -24,11 +24,11 @@ namespace troy {namespace utils {
             return;
         }
         // Create temporary space to store mutable copy of denominator.
-        Array<uint64_t> shifted_denominator(uint64_count, on_device());
+        Array<uint64_t> shifted_denominator(uint64_count, on_device(), pool);
         // Shift denominator to bring MSB in alignment with MSB of numerator.
         size_t denominator_shift = numerator_bits - denominator_bits;
         left_shift_uint(denominator, denominator_shift, uint64_count, shifted_denominator.reference());
-        Array<uint64_t> difference(uint64_count, on_device());
+        Array<uint64_t> difference(uint64_count, on_device(), pool);
         denominator_bits += denominator_shift;
         // Perform bit-wise division algorithm.
         size_t remaining_shifts = denominator_shift;
@@ -63,7 +63,7 @@ namespace troy {namespace utils {
     }
     
     __host__
-    void divide_uint192_uint64_inplace(Slice<uint64_t> numerator, uint64_t denominator, Slice<uint64_t> quotient) {
+    void divide_uint192_uint64_inplace(Slice<uint64_t> numerator, uint64_t denominator, Slice<uint64_t> quotient, MemoryPoolHandle pool) {
         quotient[0] = 0; quotient[1] = 0; quotient[2] = 0;
         // Determine significant bits in numerator and denominator.
         size_t numerator_bits = get_significant_bit_count_uint(numerator.as_const());
@@ -79,12 +79,12 @@ namespace troy {namespace utils {
             return;
         }
         // Create temporary space to store mutable copy of denominator.
-        Array<uint64_t> shifted_denominator(uint64_count, on_device());
+        Array<uint64_t> shifted_denominator(uint64_count, on_device(), pool);
         shifted_denominator[0] = denominator;
         // Shift denominator to bring MSB in alignment with MSB of numerator.
         size_t denominator_shift = numerator_bits - denominator_bits;
         left_shift_uint192_inplace(shifted_denominator.reference(), denominator_shift);
-        Array<uint64_t> difference(uint64_count, on_device());
+        Array<uint64_t> difference(uint64_count, on_device(), pool);
         denominator_bits += denominator_shift;
         // Perform bit-wise division algorithm.
         size_t remaining_shifts = denominator_shift;

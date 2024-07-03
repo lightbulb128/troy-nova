@@ -2,16 +2,16 @@
 
 namespace troy { namespace linear {
 
-    Cipher2d Plain2d::encrypt_internal(const Encryptor& encryptor, bool symmetric) const {
+    Cipher2d Plain2d::encrypt_internal(const Encryptor& encryptor, bool symmetric, MemoryPoolHandle pool) const {
         Cipher2d cipher;
         Ciphertext buffer;
         for (size_t i = 0; i < this->rows(); ++i) {
             std::vector<Ciphertext>& row = cipher.new_row();
             for (size_t j = 0; j < this->data()[i].size(); ++j) {
                 if (!symmetric) {
-                    encryptor.encrypt_asymmetric((*this)[i][j], buffer);
+                    encryptor.encrypt_asymmetric((*this)[i][j], buffer, nullptr, pool);
                 } else {
-                    encryptor.encrypt_symmetric((*this)[i][j], true, buffer);
+                    encryptor.encrypt_symmetric((*this)[i][j], true, buffer, nullptr, pool);
                 }
                 row.push_back(std::move(buffer));
             }
@@ -19,11 +19,11 @@ namespace troy { namespace linear {
         return cipher;
     }
 
-    Cipher2d Plain2d::encrypt_asymmetric(const Encryptor& encryptor) const {
-        return encrypt_internal(encryptor, false);
+    Cipher2d Plain2d::encrypt_asymmetric(const Encryptor& encryptor, MemoryPoolHandle pool) const {
+        return encrypt_internal(encryptor, false, pool);
     }
-    Cipher2d Plain2d::encrypt_symmetric(const Encryptor& encryptor) const {
-        return encrypt_internal(encryptor, true);
+    Cipher2d Plain2d::encrypt_symmetric(const Encryptor& encryptor, MemoryPoolHandle pool) const {
+        return encrypt_internal(encryptor, true, pool);
     }
 
     void Cipher2d::save(std::ostream& stream, HeContextPointer context) const {
@@ -37,7 +37,7 @@ namespace troy { namespace linear {
         }
     }
 
-    void Cipher2d::load(std::istream& stream, HeContextPointer context) {
+    void Cipher2d::load(std::istream& stream, HeContextPointer context, MemoryPoolHandle pool) {
         size_t rows;
         this->data().clear();
         troy::serialize::load_object(stream, rows);
@@ -47,7 +47,7 @@ namespace troy { namespace linear {
             std::vector<Ciphertext>& row = this->new_row();
             for (size_t j = 0; j < row_size; j++) {
                 Ciphertext cipher;
-                cipher.load(stream, context);
+                cipher.load(stream, context, pool);
                 row.push_back(std::move(cipher));
             }
         }
@@ -67,7 +67,7 @@ namespace troy { namespace linear {
     }
 
 
-    Cipher2d Cipher2d::translate(const Evaluator& evaluator, const Cipher2d& other, bool subtract) const {
+    Cipher2d Cipher2d::translate(const Evaluator& evaluator, const Cipher2d& other, bool subtract, MemoryPoolHandle pool) const {
         if (this->size() != other.size()) {
             throw std::runtime_error("[Cipher2d::translate] Row size mismatch.");
         }
@@ -80,9 +80,9 @@ namespace troy { namespace linear {
             std::vector<Ciphertext>& row = result.new_row();
             for (size_t j = 0; j < (*this)[i].size(); j++) {
                 if (!subtract) {
-                    evaluator.add((*this)[i][j], other[i][j], buffer);
+                    evaluator.add((*this)[i][j], other[i][j], buffer, pool);
                 } else {
-                    evaluator.sub((*this)[i][j], other[i][j], buffer);
+                    evaluator.sub((*this)[i][j], other[i][j], buffer, pool);
                 }
                 row.push_back(std::move(buffer));
             }
@@ -90,7 +90,7 @@ namespace troy { namespace linear {
         return result;
     }
 
-    void Cipher2d::translate_inplace(const Evaluator& evaluator, const Cipher2d& other, bool subtract) {
+    void Cipher2d::translate_inplace(const Evaluator& evaluator, const Cipher2d& other, bool subtract, MemoryPoolHandle pool) {
         if (this->size() != other.size()) {
             throw std::runtime_error("[Cipher2d::translate_inplace] Row size mismatch.");
         }
@@ -100,15 +100,15 @@ namespace troy { namespace linear {
             }
             for (size_t j = 0; j < (*this)[i].size(); j++) {
                 if (!subtract) {
-                    evaluator.add_inplace((*this)[i][j], other[i][j]);
+                    evaluator.add_inplace((*this)[i][j], other[i][j], pool);
                 } else {
-                    evaluator.sub_inplace((*this)[i][j], other[i][j]);
+                    evaluator.sub_inplace((*this)[i][j], other[i][j], pool);
                 }
             }
         }
     }
 
-    Cipher2d Cipher2d::translate_plain(const Evaluator& evaluator, const Plain2d& other, bool subtract) const {
+    Cipher2d Cipher2d::translate_plain(const Evaluator& evaluator, const Plain2d& other, bool subtract, MemoryPoolHandle pool) const {
         if (this->size() != other.size()) {
             throw std::runtime_error("[Cipher2d::translate_plain] Row size mismatch.");
         }
@@ -121,9 +121,9 @@ namespace troy { namespace linear {
             std::vector<Ciphertext>& row = result.new_row();
             for (size_t j = 0; j < (*this)[i].size(); j++) {
                 if (!subtract) {
-                    evaluator.add_plain((*this)[i][j], other[i][j], buffer);
+                    evaluator.add_plain((*this)[i][j], other[i][j], buffer, pool);
                 } else {
-                    evaluator.sub_plain((*this)[i][j], other[i][j], buffer);
+                    evaluator.sub_plain((*this)[i][j], other[i][j], buffer, pool);
                 }
                 row.push_back(std::move(buffer));
             }
@@ -131,7 +131,7 @@ namespace troy { namespace linear {
         return result;
     }
 
-    void Cipher2d::translate_plain_inplace(const Evaluator& evaluator, const Plain2d& other, bool subtract) {
+    void Cipher2d::translate_plain_inplace(const Evaluator& evaluator, const Plain2d& other, bool subtract, MemoryPoolHandle pool) {
         if (this->size() != other.size()) {
             throw std::runtime_error("[Cipher2d::translate_plain_inplace] Row size mismatch.");
         }
@@ -141,9 +141,9 @@ namespace troy { namespace linear {
             }
             for (size_t j = 0; j < (*this)[i].size(); j++) {
                 if (!subtract) {
-                    evaluator.add_plain_inplace((*this)[i][j], other[i][j]);
+                    evaluator.add_plain_inplace((*this)[i][j], other[i][j], pool);
                 } else {
-                    evaluator.sub_plain_inplace((*this)[i][j], other[i][j]);
+                    evaluator.sub_plain_inplace((*this)[i][j], other[i][j], pool);
                 }
             }
         }

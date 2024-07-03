@@ -35,6 +35,7 @@ namespace troy {namespace utils {
         } else {
             size_t block_count = utils::ceil_div(n, utils::KERNEL_THREAD_COUNT);
             kernel_fill_uint128s<<<block_count, utils::KERNEL_THREAD_COUNT>>>(bytes, seed, counter);
+            cudaStreamSynchronize(0);
             counter = counter.add(n);
         }
     }
@@ -61,7 +62,7 @@ namespace troy {namespace utils {
         if (tail > 0) {
             ruint128_t value = host_generate_uint128(this->seed, this->counter);
             Slice<uint8_t> tail_slice = bytes.slice(main * sizeof(ruint128_t), bytes.size());
-            tail_slice.copy_from_slice(ConstSlice<uint8_t>(reinterpret_cast<uint8_t*>(&value), tail, false));
+            tail_slice.copy_from_slice(ConstSlice<uint8_t>(reinterpret_cast<uint8_t*>(&value), tail, false, nullptr));
         }
     }
 
@@ -70,7 +71,8 @@ namespace troy {namespace utils {
             Slice<uint8_t>(
                 reinterpret_cast<uint8_t*>(uint64s.raw_pointer()), 
                 uint64s.size() * sizeof(uint64_t), 
-                uint64s.on_device()
+                uint64s.on_device(),
+                uint64s.pool()
             )
         );
     }
@@ -101,11 +103,11 @@ namespace troy {namespace utils {
     
     void RandomGenerator::sample_poly_ternary(Slice<uint64_t> destination, size_t degree, ConstSlice<Modulus> moduli) {
         bool device = destination.on_device();
-        if (device != moduli.on_device()) {
+        if (!utils::device_compatible(destination, moduli)) {
             throw std::runtime_error("[RandomGenerator::sample_poly_ternary] destination and modulus must be on the same device");
         }
         if (!device) {
-            Array<uint8_t> buffer(degree, false); 
+            Array<uint8_t> buffer(degree, false, nullptr); 
             this->fill_bytes(buffer.reference());
             for (size_t j = 0; j < degree; j++) {
                 uint8_t r = buffer[j] % 3;
@@ -124,6 +126,7 @@ namespace troy {namespace utils {
                 destination, degree, moduli,
                 this->seed, this->counter
             );
+            cudaStreamSynchronize(0);
             this->counter = this->counter.add(degree);
         }
     }
@@ -162,11 +165,11 @@ namespace troy {namespace utils {
 
     void RandomGenerator::sample_poly_centered_binomial(Slice<uint64_t> destination, size_t degree, ConstSlice<Modulus> moduli) {
         bool device = destination.on_device();
-        if (device != moduli.on_device()) {
+        if (!utils::device_compatible(destination, moduli)) {
             throw std::runtime_error("[RandomGenerator::sample_poly_centered_binomial] destination and modulus must be on the same device");
         }
         if (!device) {
-            Array<uint64_t> buffer(degree, false);
+            Array<uint64_t> buffer(degree, false, nullptr);
             this->fill_uint64s(buffer.reference());
             for (size_t j = 0; j < degree; j++) {
                 int r = uint64_to_cbd(buffer[j]);
@@ -184,13 +187,14 @@ namespace troy {namespace utils {
             kernel_sample_poly_centered_binomial<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 destination, degree, moduli, this->seed, this->counter
             );
+            cudaStreamSynchronize(0);
             this->counter = this->counter.add(degree);
         }
     }
 
     void RandomGenerator::sample_poly_uniform(Slice<uint64_t> destination, size_t degree, ConstSlice<Modulus> moduli) {
         bool device = destination.on_device();
-        if (device != moduli.on_device()) {
+        if (!utils::device_compatible(destination, moduli)) {
             throw std::runtime_error("[RandomGenerator::sample_poly_uniform] destination and modulus must be on the same device");
         }
         this->fill_uint64s(destination);

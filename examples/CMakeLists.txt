@@ -11,6 +11,8 @@ target_sources(troyexamples PRIVATE
     7_serialization.cu
     10_bfv_matmul.cu
     11_ckks_matmul.cu
+    20_memory_pools.cu
+    99_quickstart.cu
 )
 
 target_link_libraries(troyexamples PRIVATE troy)

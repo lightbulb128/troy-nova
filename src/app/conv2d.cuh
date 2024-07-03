@@ -23,6 +23,7 @@ namespace troy { namespace linear {
         size_t batch_block, input_channel_block, output_channel_block;
         size_t image_height_block, image_width_block;
         MatmulObjective objective; 
+        MemoryPoolHandle pool;
         bool pack_lwe;
 
         inline Conv2dHelper(
@@ -31,13 +32,15 @@ namespace troy { namespace linear {
             size_t image_height, size_t image_width,
             size_t kernel_height, size_t kernel_width,
             size_t poly_degree,
-            MatmulObjective objective = MatmulObjective::EncryptLeft
+            MatmulObjective objective = MatmulObjective::EncryptLeft,
+            MemoryPoolHandle pool = MemoryPool::GlobalPool()
         ):
             batch_size(batch_size), 
             input_channels(input_channels), output_channels(output_channels),
             image_height(image_height), image_width(image_width),
             kernel_height(kernel_height), kernel_width(kernel_width),
-            slot_count(poly_degree), objective(objective)
+            slot_count(poly_degree), objective(objective),
+            pool(pool)
         {
             determine_block();
         }

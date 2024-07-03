@@ -10,7 +10,8 @@ namespace troy { namespace rlwe {
         const ParmsID& parms_id,
         bool is_ntt_form,
         utils::RandomGenerator& u_prng,
-        Ciphertext& destination
+        Ciphertext& destination,
+        MemoryPoolHandle pool
     );
 
     void asymmetric(
@@ -18,7 +19,8 @@ namespace troy { namespace rlwe {
         HeContextPointer context,
         const ParmsID& parms_id,
         bool is_ntt_form,
-        Ciphertext& destination
+        Ciphertext& destination,
+        MemoryPoolHandle pool
     );
 
     void symmetric_with_c1_prng(
@@ -28,7 +30,8 @@ namespace troy { namespace rlwe {
         bool is_ntt_form,
         utils::RandomGenerator& c1_prng,
         bool save_seed,
-        Ciphertext& destination
+        Ciphertext& destination,
+        MemoryPoolHandle pool
     );
 
     void symmetric(
@@ -37,7 +40,8 @@ namespace troy { namespace rlwe {
         const ParmsID& parms_id,
         bool is_ntt_form,
         bool save_seed,
-        Ciphertext& destination
+        Ciphertext& destination,
+        MemoryPoolHandle pool
     );
 
 }}

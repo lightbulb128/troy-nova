@@ -55,9 +55,9 @@ namespace ntt {
         size_t coeff_count_power = 1;
         Modulus modulus(0xffffffffffc0001);
         NTTTables tables(coeff_count_power, modulus);
-        ConstSlice<NTTTables> table_slice(&tables, 1, false);
+        ConstSlice<NTTTables> table_slice(&tables, 1, false, nullptr);
 
-        Array<uint64_t> poly(2, false);
+        Array<uint64_t> poly(2, false, nullptr);
         poly[0] = 0; poly[1] = 0;
         ntt_negacyclic_harvey_p(poly.reference(), poly.size(), table_slice);
         EXPECT_EQ(poly[0], 0);
@@ -79,14 +79,14 @@ namespace ntt {
 
         size_t coeff_count_power = 1;
         Modulus modulus(0xffffffffffc0001);
-        Box<NTTTables> tables(new NTTTables(coeff_count_power, modulus), false);
+        Box<NTTTables> tables(new NTTTables(coeff_count_power, modulus), false, nullptr);
         tables->to_device_inplace(); // this moves the arrays into device, but not the table itself
-        Box<NTTTables> tables_device = tables.to_device();
+        Box<NTTTables> tables_device = tables.to_device(MemoryPool::GlobalPool());
         ConstSlice<NTTTables> table_slice = ConstSlice<NTTTables>::from_pointer(tables_device.as_const_pointer());
 
-        Array<uint64_t> poly(2, false);
+        Array<uint64_t> poly(2, false, nullptr);
         poly[0] = 0; poly[1] = 0;
-        poly.to_device_inplace();
+        poly.to_device_inplace(MemoryPool::GlobalPool());
         ntt_negacyclic_harvey_p(poly.reference(), poly.size(), table_slice);
         poly.to_host_inplace();
         EXPECT_EQ(poly[0], 0);
@@ -114,20 +114,20 @@ namespace ntt {
         size_t n = 1 << coeff_count_power;
         Modulus modulus(0xffffffffffc0001);
         NTTTables tables(coeff_count_power, modulus);
-        ConstSlice<NTTTables> table_slice(&tables, 1, false);
+        ConstSlice<NTTTables> table_slice(&tables, 1, false, nullptr);
 
-        Array<uint64_t> poly(n, false);
+        Array<uint64_t> poly(n, false, nullptr);
         set_zero_uint(poly.reference());
         inverse_ntt_negacyclic_harvey_p(poly.reference(), poly.size(), table_slice);
         for (size_t i = 0; i < n; i++) {
             EXPECT_EQ(poly[i], 0);
         }
 
-        Array<uint64_t> original(n, false);
+        Array<uint64_t> original(n, false, nullptr);
         for (size_t i = 0; i < n; i++) {
             original[i] = i;
         }
-        poly = original.clone();
+        poly = original.clone(MemoryPool::GlobalPool());
         ntt_negacyclic_harvey_p(poly.reference(), n, table_slice);
         inverse_ntt_negacyclic_harvey_p(poly.reference(), n, table_slice);
         for (size_t i = 0; i < n; i++) {
@@ -142,26 +142,26 @@ namespace ntt {
         size_t n = 1 << coeff_count_power;
         Modulus modulus(0xffffffffffc0001);
         
-        Box<NTTTables> tables(new NTTTables(coeff_count_power, modulus), false);
+        Box<NTTTables> tables(new NTTTables(coeff_count_power, modulus), false, nullptr);
         tables->to_device_inplace(); // this moves the arrays into device, but not the table itself
-        Box<NTTTables> tables_device = tables.to_device();
+        Box<NTTTables> tables_device = tables.to_device(MemoryPool::GlobalPool());
         ConstSlice<NTTTables> table_slice = ConstSlice<NTTTables>::from_pointer(tables_device.as_const_pointer());
 
-        Array<uint64_t> poly(n, false);
+        Array<uint64_t> poly(n, false, nullptr);
         set_zero_uint(poly.reference());
-        poly.to_device_inplace();
+        poly.to_device_inplace(MemoryPool::GlobalPool());
         inverse_ntt_negacyclic_harvey_p(poly.reference(), poly.size(), table_slice);
         poly.to_host_inplace();
         for (size_t i = 0; i < n; i++) {
             EXPECT_EQ(poly[i], 0);
         }
 
-        Array<uint64_t> original(n, false);
+        Array<uint64_t> original(n, false, nullptr);
         for (size_t i = 0; i < n; i++) {
             original[i] = i;
         }
-        poly = original.clone();
-        poly.to_device_inplace();
+        poly = original.clone(MemoryPool::GlobalPool());
+        poly.to_device_inplace(MemoryPool::GlobalPool());
         ntt_negacyclic_harvey_p(poly.reference(), n, table_slice);
         inverse_ntt_negacyclic_harvey_p(poly.reference(), n, table_slice);
         poly.to_host_inplace();

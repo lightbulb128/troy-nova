@@ -44,6 +44,9 @@ namespace troy {
 
     public:
 
+        inline MemoryPoolHandle pool() const { return parms_.pool(); }
+        inline bool device_index() const { return parms_.device_index(); }
+
         std::optional<std::shared_ptr<HeContext>> context() const;
         std::shared_ptr<HeContext> context_pointer() const;
 
@@ -154,7 +157,7 @@ namespace troy {
         inline ContextData(EncryptionParameters parms):
             parms_(std::move(parms)), device(false) {}
 
-        void to_device_inplace();
+        void to_device_inplace(MemoryPoolHandle pool = MemoryPool::GlobalPool());
 
     };
 

@@ -1,10 +1,13 @@
+cmake_minimum_required(VERSION 3.18)
+
 project(TroyNew LANGUAGES C CXX CUDA)
 
 set(CMAKE_CXX_STANDARD 17)
 # set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -O3")
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -std=c++17")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -std=c++17 --default-stream per-thread")
+
 
 # if cmake version > 3.18
 if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.18")
@@ -41,6 +44,8 @@ if (TROY_MEMORY_POOL_UNSAFE)
     set(TROY_MEMORY_POOL ON)
   endif()
 endif()
+
+find_package(Threads REQUIRED)
 
 add_subdirectory(src)
 

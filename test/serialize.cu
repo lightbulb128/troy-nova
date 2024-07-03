@@ -36,29 +36,29 @@ namespace serialize {
         ASSERT_TRUE(message.near_equal(decoded, tolerance));
     }
 
-    TEST(Serialize, HostBFVPlaintext) {
+    TEST(SerializeTest, HostBFVPlaintext) {
         GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_plaintext(ghe);
     }
-    TEST(Serialize, HostBGVPlaintext) {
+    TEST(SerializeTest, HostBGVPlaintext) {
         GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_plaintext(ghe);
     }
-    TEST(Serialize, HostCKKSPlaintext) {
+    TEST(SerializeTest, HostCKKSPlaintext) {
         GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1<<16, 1e-2);
         test_plaintext(ghe);
     }
-    TEST(Serialize, DeviceBFVPlaintext) {
+    TEST(SerializeTest, DeviceBFVPlaintext) {
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_plaintext(ghe);
         utils::MemoryPool::Destroy();
     }
-    TEST(Serialize, DeviceBGVPlaintext) {
+    TEST(SerializeTest, DeviceBGVPlaintext) {
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_plaintext(ghe);
         utils::MemoryPool::Destroy();
     }
-    TEST(Serialize, DeviceCKKSPlaintext) {
+    TEST(SerializeTest, DeviceCKKSPlaintext) {
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1<<16, 1e-2);
         test_plaintext(ghe);
         utils::MemoryPool::Destroy();
@@ -98,29 +98,29 @@ namespace serialize {
         ASSERT_TRUE(message.near_equal(decoded, tolerance));
     }
 
-    TEST(Serialize, HostBFVCiphertext) {
+    TEST(SerializeTest, HostBFVCiphertext) {
         GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_ciphertext(ghe);
     }
-    TEST(Serialize, HostBGVCiphertext) {
+    TEST(SerializeTest, HostBGVCiphertext) {
         GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_ciphertext(ghe);
     }
-    TEST(Serialize, HostCKKSCiphertext) {
+    TEST(SerializeTest, HostCKKSCiphertext) {
         GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1<<16, 1e-2);
         test_ciphertext(ghe);
     }
-    TEST(Serialize, DeviceBFVCiphertext) {
+    TEST(SerializeTest, DeviceBFVCiphertext) {
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_ciphertext(ghe);
         utils::MemoryPool::Destroy();
     }
-    TEST(Serialize, DeviceBGVCiphertext) {
+    TEST(SerializeTest, DeviceBGVCiphertext) {
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_ciphertext(ghe);
         utils::MemoryPool::Destroy();
     }
-    TEST(Serialize, DeviceCKKSCiphertext) {
+    TEST(SerializeTest, DeviceCKKSCiphertext) {
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1<<16, 1e-2);
         test_ciphertext(ghe);
         utils::MemoryPool::Destroy();
@@ -162,29 +162,29 @@ namespace serialize {
         ASSERT_TRUE(message.near_equal(decoded, tolerance));
     }
 
-    TEST(Serialize, HostBFVSecretPublicKey) {
+    TEST(SerializeTest, HostBFVSecretPublicKey) {
         GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_secret_public_key(ghe);
     }
-    TEST(Serialize, HostBGVSecretPublicKey) {
+    TEST(SerializeTest, HostBGVSecretPublicKey) {
         GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_secret_public_key(ghe);
     }
-    TEST(Serialize, HostCKKSCSecretPublicKey) {
+    TEST(SerializeTest, HostCKKSCSecretPublicKey) {
         GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1<<16, 1e-2);
         test_secret_public_key(ghe);
     }
-    TEST(Serialize, DeviceBFVSecretPublicKey) {
+    TEST(SerializeTest, DeviceBFVSecretPublicKey) {
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_secret_public_key(ghe);
         utils::MemoryPool::Destroy();
     }
-    TEST(Serialize, DeviceBGVSecretPublicKey) {
+    TEST(SerializeTest, DeviceBGVSecretPublicKey) {
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_secret_public_key(ghe);
         utils::MemoryPool::Destroy();
     }
-    TEST(Serialize, DeviceCKKSSecretPublicKey) {
+    TEST(SerializeTest, DeviceCKKSSecretPublicKey) {
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1<<16, 1e-2);
         test_secret_public_key(ghe);
         utils::MemoryPool::Destroy();
@@ -291,29 +291,29 @@ namespace serialize {
         }
     }
 
-    TEST(Serialize, HostBFVKSwitchKeys) {
+    TEST(SerializeTest, HostBFVKSwitchKeys) {
         GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_kswitch_keys(ghe);
     }
-    TEST(Serialize, HostBGVKSwitchKeys) {
+    TEST(SerializeTest, HostBGVKSwitchKeys) {
         GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_kswitch_keys(ghe);
     }
-    TEST(Serialize, HostCKKSKSwitchKeys) {
+    TEST(SerializeTest, HostCKKSKSwitchKeys) {
         GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
         test_kswitch_keys(ghe);
     }
-    TEST(Serialize, DeviceBFVKSwitchKeys) {
+    TEST(SerializeTest, DeviceBFVKSwitchKeys) {
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_kswitch_keys(ghe);
         utils::MemoryPool::Destroy();
     }
-    TEST(Serialize, DeviceBGVKSwitchKeys) {
+    TEST(SerializeTest, DeviceBGVKSwitchKeys) {
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_kswitch_keys(ghe);
         utils::MemoryPool::Destroy();
     }
-    TEST(Serialize, DeviceCKKSKSwitchKeys) {
+    TEST(SerializeTest, DeviceCKKSKSwitchKeys) {
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
         test_kswitch_keys(ghe);
         utils::MemoryPool::Destroy();
@@ -369,32 +369,32 @@ namespace serialize {
         for (size_t term: terms) {
             ASSERT_TRUE(truth.element(term).near_equal(decoded.element(term), tolerance));
         }
-        
+
     }
 
-    TEST(Serialize, HostBFVCiphertextTerms) {
+    TEST(SerializeTest, HostBFVCiphertextTerms) {
         GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_ciphertext_terms(ghe);
     }
-    TEST(Serialize, HostBGVCiphertextTerms) {
+    TEST(SerializeTest, HostBGVCiphertextTerms) {
         GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_ciphertext_terms(ghe);
     }
-    TEST(Serialize, HostCKKSCiphertextTerms) {
+    TEST(SerializeTest, HostCKKSCiphertextTerms) {
         GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1<<16, 1e-2);
         test_ciphertext_terms(ghe);
     }
-    TEST(Serialize, DeviceBFVCiphertextTerms) {
+    TEST(SerializeTest, DeviceBFVCiphertextTerms) {
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_ciphertext_terms(ghe);
         utils::MemoryPool::Destroy();
     }
-    TEST(Serialize, DeviceBGVCiphertextTerms) {
+    TEST(SerializeTest, DeviceBGVCiphertextTerms) {
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_ciphertext_terms(ghe);
         utils::MemoryPool::Destroy();
     }
-    TEST(Serialize, DeviceCKKSCiphertextTerms) {
+    TEST(SerializeTest, DeviceCKKSCiphertextTerms) {
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1<<16, 1e-2);
         test_ciphertext_terms(ghe);
         utils::MemoryPool::Destroy();

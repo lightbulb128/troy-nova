@@ -9,7 +9,7 @@ namespace troy {namespace utils {
         value = std::abs(value);
         int i = 0;
         while (value > 0) {
-            int zi = (value & 1 != 0) ? (2 - (value & 3)) : 0;
+            int zi = ((value & 1) != 0) ? (2 - (value & 3)) : 0;
             value = (value - zi) >> 1;
             if (zi != 0) {
                 res.push_back((sign ? -zi : zi) << i);

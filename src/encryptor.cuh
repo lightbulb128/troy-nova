@@ -17,13 +17,15 @@ namespace troy {
             const ParmsID& parms_id, 
             bool is_asymmetric, bool save_seed, 
             utils::RandomGenerator* u_prng, 
-            Ciphertext& destination) const;
+            Ciphertext& destination,
+            MemoryPoolHandle pool) const;
 
         void encrypt_internal(
             const Plaintext& plain,
             bool is_asymmetric, bool save_seed,
             utils::RandomGenerator* u_prng,
-            Ciphertext& destination) const;
+            Ciphertext& destination,
+            MemoryPoolHandle pool) const;
 
     public:
 
@@ -52,12 +54,12 @@ namespace troy {
             return public_key_.value().on_device();
         }
         
-        inline void to_device_inplace() {
+        inline void to_device_inplace(MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
             if (public_key_.has_value()) {
-                public_key_.value().to_device_inplace();
+                public_key_.value().to_device_inplace(pool);
             }
             if (secret_key_.has_value()) {
-                secret_key_.value().to_device_inplace();
+                secret_key_.value().to_device_inplace(pool);
             }
         }
 
@@ -76,7 +78,8 @@ namespace troy {
         }
 
         inline void set_public_key(const PublicKey& public_key) {
-            public_key_ = public_key.clone();
+            PublicKey cloned = public_key.clone(public_key.pool());
+            public_key_ = std::move(cloned);
             if (this->secret_key_.has_value()) {
                 if (this->secret_key_.value().on_device() != public_key.on_device()) {
                     throw std::runtime_error("[Encryptor::set_public_key] public key and secret key are not on the same device");
@@ -85,7 +88,7 @@ namespace troy {
         }
 
         inline void set_secret_key(const SecretKey& secret_key) {
-            secret_key_ = secret_key.clone();
+            secret_key_ = secret_key.clone(secret_key.pool());
             if (this->public_key_.has_value()) {
                 if (this->public_key_.value().on_device() != secret_key.on_device()) {
                     throw std::runtime_error("[Encryptor::set_secret_key] public key and secret key are not on the same device");
@@ -93,43 +96,43 @@ namespace troy {
             }
         }
 
-        inline void encrypt_asymmetric(const Plaintext& plain, Ciphertext& destination, utils::RandomGenerator* u_prng = nullptr) const {
-            encrypt_internal(plain, true, false, u_prng, destination);
+        inline void encrypt_asymmetric(const Plaintext& plain, Ciphertext& destination, utils::RandomGenerator* u_prng = nullptr, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            encrypt_internal(plain, true, false, u_prng, destination, pool);
         }
 
-        inline Ciphertext encrypt_asymmetric_new(const Plaintext& plain, utils::RandomGenerator* u_prng = nullptr) const {
+        inline Ciphertext encrypt_asymmetric_new(const Plaintext& plain, utils::RandomGenerator* u_prng = nullptr, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;
-            encrypt_asymmetric(plain, destination, u_prng);
+            encrypt_asymmetric(plain, destination, u_prng, pool);
             return destination;
         }
 
-        inline void encrypt_zero_asymmetric(Ciphertext& destination, std::optional<ParmsID> parms_id = std::nullopt, utils::RandomGenerator* u_prng = nullptr) const {
-            encrypt_zero_internal(parms_id.value_or(context_->first_parms_id()), true, false, u_prng, destination);
+        inline void encrypt_zero_asymmetric(Ciphertext& destination, std::optional<ParmsID> parms_id = std::nullopt, utils::RandomGenerator* u_prng = nullptr, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            encrypt_zero_internal(parms_id.value_or(context_->first_parms_id()), true, false, u_prng, destination, pool);
         }
 
-        inline Ciphertext encrypt_zero_asymmetric_new(std::optional<ParmsID> parms_id = std::nullopt, utils::RandomGenerator* u_prng = nullptr) const {
+        inline Ciphertext encrypt_zero_asymmetric_new(std::optional<ParmsID> parms_id = std::nullopt, utils::RandomGenerator* u_prng = nullptr, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;
-            encrypt_zero_asymmetric(destination, parms_id, u_prng);
+            encrypt_zero_asymmetric(destination, parms_id, u_prng, pool);
             return destination;
         }
 
-        inline void encrypt_symmetric(const Plaintext& plain, bool save_seed, Ciphertext& destination, utils::RandomGenerator* u_prng = nullptr) const {
-            encrypt_internal(plain, false, save_seed, u_prng, destination);
+        inline void encrypt_symmetric(const Plaintext& plain, bool save_seed, Ciphertext& destination, utils::RandomGenerator* u_prng = nullptr, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            encrypt_internal(plain, false, save_seed, u_prng, destination, pool);
         }
 
-        inline Ciphertext encrypt_symmetric_new(const Plaintext& plain, bool save_seed, utils::RandomGenerator* u_prng = nullptr) const {
+        inline Ciphertext encrypt_symmetric_new(const Plaintext& plain, bool save_seed, utils::RandomGenerator* u_prng = nullptr, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;
-            encrypt_symmetric(plain, save_seed, destination, u_prng);
+            encrypt_symmetric(plain, save_seed, destination, u_prng, pool);
             return destination;
         }
 
-        inline void encrypt_zero_symmetric(bool save_seed, Ciphertext& destination, std::optional<ParmsID> parms_id = std::nullopt, utils::RandomGenerator* u_prng = nullptr) const {
-            encrypt_zero_internal(parms_id.value_or(context_->first_parms_id()), false, save_seed, u_prng, destination);
+        inline void encrypt_zero_symmetric(bool save_seed, Ciphertext& destination, std::optional<ParmsID> parms_id = std::nullopt, utils::RandomGenerator* u_prng = nullptr, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            encrypt_zero_internal(parms_id.value_or(context_->first_parms_id()), false, save_seed, u_prng, destination, pool);
         }
 
-        inline Ciphertext encrypt_zero_symmetric_new(bool save_seed, std::optional<ParmsID> parms_id = std::nullopt, utils::RandomGenerator* u_prng = nullptr) const {
+        inline Ciphertext encrypt_zero_symmetric_new(bool save_seed, std::optional<ParmsID> parms_id = std::nullopt, utils::RandomGenerator* u_prng = nullptr, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;
-            encrypt_zero_symmetric(save_seed, destination, parms_id, u_prng);
+            encrypt_zero_symmetric(save_seed, destination, parms_id, u_prng, pool);
             return destination;
         }
 

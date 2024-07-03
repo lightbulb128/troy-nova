@@ -8,6 +8,12 @@ add_library(troy SHARED ${CURRENT_HEADERS} ${CURRENT_SOURCES})
 add_library(troy_static STATIC ${CURRENT_HEADERS} ${CURRENT_SOURCES})
 set_target_properties(troy PROPERTIES CUDA_SEPERABLE_COMPILATION ON)
 
+target_compile_definitions(troy        PRIVATE CUDA_API_PER_THREAD_DEFAULT_STREAM)
+target_compile_definitions(troy_static PRIVATE CUDA_API_PER_THREAD_DEFAULT_STREAM)
+
+target_link_libraries(troy PUBLIC Threads::Threads)
+target_link_libraries(troy_static PUBLIC Threads::Threads)
+
 set(gcc_like_cxx "$<COMPILE_LANG_AND_ID:CXX,ARMClang,AppleClang,Clang,GNU>")
 set(nvcc_cxx "$<COMPILE_LANG_AND_ID:CUDA,NVIDIA>")
 
@@ -18,11 +24,13 @@ target_compile_options(troy INTERFACE
 
 # if TROY_MEMORY_POOL is on, add this as a macro
 if(TROY_MEMORY_POOL)
-  target_compile_definitions(troy PUBLIC TROY_MEMORY_POOL)
+  target_compile_definitions(troy        PUBLIC TROY_MEMORY_POOL)
+  target_compile_definitions(troy_static PUBLIC TROY_MEMORY_POOL)
 endif()
 
 if(TROY_MEMORY_POOL_UNSAFE)
-  target_compile_definitions(troy PUBLIC TROY_MEMORY_POOL_UNSAFE)
+  target_compile_definitions(troy        PUBLIC TROY_MEMORY_POOL_UNSAFE)
+  target_compile_definitions(troy_static PUBLIC TROY_MEMORY_POOL_UNSAFE)
 endif()
 
 install(TARGETS troy troy_static

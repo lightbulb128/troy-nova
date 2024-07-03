@@ -1,4 +1,4 @@
-from test import GeneralVectorDataType, GeneralEncoder, GeneralVector, GeneralHeContext
+from utils import GeneralVectorDataType, GeneralEncoder, GeneralVector, GeneralHeContext
 import pytroy
 from pytroy import SchemeType
 import numpy as np
@@ -65,7 +65,7 @@ class HeUint64MatmulTest:
         truth = GeneralVector(GeneralVectorDataType.Integers, y_truth)
         self.tester.assertTrue(ghe.near_equal(decrypted, truth))
 
-def create_test_uint64s_class(ghe: GeneralHeContext):
+def create_test_uint64s_class(name, ghe: GeneralHeContext):
 
     class UnnamedClass(unittest.TestCase):
 
@@ -83,7 +83,7 @@ def create_test_uint64s_class(ghe: GeneralHeContext):
             UnnamedClass.test_matmul_large_no_pack = lambda self: self.tester.test_matmul(400, 500, 600, pack_lwe=False, mod_switch_to_next=False)
             UnnamedClass.test_matmul_large_pack = lambda self: self.tester.test_matmul(400, 500, 600, pack_lwe=True, mod_switch_to_next=False)
 
-    return UnnamedClass
+    return type(name, (UnnamedClass,), {})
 
 class HeDoubleMatmulTest:
 
@@ -140,7 +140,7 @@ class HeDoubleMatmulTest:
         truth = GeneralVector(GeneralVectorDataType.Doubles, y_truth)
         self.tester.assertTrue(ghe.near_equal(decrypted, truth))
 
-def create_test_doubles_class(ghe: GeneralHeContext):
+def create_test_doubles_class(name, ghe: GeneralHeContext):
 
     class UnnamedClass(unittest.TestCase):
 
@@ -157,7 +157,7 @@ def create_test_doubles_class(ghe: GeneralHeContext):
         UnnamedClass.test_matmul_large_no_pack = lambda self: self.tester.test_matmul(400, 500, 600, pack_lwe=False, mod_switch_to_next=False)
         UnnamedClass.test_matmul_large_pack = lambda self: self.tester.test_matmul(400, 500, 600, pack_lwe=True, mod_switch_to_next=False)
 
-    return UnnamedClass
+    return type(name, (UnnamedClass,), {})
 
 class HeRing2kMatmulTest:
 
@@ -251,7 +251,7 @@ class HeRing2kMatmulTest:
 
         self.tester.assertTrue(np.allclose(y_decrypted, y_truth))
 
-def create_test_ring2k_class(device: bool, t_bits: int, poly_degree: int, q_bits: "list[int]"):
+def create_test_ring2k_class(name, device: bool, t_bits: int, poly_degree: int, q_bits: "list[int]"):
 
     class UnnamedClass(unittest.TestCase):
 
@@ -263,65 +263,44 @@ def create_test_ring2k_class(device: bool, t_bits: int, poly_degree: int, q_bits
     UnnamedClass.test_matmul_medium_no_pack = lambda self: self.tester.test_matmul(40, 50, 60, pack_lwe=False, mod_switch_to_next=False)
     UnnamedClass.test_matmul_small_pack = lambda self: self.tester.test_matmul(4, 5, 6, pack_lwe=True, mod_switch_to_next=False)
     UnnamedClass.test_matmul_medium_pack = lambda self: self.tester.test_matmul(40, 50, 60, pack_lwe=True, mod_switch_to_next=False)
-    return UnnamedClass
-
+    
+    return type(name, (UnnamedClass,), {})
 
 class CompleteTestSuite(unittest.TestSuite):
 
     def __init__(self, device):
         super().__init__()
-        device = False
+        devstr = "Device" if device else "Host"
         
-        test_case = create_test_uint64s_class(GeneralHeContext(device, SchemeType.BFV, 8192, 20, [60, 40, 40, 60], True, 0x123))
+        test_case = create_test_uint64s_class(devstr + "BFVMatmul", GeneralHeContext(device, SchemeType.BFV, 8192, 20, [60, 40, 40, 60], True, 0x123))
         self.addTest(unittest.makeSuite(test_case))
-        test_case = create_test_uint64s_class(GeneralHeContext(device, SchemeType.BGV, 8192, 20, [60, 40, 40, 60], True, 0x123))
-        self.addTest(unittest.makeSuite(test_case))
-        
-        test_case = create_test_doubles_class(GeneralHeContext(device, SchemeType.CKKS, 8192, 20, [60, 40, 40, 60], True, 0x123, 5, 1<<20, 1e-2))
+        test_case = create_test_uint64s_class(devstr + "BGVMatmul", GeneralHeContext(device, SchemeType.BGV, 8192, 20, [60, 40, 40, 60], True, 0x123))
         self.addTest(unittest.makeSuite(test_case))
         
-        test_case = create_test_ring2k_class(device, 32, 8192, [60, 60, 60])
+        test_case = create_test_doubles_class(devstr + "CKKSMatmul", GeneralHeContext(device, SchemeType.CKKS, 8192, 20, [60, 40, 40, 60], True, 0x123, 5, 1<<20, 1e-2))
         self.addTest(unittest.makeSuite(test_case))
-        test_case = create_test_ring2k_class(device, 20, 8192, [60, 60, 60])
+        
+        test_case = create_test_ring2k_class(devstr + "Ring32Matmul", device, 32, 8192, [60, 60, 60])
         self.addTest(unittest.makeSuite(test_case))
-        test_case = create_test_ring2k_class(device, 17, 8192, [60, 60, 60])
+        test_case = create_test_ring2k_class(devstr + "Ring20Matmul", device, 20, 8192, [60, 60, 60])
         self.addTest(unittest.makeSuite(test_case))
-
-        test_case = create_test_ring2k_class(device, 64, 8192, [60, 60, 60, 60])
-        self.addTest(unittest.makeSuite(test_case))
-        test_case = create_test_ring2k_class(device, 50, 8192, [60, 60, 60, 60])
-        self.addTest(unittest.makeSuite(test_case))
-        test_case = create_test_ring2k_class(device, 33, 8192, [60, 60, 60, 60])
+        test_case = create_test_ring2k_class(devstr + "Ring17Matmul", device, 17, 8192, [60, 60, 60])
         self.addTest(unittest.makeSuite(test_case))
 
+        test_case = create_test_ring2k_class(devstr + "Ring64Matmul", device, 64, 8192, [60, 60, 60, 60])
+        self.addTest(unittest.makeSuite(test_case))
+        test_case = create_test_ring2k_class(devstr + "Ring50Matmul", device, 50, 8192, [60, 60, 60, 60])
+        self.addTest(unittest.makeSuite(test_case))
+        test_case = create_test_ring2k_class(devstr + "Ring33Matmul", device, 33, 8192, [60, 60, 60, 60])
+        self.addTest(unittest.makeSuite(test_case))
 
-def custom_main():
-    print("There is nothing here.")
+def get_suite():
+    suite = unittest.TestSuite()
+    suite.addTest(CompleteTestSuite(False))
+    suite.addTest(CompleteTestSuite(True))
+    return suite
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--custom", action="store_true")
-
-    args = parser.parse_args()
-
     pytroy.initialize_kernel(0)
-
-    if args.custom:
-
-        custom_main()
-
-    else:
-
-        # run host suite
-        print("===== Running host test suite =====")
-        suite = CompleteTestSuite(False)
-        unittest.TextTestRunner().run(suite)
-        print("")
-
-        # run device suite
-        print("===== Running device test suite =====")
-        suite = CompleteTestSuite(True)
-        unittest.TextTestRunner().run(suite)
-        print("")
-
+    unittest.TextTestRunner(verbosity=2).run(get_suite())
     pytroy.destroy_memory_pool()

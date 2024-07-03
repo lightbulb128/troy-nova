@@ -11,34 +11,37 @@ namespace troy {
 
     public:
 
-        inline SecretKey() {}
+        inline MemoryPoolHandle pool() const { return sk.pool(); }
+        inline bool device_index() const { return sk.device_index(); }
 
-        inline SecretKey(const Plaintext& sk): sk(sk.clone()) {}
+        inline SecretKey() {}
+        inline SecretKey(const Plaintext& sk): sk(sk.clone(sk.pool())) {}
+        inline SecretKey(Plaintext&& sk): sk(std::move(sk)) {}
 
         inline bool on_device() const {
             return sk.on_device();
         }
 
-        inline SecretKey clone() const {
-            return SecretKey(sk.clone());
+        inline SecretKey clone(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            return SecretKey(sk.clone(pool));
         }
 
-        inline void to_device_inplace() {
-            sk.to_device_inplace();
+        inline void to_device_inplace(MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+            sk.to_device_inplace(pool);
         }
 
         inline void to_host_inplace() {
             sk.to_host_inplace();
         }
 
-        inline SecretKey to_device() const {
-            SecretKey cloned = this->clone();
-            cloned.to_device_inplace();
+        inline SecretKey to_device(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            SecretKey cloned = this->clone(pool);
+            cloned.to_device_inplace(pool);
             return cloned;
         }
 
         inline SecretKey to_host() const {
-            SecretKey cloned = this->clone();
+            SecretKey cloned = this->clone(pool());
             cloned.to_host_inplace();
             return cloned;
         }
@@ -70,12 +73,12 @@ namespace troy {
         inline void save(std::ostream& stream) const {
             sk.save(stream);
         }
-        inline void load(std::istream& stream) {
-            sk.load(stream);
+        inline void load(std::istream& stream, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+            sk.load(stream, pool);
         }
-        inline static SecretKey load_new(std::istream& stream) {
+        inline static SecretKey load_new(std::istream& stream, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
             SecretKey sk;
-            sk.load(stream);
+            sk.load(stream, pool);
             return sk;
         }
         inline size_t serialized_size() const {
@@ -90,33 +93,38 @@ namespace troy {
         Ciphertext pk;
 
     public:
+
+        inline MemoryPoolHandle pool() const { return pk.pool(); }
+        inline bool device_index() const { return pk.device_index(); }
+
         inline PublicKey() {}
-        inline PublicKey(const Ciphertext& pk): pk(pk.clone()) {}
+        inline PublicKey(const Ciphertext& pk): pk(pk.clone(pk.pool())) {}
+        inline PublicKey(Ciphertext&& pk): pk(std::move(pk)) {}
 
         inline bool on_device() const {
             return pk.on_device();
         }
 
-        inline PublicKey clone() const {
-            return PublicKey(pk.clone());
+        inline PublicKey clone(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            return PublicKey(pk.clone(pool));
         }
 
-        inline void to_device_inplace() {
-            pk.to_device_inplace();
+        inline void to_device_inplace(MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+            pk.to_device_inplace(pool);
         }
 
         inline void to_host_inplace() {
             pk.to_host_inplace();
         }
 
-        inline PublicKey to_device() const {
-            PublicKey cloned = this->clone();
-            cloned.to_device_inplace();
+        inline PublicKey to_device(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            PublicKey cloned = this->clone(pool);
+            cloned.to_device_inplace(pool);
             return cloned;
         }
 
         inline PublicKey to_host() const {
-            PublicKey cloned = this->clone();
+            PublicKey cloned = this->clone(pool());
             cloned.to_host_inplace();
             return cloned;
         }
@@ -155,12 +163,12 @@ namespace troy {
         inline void save(std::ostream& stream, HeContextPointer context) const {
             pk.save(stream, context);
         }
-        inline void load(std::istream& stream, HeContextPointer context) {
-            pk.load(stream, context);
+        inline void load(std::istream& stream, HeContextPointer context, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+            pk.load(stream, context, pool);
         }
-        inline static PublicKey load_new(std::istream& stream, HeContextPointer context) {
+        inline static PublicKey load_new(std::istream& stream, HeContextPointer context, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
             Ciphertext result;
-            result.load(stream, context);
+            result.load(stream, context, pool);
             return result;
         }
         inline size_t serialized_size(HeContextPointer context) const {

@@ -92,8 +92,8 @@ namespace matmul {
             }
         }
 
-        GeneralVector decrypted(std::move(y_decrypted));
-        GeneralVector truthv(std::move(y_truth));
+        GeneralVector decrypted(std::move(y_decrypted), false);
+        GeneralVector truthv(std::move(y_truth), false);
 
         // std::cerr << "Truth:     " << truthv << std::endl;
         // std::cerr << "Decrypted: " << decrypted << std::endl;

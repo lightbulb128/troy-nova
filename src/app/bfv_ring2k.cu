@@ -110,7 +110,7 @@ namespace troy::linear {
         gamma_host_ = utils::get_prime(poly_degree, utils::HE_INTERNAL_MOD_BIT_COUNT);
         Modulus* gamma_space = reinterpret_cast<Modulus*>(std::malloc(sizeof(Modulus)));
         *gamma_space = gamma_host_;
-        gamma_ = utils::Box<Modulus>(gamma_space, false);
+        gamma_ = utils::Box<Modulus>(gamma_space, false, nullptr);
         for (size_t i = 0; i < coeff_modulus.size(); i++) {
             if (coeff_modulus[i].value() == gamma_host_.value()) {
                 throw std::invalid_argument("[PolynomialEncoderRNSHelper::PolynomialEncoderRNSHelper] gamma is in coeff_modulus");
@@ -120,7 +120,7 @@ namespace troy::linear {
         t_half_ = static_cast<T>(1) << (t_bit_length - 1);
 
         ConstSlice<uint64_t> Q = context_data->total_coeff_modulus();
-        Array<uint64_t> Q_div_t(num_modulus, false); Q_div_t.set_zero();
+        Array<uint64_t> Q_div_t(num_modulus, false, nullptr); Q_div_t.set_zero();
         if (log_Q > t_bit_length) {
             utils::right_shift_uint(Q, t_bit_length, num_modulus, Q_div_t.reference());
         } else {
@@ -131,16 +131,16 @@ namespace troy::linear {
 
         const utils::RNSTool& rns_tool = context_data->rns_tool();
         rns_tool.base_q().decompose_single(Q_div_t.reference());
-        Q_div_t_mod_qi_ = Array<MultiplyUint64Operand>(num_modulus, false);
+        Q_div_t_mod_qi_ = Array<MultiplyUint64Operand>(num_modulus, false, nullptr);
         for (size_t i = 0; i < num_modulus; i++) {
             Q_div_t_mod_qi_[i] = MultiplyUint64Operand(Q_div_t[i], coeff_modulus[i]);
         }
 
         const utils::RNSBase& base_Q = rns_tool.base_q();
-        utils::RNSBase base_gamma = utils::RNSBase(ConstSlice(&gamma_host_, 1, false));
+        utils::RNSBase base_gamma = utils::RNSBase(ConstSlice(&gamma_host_, 1, false, nullptr));
         base_Q_to_gamma_ = std::move(utils::BaseConverter(base_Q, base_gamma));
 
-        punctured_q_mod_t_ = Array<T>(num_modulus, false);
+        punctured_q_mod_t_ = Array<T>(num_modulus, false, nullptr);
         for (size_t i = 0; i < num_modulus; i++) {
             punctured_q_mod_t_[i] = modulo_from_limbs<T>(base_Q.punctured_product().const_slice(i * num_modulus, (i + 1) * num_modulus), t_bit_length);
         }
@@ -170,32 +170,32 @@ namespace troy::linear {
             }
             neg_inv_Q_mod_gamma_ = utils::Box(
                 reinterpret_cast<MultiplyUint64Operand*>(std::malloc(sizeof(MultiplyUint64Operand))),
-                false
+                false, nullptr
             );
             *neg_inv_Q_mod_gamma_ = MultiplyUint64Operand(utils::negate_uint64_mod(inv, gamma_host_), gamma_host_);
         }
 
-        gamma_t_mod_Q_ = Array<MultiplyUint64Operand>(num_modulus, false);
+        gamma_t_mod_Q_ = Array<MultiplyUint64Operand>(num_modulus, false, nullptr);
         uint64_t t0[2]; set_uint64s_with_uint128(t0, static_cast<uint128_t>(1) << (t_bit_length / 2));
         uint64_t t1[2]; set_uint64s_with_uint128(t1, static_cast<uint128_t>(1) << (t_bit_length - t_bit_length / 2));
 
         for (size_t i = 0; i < num_modulus; i++) {
             const Modulus& prime = coeff_modulus[i];
-            uint64_t t = prime.reduce_uint128_limbs(ConstSlice<uint64_t>(t0, 2, false)); 
-            t = utils::multiply_uint64_mod(t, prime.reduce_uint128_limbs(ConstSlice<uint64_t>(t1, 2, false)), prime);
+            uint64_t t = prime.reduce_uint128_limbs(ConstSlice<uint64_t>(t0, 2, false, nullptr)); 
+            t = utils::multiply_uint64_mod(t, prime.reduce_uint128_limbs(ConstSlice<uint64_t>(t1, 2, false, nullptr)), prime);
             uint64_t g = prime.reduce(gamma_host_.value());
             gamma_t_mod_Q_[i] = MultiplyUint64Operand(utils::multiply_uint64_mod(g, t, prime), prime);
         }
     }
 
     template <typename T>
-    void PolynomialEncoderRNSHelper<T>::to_device_inplace() {
-        gamma_.to_device_inplace();
-        punctured_q_mod_t_.to_device_inplace();
-        gamma_t_mod_Q_.to_device_inplace();
-        base_Q_to_gamma_.to_device_inplace();
-        Q_div_t_mod_qi_.to_device_inplace();
-        neg_inv_Q_mod_gamma_.to_device_inplace();
+    void PolynomialEncoderRNSHelper<T>::to_device_inplace(MemoryPoolHandle pool) {
+        gamma_.to_device_inplace(pool);
+        punctured_q_mod_t_.to_device_inplace(pool);
+        gamma_t_mod_Q_.to_device_inplace(pool);
+        base_Q_to_gamma_.to_device_inplace(pool);
+        Q_div_t_mod_qi_.to_device_inplace(pool);
+        neg_inv_Q_mod_gamma_.to_device_inplace(pool);
     }
 
     template <typename T>
@@ -245,6 +245,7 @@ namespace troy::linear {
                 Q_div_t_mod_qi_.const_reference(), Q_mod_t_, 
                 t_half_, t_bit_length_, modulus_index, destination
             );
+            cudaStreamSynchronize(0);
         }
     }
 
@@ -266,16 +267,16 @@ namespace troy::linear {
             uint64_t t_half_arr[2]; set_uint64s_with_uint128(t_half_arr, t_half);
             uint64_t x_arr[2]; set_uint64s_with_uint128(x_arr, x);
 
-            ConstSlice<uint64_t> Q_mod_t(Q_mod_t_arr, 2, true);
-            ConstSlice<uint64_t> xlimbs(x_arr, 2, true);
-            ConstSlice<uint64_t> t_half(t_half_arr, 2, true);
+            ConstSlice<uint64_t> Q_mod_t(Q_mod_t_arr, 2, true, nullptr);
+            ConstSlice<uint64_t> xlimbs(x_arr, 2, true, nullptr);
+            ConstSlice<uint64_t> t_half(t_half_arr, 2, true, nullptr);
 
             // Compute round(x * Q_mod_t / t) for 2^64 < x, t <= 2^128
             // round(x * Q_mod_t / t) = floor((x * Q_mod_t + t_half) / t)
             // We need 4 limbs to store the product x * Q_mod_t
-            uint64_t mul_limbs[4]; Slice<uint64_t> mul_limbs_slice(mul_limbs, 4, true);
-            uint64_t add_limbs[4]; Slice<uint64_t> add_limbs_slice(add_limbs, 4, true);
-            uint64_t rs_limbs[3]; Slice<uint64_t> rs_limbs_slice(rs_limbs, 3, true);
+            uint64_t mul_limbs[4]; Slice<uint64_t> mul_limbs_slice(mul_limbs, 4, true, nullptr);
+            uint64_t add_limbs[4]; Slice<uint64_t> add_limbs_slice(add_limbs, 4, true, nullptr);
+            uint64_t rs_limbs[3]; Slice<uint64_t> rs_limbs_slice(rs_limbs, 3, true, nullptr);
             utils::multiply_uint(Q_mod_t, xlimbs, mul_limbs_slice);
             utils::add_uint_carry(mul_limbs_slice.as_const(), t_half,
                     0, add_limbs_slice);
@@ -288,8 +289,6 @@ namespace troy::linear {
 
     template <>
     void PolynomialEncoderRNSHelper<uint128_t>::scale_up_component(utils::ConstSlice<uint128_t> source, const HeContext& context, size_t modulus_index, utils::Slice<uint64_t> destination) const {
-        utils::Array<uint64_t> source64(source.size() * 2, false);
-        source64.copy_from_slice(ConstSlice<uint64_t>(reinterpret_cast<const uint64_t*>(source.raw_pointer()), source.size() * 2, source.on_device()));
         ContextDataPointer context_data = context.get_context_data(this->parms_id_).value();
         custom_assert(source.on_device() == destination.on_device(), "[PolynomialEncoderRNSHelper::scale_up_component] source and destination are not in the same device");
         const EncryptionParameters& parms = context_data->parms();
@@ -297,17 +296,17 @@ namespace troy::linear {
         custom_assert(destination.size() >= source.size());
         if (!source.on_device()) {
             const Modulus& modulus = parms.coeff_modulus()[modulus_index];
-            ConstSlice<uint64_t> t_half = ConstSlice<uint64_t>(reinterpret_cast<const uint64_t*>(&this->t_half_), 2, false);
-            ConstSlice<uint64_t> q_mod_t = ConstSlice<uint64_t>(reinterpret_cast<const uint64_t*>(&this->Q_mod_t_), 2, false);
+            ConstSlice<uint64_t> t_half = ConstSlice<uint64_t>(reinterpret_cast<const uint64_t*>(&this->t_half_), 2, false, nullptr);
+            ConstSlice<uint64_t> q_mod_t = ConstSlice<uint64_t>(reinterpret_cast<const uint64_t*>(&this->Q_mod_t_), 2, false, nullptr);
             for (size_t i = 0; i < source.size(); i++) {
                 uint128_t x = source[i];
                 uint64_t x64 = modulus.reduce_uint128(x);
                 uint64_t u = utils::multiply_uint64operand_mod(x64, Q_div_t_mod_qi_[modulus_index], modulus);
                 
-                uint64_t mul_limbs[4] = {0, 0, 0, 0}; Slice<uint64_t> mul_limbs_slice = Slice<uint64_t>(mul_limbs, 4, false);
-                uint64_t add_limbs[4] = {0, 0, 0, 0}; Slice<uint64_t> add_limbs_slice = Slice<uint64_t>(add_limbs, 4, false);
-                uint64_t rs_limbs[3] = {0, 0, 0}; Slice<uint64_t> rs_limbs_slice = Slice<uint64_t>(rs_limbs, 3, false);
-                uint64_t x_limbs[2] = {static_cast<uint64_t>(x), static_cast<uint64_t>(x >> 64)}; ConstSlice<uint64_t> x_limbs_slice = ConstSlice<uint64_t>(x_limbs, 2, false);
+                uint64_t mul_limbs[4] = {0, 0, 0, 0}; Slice<uint64_t> mul_limbs_slice = Slice<uint64_t>(mul_limbs, 4, false, nullptr);
+                uint64_t add_limbs[4] = {0, 0, 0, 0}; Slice<uint64_t> add_limbs_slice = Slice<uint64_t>(add_limbs, 4, false, nullptr);
+                uint64_t rs_limbs[3] = {0, 0, 0}; Slice<uint64_t> rs_limbs_slice = Slice<uint64_t>(rs_limbs, 3, false, nullptr);
+                uint64_t x_limbs[2] = {static_cast<uint64_t>(x), static_cast<uint64_t>(x >> 64)}; ConstSlice<uint64_t> x_limbs_slice = ConstSlice<uint64_t>(x_limbs, 2, false, nullptr);
                 utils::multiply_uint(q_mod_t, x_limbs_slice, mul_limbs_slice);
                 utils::add_uint_carry(mul_limbs_slice.as_const(), t_half, 0, add_limbs_slice);
                 utils::right_shift_uint192(add_limbs_slice.const_slice(1, 4), t_bit_length_ - 64, rs_limbs_slice);
@@ -320,6 +319,7 @@ namespace troy::linear {
                 Q_div_t_mod_qi_.const_reference(), Q_mod_t_, 
                 t_half_, t_bit_length_, modulus_index, destination
             );
+            cudaStreamSynchronize(0);
         }
     }
 
@@ -366,6 +366,7 @@ namespace troy::linear {
             kernel_centralize_at_component<T><<<block_count, KERNEL_THREAD_COUNT>>>(
                 source, parms.coeff_modulus().at(modulus_index), t_half_, mod_t_mask_, destination
             );
+            cudaStreamSynchronize(0);
         }
     }
 
@@ -419,7 +420,7 @@ namespace troy::linear {
 
 
     template <typename T>
-    void PolynomialEncoderRNSHelper<T>::scale_down(const Plaintext& input, const HeContext& context, utils::Slice<T> destination) const {
+    void PolynomialEncoderRNSHelper<T>::scale_down(const Plaintext& input, const HeContext& context, utils::Slice<T> destination, MemoryPoolHandle pool) const {
         // Ref: Bajard et al. "A Full RNS Variant of FV like Somewhat Homomorphic
         // Encryption Schemes" (Section 3.2 & 3.3)
         // NOTE(juhou): Basically the same code in seal/util/rns.cpp instead we
@@ -444,7 +445,7 @@ namespace troy::linear {
         custom_assert(input.on_device() == destination.on_device(), "[PolynomialEncoderRNSHelper::scale_down] input and destination are not in the same device");
         bool device = input.on_device();
 
-        Array<uint64_t> tmp(input.data().size(), device);
+        Array<uint64_t> tmp(input.data().size(), device, pool);
         tmp.set_zero();
 
         // 1. multiply with gamma*t
@@ -454,8 +455,8 @@ namespace troy::linear {
         );
 
         // 2-1 FastBase convert from baseQ to {gamma}
-        Array<uint64_t> base_on_gamma(coeff_count, device);
-        base_Q_to_gamma_.fast_convert_array(tmp.const_reference(), base_on_gamma.reference());
+        Array<uint64_t> base_on_gamma(coeff_count, device, pool);
+        base_Q_to_gamma_.fast_convert_array(tmp.const_reference(), base_on_gamma.reference(), pool);
         // 2-2 Then multiply with -Q^{-1} mod gamma
         troy::utils::multiply_uint64operand_inplace(
             base_on_gamma.reference(), neg_inv_Q_mod_gamma_.as_const_pointer(),
@@ -512,6 +513,7 @@ namespace troy::linear {
                 base_on_gamma.const_reference(), gamma_.as_const_pointer(),
                 destination
             );
+            cudaStreamSynchronize(0);
         }
     }
 

@@ -8,7 +8,7 @@ namespace troy {
     using utils::NTTTables;
     using utils::Array;
 
-    Decryptor::Decryptor(HeContextPointer context, const SecretKey& secret_key) :
+    Decryptor::Decryptor(HeContextPointer context, const SecretKey& secret_key, MemoryPoolHandle pool) :
         context_(context) 
     {
         ContextDataPointer key_context_data = context->key_context_data().value();
@@ -18,10 +18,10 @@ namespace troy {
         size_t coeff_modulus_size = coeff_modulus.size();
         if (secret_key.data().size() != coeff_count * coeff_modulus_size)
             throw std::invalid_argument("[Decryptor::Decryptor] secret_key is not valid for encryption parameters");
-        this->secret_key_array_ = secret_key.data().clone();
+        this->secret_key_array_ = secret_key.data().clone(pool);
     }
 
-    void Decryptor::dot_product_ct_sk_array(const Ciphertext& encrypted, utils::Slice<uint64_t> destination) const {
+    void Decryptor::dot_product_ct_sk_array(const Ciphertext& encrypted, utils::Slice<uint64_t> destination, MemoryPoolHandle pool) const {
         if (!utils::same(this->on_device(), encrypted.on_device(), destination.on_device())) {
             throw std::invalid_argument("[Decryptor::dot_product_ct_sk_array] Arguments are not on the same device.");
         }
@@ -63,7 +63,7 @@ namespace troy {
         } else {
             size_t poly_coeff_count = coeff_count * coeff_modulus_size;
             size_t key_poly_coeff_count = coeff_count * key_coeff_modulus_size;
-            Array<uint64_t> encrypted_copy = Array<uint64_t>::create_and_copy_from_slice(encrypted.data().const_slice(poly_coeff_count, encrypted_size * poly_coeff_count));
+            Array<uint64_t> encrypted_copy = Array<uint64_t>::create_and_copy_from_slice(encrypted.data().const_slice(poly_coeff_count, encrypted_size * poly_coeff_count), pool);
             if (!is_ntt_form) {
                 utils::ntt_negacyclic_harvey_ps(encrypted_copy.reference(), encrypted_size - 1, coeff_count, ntt_tables);
             }
@@ -90,7 +90,7 @@ namespace troy {
         lock.unlock();
     }
 
-    void Decryptor::decrypt(const Ciphertext& encrypted, Plaintext& destination) const {
+    void Decryptor::decrypt(const Ciphertext& encrypted, Plaintext& destination, MemoryPoolHandle pool) const {
         // sanity check
         if (encrypted.contains_seed()) {
             throw std::invalid_argument("[Decryptor::decrypt] Seed should be expanded first.");
@@ -98,18 +98,18 @@ namespace troy {
         if (encrypted.polynomial_count() < utils::HE_CIPHERTEXT_SIZE_MIN) {
             throw std::invalid_argument("[Decryptor::decrypt] Ciphertext is empty.");
         }
-        if (encrypted.on_device()) destination.to_device_inplace();
+        if (encrypted.on_device()) destination.to_device_inplace(pool);
         else destination.to_host_inplace();
         SchemeType scheme = this->context()->first_context_data().value()->parms().scheme();
         switch (scheme) {
-            case SchemeType::BFV: this->bfv_decrypt(encrypted, destination); break;
-            case SchemeType::CKKS: this->ckks_decrypt(encrypted, destination); break;
-            case SchemeType::BGV: this->bgv_decrypt(encrypted, destination); break;
+            case SchemeType::BFV: this->bfv_decrypt(encrypted, destination, pool); break;
+            case SchemeType::CKKS: this->ckks_decrypt(encrypted, destination, pool); break;
+            case SchemeType::BGV: this->bgv_decrypt(encrypted, destination, pool); break;
             default: throw std::invalid_argument("[Decryptor::decrypt] Unsupported scheme.");
         }
     }
 
-    void Decryptor::bfv_decrypt_without_scaling_down(const Ciphertext& encrypted, Plaintext& destination) const {
+    void Decryptor::bfv_decrypt_without_scaling_down(const Ciphertext& encrypted, Plaintext& destination, MemoryPoolHandle pool) const {
         if (encrypted.is_ntt_form()) {
             throw std::invalid_argument("[Decryptor::bfv_decrypt] Ciphertext is in NTT form.");
         }
@@ -124,7 +124,7 @@ namespace troy {
 
         // Make a temp destination for all the arithmetic mod qi before calling FastBConverse
         bool device = encrypted.on_device();
-        if (device) destination.to_device_inplace();
+        if (device) destination.to_device_inplace(pool);
         else destination.to_host_inplace();
         
         destination.resize_rns(*this->context_, encrypted.parms_id());
@@ -132,10 +132,10 @@ namespace troy {
         // put < (c_1 , c_2, ... , c_{count-1}) , (s,s^2,...,s^{count-1}) > mod q in destination
         // Now do the dot product of encrypted_copy and the secret key array using NTT.
         // The secret key powers are already NTT transformed.
-        this->dot_product_ct_sk_array(encrypted, destination.reference());
+        this->dot_product_ct_sk_array(encrypted, destination.reference(), pool);
     }
 
-    void Decryptor::bfv_decrypt(const Ciphertext& encrypted, Plaintext& destination) const {
+    void Decryptor::bfv_decrypt(const Ciphertext& encrypted, Plaintext& destination, MemoryPoolHandle pool) const {
         if (encrypted.is_ntt_form()) {
             throw std::invalid_argument("[Decryptor::bfv_decrypt] Ciphertext is in NTT form.");
         }
@@ -146,13 +146,13 @@ namespace troy {
         size_t coeff_count = parms.poly_modulus_degree();
 
         Plaintext temp;
-        this->bfv_decrypt_without_scaling_down(encrypted, temp);
+        this->bfv_decrypt_without_scaling_down(encrypted, temp, pool);
         
         // Add Delta / 2 and now we have something which is Delta * (m + epsilon) where epsilon < 1
         // Therefore, we can (integer) divide by Delta and the answer will round down to m.
 
         bool device = encrypted.on_device();
-        if (device) destination.to_device_inplace();
+        if (device) destination.to_device_inplace(pool);
         else destination.to_host_inplace();
 
         // Allocate a full size destination to write to
@@ -161,14 +161,14 @@ namespace troy {
 
         // Divide scaling variant using BEHZ FullRNS techniques
         context_data->rns_tool().decrypt_scale_and_round(
-            temp.const_reference(), destination.poly()
+            temp.const_reference(), destination.poly(), pool
         );
         destination.is_ntt_form() = false;
         destination.coeff_modulus_size() = coeff_modulus_size;
         destination.poly_modulus_degree() = coeff_count;
     }
 
-    void Decryptor::ckks_decrypt(const Ciphertext& encrypted, Plaintext& destination) const {
+    void Decryptor::ckks_decrypt(const Ciphertext& encrypted, Plaintext& destination, MemoryPoolHandle pool) const {
 
         if (!encrypted.is_ntt_form()) {
             throw std::invalid_argument("[Decryptor::ckks_decrypt] Ciphertext is not in NTT form.");
@@ -181,7 +181,7 @@ namespace troy {
         size_t rns_poly_uint64_count = coeff_count * coeff_modulus_size;
         
         bool device = encrypted.on_device();
-        if (device) destination.to_device_inplace();
+        if (device) destination.to_device_inplace(pool);
         else destination.to_host_inplace();
 
         // Decryption consists in finding
@@ -196,7 +196,7 @@ namespace troy {
         destination.resize(rns_poly_uint64_count);
         
         // Do the dot product of encrypted and the secret key array using NTT.
-        this->dot_product_ct_sk_array(encrypted, destination.poly());
+        this->dot_product_ct_sk_array(encrypted, destination.poly(), pool);
 
         // Set destination parameters as in encrypted
         destination.parms_id() = encrypted.parms_id();
@@ -206,7 +206,7 @@ namespace troy {
         destination.poly_modulus_degree() = coeff_count;
     }
 
-    void Decryptor::bgv_decrypt(const Ciphertext& encrypted, Plaintext& destination) const {
+    void Decryptor::bgv_decrypt(const Ciphertext& encrypted, Plaintext& destination, MemoryPoolHandle pool) const {
         if (!encrypted.is_ntt_form()) {
             throw std::invalid_argument("[Decryptor::bgv_decrypt] Ciphertext is not in NTT form.");
         }
@@ -218,11 +218,11 @@ namespace troy {
         
         // Make a temp destination for all the arithmetic mod qi before calling FastBConverse
         bool device = encrypted.on_device();
-        if (device) destination.to_device_inplace();
+        if (device) destination.to_device_inplace(pool);
         else destination.to_host_inplace();
-        Array<uint64_t> tmp_dest_modq(coeff_count * coeff_modulus_size, device);
+        Array<uint64_t> tmp_dest_modq(coeff_count * coeff_modulus_size, device, pool);
 
-        this->dot_product_ct_sk_array(encrypted, tmp_dest_modq.reference());
+        this->dot_product_ct_sk_array(encrypted, tmp_dest_modq.reference(), pool);
 
         // Allocate a full size destination to write to
         destination.parms_id() = parms_id_zero;
@@ -232,7 +232,7 @@ namespace troy {
 
         // Divide scaling variant using BEHZ FullRNS techniques
         context_data->rns_tool().decrypt_mod_t(
-            tmp_dest_modq.const_reference(), destination.poly()
+            tmp_dest_modq.const_reference(), destination.poly(), pool
         );
         
         if (encrypted.correction_factor() != 1) {
@@ -253,12 +253,15 @@ namespace troy {
             throw std::invalid_argument("[poly_infty_norm] Modulus is not valid.");
         }
         bool device = poly.on_device();
+        if (device) {
+            throw std::invalid_argument("[poly_infty_norm] Poly is on device.");
+        }
         // Construct negative threshold: (modulus + 1) / 2
-        Array<uint64_t> modulus_neg_threshold(modulus.size(), device);
+        Array<uint64_t> modulus_neg_threshold(modulus.size(), false, nullptr);
         utils::half_round_up_uint(modulus, modulus_neg_threshold.reference());
         // Mod out the poly coefficients and choose a symmetric representative from [-modulus,modulus)
         result.set_zero();
-        Array<uint64_t> coeff_abs_value(coeff_uint64_count, device);
+        Array<uint64_t> coeff_abs_value(coeff_uint64_count, false, nullptr);
         coeff_abs_value.set_zero();
         size_t coeff_count = poly.size() / coeff_uint64_count;
         for (size_t i = 0; i < coeff_count; i++) {
@@ -274,7 +277,7 @@ namespace troy {
         }
     }
 
-    size_t Decryptor::invariant_noise_budget(const Ciphertext& encrypted) const {
+    size_t Decryptor::invariant_noise_budget(const Ciphertext& encrypted, MemoryPoolHandle pool) const {
         if (encrypted.polynomial_count() < utils::HE_CIPHERTEXT_SIZE_MIN) {
             throw std::invalid_argument("[Decryptor::invariant_noise_budget] Ciphertext is invalid.");
         }
@@ -296,8 +299,8 @@ namespace troy {
         // in destination_poly.
         // Now do the dot product of encrypted_copy and the secret key array using NTT.
         // The secret key powers are already NTT transformed.
-        Array<uint64_t> noise_poly(coeff_count * coeff_modulus_size, encrypted.on_device());
-        this->dot_product_ct_sk_array(encrypted, noise_poly.reference());
+        Array<uint64_t> noise_poly(coeff_count * coeff_modulus_size, encrypted.on_device(), pool);
+        this->dot_product_ct_sk_array(encrypted, noise_poly.reference(), pool);
 
         if (encrypted.is_ntt_form()) {
             // In the case of NTT form, we need to transform the noise to normal form
@@ -313,12 +316,12 @@ namespace troy {
         }
 
         // CRT-compose the noise
-        context_data->rns_tool().base_q().compose_array(noise_poly.reference());
+        context_data->rns_tool().base_q().compose_array(noise_poly.reference(), pool);
 
         // Next we compute the infinity norm mod parms.coeffModulus()
-        Array<uint64_t> norm(coeff_modulus_size, false);
+        Array<uint64_t> norm(coeff_modulus_size, false, nullptr);
         noise_poly.to_host_inplace();
-        Array<uint64_t> total_coeff_modulus = Array<uint64_t>::create_and_copy_from_slice(context_data->total_coeff_modulus(), false);
+        Array<uint64_t> total_coeff_modulus = Array<uint64_t>::create_and_copy_from_slice(context_data->total_coeff_modulus(), false, nullptr);
         poly_infty_norm(noise_poly.const_reference(), coeff_modulus_size, total_coeff_modulus.const_reference(), norm.reference());
 
         // The -1 accounts for scaling the invariant noise by 2;

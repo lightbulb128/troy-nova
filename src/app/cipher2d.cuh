@@ -12,7 +12,7 @@ namespace troy { namespace linear {
     private:
         std::vector<std::vector<Plaintext>> inner;
 
-        Cipher2d encrypt_internal(const Encryptor& encryptor, bool symmetric) const;
+        Cipher2d encrypt_internal(const Encryptor& encryptor, bool symmetric, MemoryPoolHandle pool) const;
 
     public:
 
@@ -30,6 +30,17 @@ namespace troy { namespace linear {
         }
         inline std::vector<Plaintext>& operator[](size_t i) {
             return inner[i];
+        }
+
+        inline Plain2d clone(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            Plain2d result;
+            for (const std::vector<Plaintext>& row : inner) {
+                std::vector<Plaintext>& new_row = result.new_row();
+                for (const Plaintext& plain : row) {
+                    new_row.push_back(plain.clone(pool));
+                }
+            }
+            return result;
         }
 
         inline size_t rows() const {
@@ -60,8 +71,8 @@ namespace troy { namespace linear {
             return inner.back();
         }
 
-        Cipher2d encrypt_asymmetric(const Encryptor& encryptor) const;
-        Cipher2d encrypt_symmetric(const Encryptor& encryptor) const;
+        Cipher2d encrypt_asymmetric(const Encryptor& encryptor, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        Cipher2d encrypt_symmetric(const Encryptor& encryptor, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
 
     };
 
@@ -71,10 +82,10 @@ namespace troy { namespace linear {
         std::vector<std::vector<Ciphertext>> inner;
 
 
-        Cipher2d translate(const Evaluator& evaluator, const Cipher2d& other, bool subtract) const;
-        void translate_inplace(const Evaluator& evaluator, const Cipher2d& other, bool subtract);
-        Cipher2d translate_plain(const Evaluator& evaluator, const Plain2d& other, bool subtract) const;
-        void translate_plain_inplace(const Evaluator& evaluator, const Plain2d& other, bool subtract);
+        Cipher2d translate(const Evaluator& evaluator, const Cipher2d& other, bool subtract, MemoryPoolHandle pool) const;
+        void translate_inplace(const Evaluator& evaluator, const Cipher2d& other, bool subtract, MemoryPoolHandle pool);
+        Cipher2d translate_plain(const Evaluator& evaluator, const Plain2d& other, bool subtract, MemoryPoolHandle pool) const;
+        void translate_plain_inplace(const Evaluator& evaluator, const Plain2d& other, bool subtract, MemoryPoolHandle pool);
 
     public:
 
@@ -92,6 +103,17 @@ namespace troy { namespace linear {
         }
         inline std::vector<Ciphertext>& operator[](size_t i) {
             return inner[i];
+        }
+
+        inline Cipher2d clone(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            Cipher2d result;
+            for (const std::vector<Ciphertext>& row : inner) {
+                std::vector<Ciphertext>& new_row = result.new_row();
+                for (const Ciphertext& plain : row) {
+                    new_row.push_back(plain.clone(pool));
+                }
+            }
+            return result;
         }
 
         inline size_t rows() const {
@@ -131,79 +153,79 @@ namespace troy { namespace linear {
         }
 
         void save(std::ostream& stream, HeContextPointer context) const;
-        void load(std::istream& stream, HeContextPointer context);
-        inline static Cipher2d load_new(std::istream& stream, HeContextPointer context) {
+        void load(std::istream& stream, HeContextPointer context, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+        inline static Cipher2d load_new(std::istream& stream, HeContextPointer context, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
             Cipher2d result;
-            result.load(stream, context);
+            result.load(stream, context, pool);
             return result;
         }
         size_t serialized_size(HeContextPointer context) const;
 
-        inline void mod_switch_to_next_inplace(const Evaluator& evaluator) {
+        inline void mod_switch_to_next_inplace(const Evaluator& evaluator, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
             for (std::vector<Ciphertext>& row : this->data()) {
                 for (Ciphertext& cipher : row) {
-                    evaluator.mod_switch_to_next_inplace(cipher);
+                    evaluator.mod_switch_to_next_inplace(cipher, pool);
                 }
             }
         }
 
-        inline Cipher2d mod_switch_to_next(const Evaluator& evaluator) const {
+        inline Cipher2d mod_switch_to_next(const Evaluator& evaluator, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Cipher2d result;
             Ciphertext buffer;
             for (const std::vector<Ciphertext>& original_row : this->data()) {
                 std::vector<Ciphertext>& row = result.new_row();
                 for (const Ciphertext& cipher : original_row) {
-                    evaluator.mod_switch_to_next(cipher, buffer);
+                    evaluator.mod_switch_to_next(cipher, buffer, pool);
                     row.push_back(std::move(buffer));
                 }
             }
             return result;
         }
 
-        inline void relinearize_inplace(const Evaluator& evaluator, const RelinKeys& relin_keys) {
+        inline void relinearize_inplace(const Evaluator& evaluator, const RelinKeys& relin_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
             for (std::vector<Ciphertext>& row : this->data()) {
                 for (Ciphertext& cipher : row) {
-                    evaluator.relinearize_inplace(cipher, relin_keys);
+                    evaluator.relinearize_inplace(cipher, relin_keys, pool);
                 }
             }
         }
 
-        inline Cipher2d relinearize(const Evaluator& evaluator, const RelinKeys& relin_keys) const {
+        inline Cipher2d relinearize(const Evaluator& evaluator, const RelinKeys& relin_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Cipher2d result;
             Ciphertext buffer;
             for (const std::vector<Ciphertext>& original_row : this->data()) {
                 std::vector<Ciphertext>& row = result.new_row();
                 for (const Ciphertext& cipher : original_row) {
-                    evaluator.relinearize(cipher, relin_keys, buffer);
+                    evaluator.relinearize(cipher, relin_keys, buffer, pool);
                     row.push_back(std::move(buffer));
                 }
             }
             return result;
         }
 
-        inline Cipher2d add(const Evaluator& evaluator, const Cipher2d& other) const {
-            return translate(evaluator, other, false);
+        inline Cipher2d add(const Evaluator& evaluator, const Cipher2d& other, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            return translate(evaluator, other, false, pool);
         }
-        inline void add_inplace(const Evaluator& evaluator, const Cipher2d& other) {
-            translate_inplace(evaluator, other, false);
+        inline void add_inplace(const Evaluator& evaluator, const Cipher2d& other, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+            translate_inplace(evaluator, other, false, pool);
         }
-        inline Cipher2d add_plain(const Evaluator& evaluator, const Plain2d& other) const {
-            return translate_plain(evaluator, other, false);
+        inline Cipher2d add_plain(const Evaluator& evaluator, const Plain2d& other, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            return translate_plain(evaluator, other, false, pool);
         }
-        inline void add_plain_inplace(const Evaluator& evaluator, const Plain2d& other) {
-            translate_plain_inplace(evaluator, other, false);
+        inline void add_plain_inplace(const Evaluator& evaluator, const Plain2d& other, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+            translate_plain_inplace(evaluator, other, false, pool);
         }
-        inline Cipher2d sub(const Evaluator& evaluator, const Cipher2d& other) const {
-            return translate(evaluator, other, true);
+        inline Cipher2d sub(const Evaluator& evaluator, const Cipher2d& other, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            return translate(evaluator, other, true, pool);
         }
-        inline void sub_inplace(const Evaluator& evaluator, const Cipher2d& other) {
-            translate_inplace(evaluator, other, true);
+        inline void sub_inplace(const Evaluator& evaluator, const Cipher2d& other, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+            translate_inplace(evaluator, other, true, pool);
         }
-        inline Cipher2d sub_plain(const Evaluator& evaluator, const Plain2d& other) const {
-            return translate_plain(evaluator, other, true);
+        inline Cipher2d sub_plain(const Evaluator& evaluator, const Plain2d& other, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            return translate_plain(evaluator, other, true, pool);
         }
-        inline void sub_plain_inplace(const Evaluator& evaluator, const Plain2d& other) {
-            translate_plain_inplace(evaluator, other, true);
+        inline void sub_plain_inplace(const Evaluator& evaluator, const Plain2d& other, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+            translate_plain_inplace(evaluator, other, true, pool);
         }
 
     };

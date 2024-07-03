@@ -22,9 +22,12 @@ namespace troy {
 
     public:
 
+        inline MemoryPoolHandle pool() const { return data_.pool(); }
+        inline bool device_index() const { return data_.device_index(); }
+
         inline Plaintext():
             coeff_count_(0),
-            data_(0, false),
+            data_(0, false, nullptr),
             parms_id_(parms_id_zero),
             scale_(1.0),
             is_ntt_form_(false),
@@ -32,21 +35,21 @@ namespace troy {
             poly_modulus_degree_(0) {}
 
         inline Plaintext(Plaintext&& source) = default;
-        inline Plaintext(const Plaintext& copy): Plaintext(copy.clone()) {}
+        inline Plaintext(const Plaintext& copy): Plaintext(copy.clone(copy.pool())) {}
 
         inline Plaintext& operator =(Plaintext&& source) = default;
         inline Plaintext& operator =(const Plaintext& assign) {
             if (this == &assign) {
                 return *this;
             }
-            *this = assign.clone();
+            *this = assign.clone(assign.pool());
             return *this;
         }
 
-        inline Plaintext clone() const {
+        inline Plaintext clone(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Plaintext result;
             result.coeff_count_ = this->coeff_count_;
-            result.data_ = this->data_.clone();
+            result.data_ = this->data_.clone(pool);
             result.parms_id_ = this->parms_id_;
             result.scale_ = this->scale_;
             result.is_ntt_form_ = this->is_ntt_form_;
@@ -55,22 +58,22 @@ namespace troy {
             return result;
         }
 
-        inline void to_device_inplace() {
-            this->data_.to_device_inplace();
+        inline void to_device_inplace(MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+            this->data_.to_device_inplace(pool);
         }
 
         inline void to_host_inplace() {
             this->data_.to_host_inplace();
         }
 
-        inline Plaintext to_device() {
-            Plaintext result = this->clone();
-            result.to_device_inplace();
+        inline Plaintext to_device(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            Plaintext result = this->clone(pool);
+            result.to_device_inplace(pool);
             return result;
         }
 
         inline Plaintext to_host() {
-            Plaintext result = this->clone();
+            Plaintext result = this->clone(this->pool());
             result.to_host_inplace();
             return result;
         }
@@ -200,10 +203,10 @@ namespace troy {
         }
 
         void save(std::ostream& stream) const;
-        void load(std::istream& stream);
-        inline static Plaintext load_new(std::istream& stream) {
+        void load(std::istream& stream, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+        inline static Plaintext load_new(std::istream& stream, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
             Plaintext result;
-            result.load(stream);
+            result.load(stream, pool);
             return result;
         }
         size_t serialized_size() const;

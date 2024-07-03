@@ -12,6 +12,7 @@ namespace troy { namespace utils {
 
     std::string uint_to_dec_string(const uint64_t *value, size_t uint64_count);
 
+    // Input must be host memory!
     inline std::string poly_to_hex_string(
         const std::uint64_t *value, std::size_t coeff_count, std::size_t coeff_uint64_count)
     {
@@ -26,7 +27,7 @@ namespace troy { namespace utils {
         value += (coeff_count - 1) * coeff_uint64_count;
         while (coeff_count--)
         {
-            if (is_zero_uint(ConstSlice(value, coeff_uint64_count, false)))
+            if (is_zero_uint(ConstSlice(value, coeff_uint64_count, false, nullptr)))
             {
                 value -= coeff_uint64_count;
                 continue;
@@ -50,6 +51,7 @@ namespace troy { namespace utils {
         return result.str();
     }
 
+    // Input must be host memory!
     inline std::string poly_to_dec_string(
         const std::uint64_t *value, std::size_t coeff_count, std::size_t coeff_uint64_count)
     {
@@ -64,7 +66,7 @@ namespace troy { namespace utils {
         value += coeff_count - 1;
         while (coeff_count--)
         {
-            if (is_zero_uint(ConstSlice(value, coeff_uint64_count, false)))
+            if (is_zero_uint(ConstSlice(value, coeff_uint64_count, false, nullptr)))
             {
                 value -= coeff_uint64_count;
                 continue;

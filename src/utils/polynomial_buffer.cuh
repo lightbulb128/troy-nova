@@ -9,12 +9,15 @@ namespace troy {namespace utils {
         Array<T> data_;
     public:
 
-        Buffer(size_t poly_count, size_t coeff_modulus_size, size_t coeff_count, bool device) :
+        MemoryPoolHandle pool() const { return data_.pool(); }
+        bool device_index() const { return data_.device_index(); }
+
+        Buffer(size_t poly_count, size_t coeff_modulus_size, size_t coeff_count, bool device, MemoryPoolHandle pool) :
             poly_count_(poly_count), coeff_modulus_size_(coeff_modulus_size), coeff_count_(coeff_count),
-            data_(poly_count * coeff_modulus_size * coeff_count, device) {}
-        Buffer(size_t coeff_modulus_size, size_t coeff_count, bool device): 
-            Buffer(1, coeff_modulus_size, coeff_count, device) {}
-        Buffer(size_t coeff_count, bool device): Buffer(1, 1, coeff_count, device) {}
+            data_(poly_count * coeff_modulus_size * coeff_count, device, pool) {}
+        Buffer(size_t coeff_modulus_size, size_t coeff_count, bool device, MemoryPoolHandle pool): 
+            Buffer(1, coeff_modulus_size, coeff_count, device, pool) {}
+        Buffer(size_t coeff_count, bool device, MemoryPoolHandle pool): Buffer(1, 1, coeff_count, device, pool) {}
 
         void resize(size_t poly_count, size_t coeff_modulus_size, size_t coeff_count) {
             poly_count_ = poly_count;
@@ -32,14 +35,17 @@ namespace troy {namespace utils {
         bool on_device() const {return data_.on_device();}
         void to_device_inplace() {data_.to_device_inplace();}
         void to_host_inplace() {data_.to_host_inplace();}
+        void to_pool_inplace(MemoryPoolHandle pool) {
+            data_.to_pool_inplace(pool);
+        }
 
         size_t size() const {return data_.size();}
         size_t poly_count() const {return poly_count_;}
         size_t coeff_modulus_size() const {return coeff_modulus_size_;}
         size_t coeff_count() const {return coeff_count_;}
 
-        Buffer clone() const {
-            Buffer clone(poly_count_, coeff_modulus_size_, coeff_count_, data_.on_device());
+        Buffer clone(MemoryPoolHandle pool) const {
+            Buffer clone(poly_count_, coeff_modulus_size_, coeff_count_, data_.on_device(), pool);
             clone.data_.copy_from_slice(data_);
             return clone;
         }

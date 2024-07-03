@@ -27,6 +27,7 @@ if(TROY_TEST)
         encryptor.cu
 
         test_adv.cu
+        test_multithread.cu
         evaluator.cu
         serialize.cu
 
@@ -39,6 +40,8 @@ if(TROY_TEST)
         app/matmul_ring2k.cu
 
         special_prime_for_encryption.cu
+
+        multithread.cu
 
     )
 
@@ -59,15 +62,19 @@ if(TROY_BENCH)
 
     add_executable(troybench)
     target_sources(troybench PRIVATE 
+        argparse.cpp
         bench/he_operations.cu
         test_adv.cu
+        test_multithread.cu
     )
     target_link_libraries(troybench troy)
 
     add_executable(bench_matmul)
     target_sources(bench_matmul PRIVATE 
+        argparse.cpp
         bench/matmul.cu
         test_adv.cu
+        test_multithread.cu
     )
     target_link_libraries(bench_matmul troy)
 

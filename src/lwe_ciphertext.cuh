@@ -17,18 +17,21 @@ namespace troy {
 
     public:
 
+        inline MemoryPoolHandle pool() const { return c1_.pool(); }
+        inline bool device_index() const { return c1_.device_index(); }
+
         inline LWECiphertext() : 
             coeff_modulus_size_(0), poly_modulus_degree_(0),
             c0_(), c1_(),
             parms_id_(parms_id_zero), 
             scale_(1.0), correction_factor_(1) {}
 
-        inline LWECiphertext clone() const {
+        inline LWECiphertext clone(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             LWECiphertext res;
             res.coeff_modulus_size_ = coeff_modulus_size_;
             res.poly_modulus_degree_ = poly_modulus_degree_;
-            res.c0_ = c0_.clone();
-            res.c1_ = c1_.clone();
+            res.c0_ = c0_.clone(pool);
+            res.c1_ = c1_.clone(pool);
             res.parms_id_ = parms_id_;
             res.scale_ = scale_;
             res.correction_factor_ = correction_factor_;
@@ -36,13 +39,13 @@ namespace troy {
         }
 
         inline LWECiphertext(LWECiphertext&& source) = default;
-        inline LWECiphertext(const LWECiphertext& source): LWECiphertext(source.clone()) {}
+        inline LWECiphertext(const LWECiphertext& source): LWECiphertext(source.clone(source.pool())) {}
         inline LWECiphertext& operator =(LWECiphertext&& source) = default;
         inline LWECiphertext& operator =(const LWECiphertext& assign) {
             if (this == &assign) {
                 return *this;
             }
-            *this = assign.clone();
+            *this = assign.clone(assign.pool());
             return *this;
         }
 
@@ -53,14 +56,14 @@ namespace troy {
             return c0_.on_device();
         }
 
-        inline void to_device_inplace() {
-            c0_.to_device_inplace();
-            c1_.to_device_inplace();
+        inline void to_device_inplace(MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+            c0_.to_device_inplace(pool);
+            c1_.to_device_inplace(pool);
         }
 
-        inline LWECiphertext to_device() const {
-            LWECiphertext res = this->clone();
-            res.to_device_inplace();
+        inline LWECiphertext to_device(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            LWECiphertext res = this->clone(pool);
+            res.to_device_inplace(pool);
             return res;
         }
 
@@ -104,7 +107,7 @@ namespace troy {
         inline const uint64_t& correction_factor() const { return correction_factor_; }
         inline uint64_t& correction_factor() { return correction_factor_; }
 
-        Ciphertext assemble_lwe() const;
+        Ciphertext assemble_lwe(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
 
     };
 

@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <optional>
 #include "test.cuh"
 #include "../src/batch_encoder.cuh"
 #include "../src/ckks_encoder.cuh"
@@ -153,7 +154,7 @@ namespace encryptor {
             // scale up
             message_uint64 = random_uint64_vector(encoder.slot_count(), t);
             auto plain = encoder.batch().encode_new(message_uint64);
-            plain = encoder.batch().scale_up_new(plain);
+            plain = encoder.batch().scale_up_new(plain, std::nullopt);
             cipher = encryptor.encrypt_symmetric_new(plain, false);
             decrypted = decryptor.decrypt_new(cipher);
             decoded_uint64 = encoder.batch().decode_new(decrypted);

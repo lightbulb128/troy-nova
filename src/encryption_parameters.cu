@@ -15,7 +15,7 @@ namespace troy {
             coeff_modulus_size +
             1 // plain_modulus
             ;
-        utils::Array<uint64_t> data(total_count, false);
+        utils::Array<uint64_t> data(total_count, false, nullptr);
         data[0] = static_cast<uint64_t>(this->scheme());
         data[1] = static_cast<uint64_t>(this->poly_modulus_degree());
         for (size_t i = 0; i < coeff_modulus_size; i++) {

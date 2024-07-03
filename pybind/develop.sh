@@ -3,7 +3,7 @@ set -e
 
 cd ../build
 cmake .. -DTROY_PYBIND=ON -DCMAKE_BUILD_TYPE=Release
-make pytroy_raw
+make pytroy_raw -j64
 
 # get filename called "pybind/pytroy_raw.cpython*"
 filename=$(ls pybind/pytroy_raw.cpython*)
@@ -49,4 +49,4 @@ pip install --force-reinstall dist/pytroy*.whl
 
 rm pytroy_raw.cpython*.so
 
-python test.py
+python tests/test.py

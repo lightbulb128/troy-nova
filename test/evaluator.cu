@@ -797,7 +797,7 @@ namespace evaluator {
         Plaintext encoded1 = context.encoder().encode_simd(message1, std::nullopt, scale);
         Plaintext encoded2 = context.encoder().encode_simd(message2, std::nullopt, scale);
         Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1);
-        context.encoder().batch().centralize_inplace(encoded2);
+        context.encoder().batch().centralize_inplace(encoded2, std::nullopt);
         Ciphertext multiplied = context.evaluator().multiply_plain_new(encrypted1, encoded2);
         Plaintext decrypted = context.decryptor().decrypt_new(multiplied);
         GeneralVector result = context.encoder().decode_simd(decrypted);

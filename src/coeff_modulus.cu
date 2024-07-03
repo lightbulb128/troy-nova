@@ -96,7 +96,7 @@ namespace troy {
         for (auto const& [key, value] : count_table) {
             prime_table.emplace(key, utils::get_primes(factor, key, value));
         }
-        utils::Array<Modulus> result(bit_sizes.size(), false);
+        utils::Array<Modulus> result(bit_sizes.size(), false, nullptr);
         size_t i = 0;
         for (size_t size : bit_sizes) {
             // get the last one of the size and remove it from prime table

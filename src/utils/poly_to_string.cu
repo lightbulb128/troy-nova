@@ -63,15 +63,15 @@ namespace troy::utils {
         {
             return string("0");
         }
-        Array<uint64_t> remainder(uint64_count, false);
-        Array<uint64_t> quotient(uint64_count, false);
-        Array<uint64_t> base(uint64_count, false);
+        Array<uint64_t> remainder(uint64_count, false, nullptr);
+        Array<uint64_t> quotient(uint64_count, false, nullptr);
+        Array<uint64_t> base(uint64_count, false, nullptr);
         base[0] = 10;
-        remainder.copy_from_slice(ConstSlice<uint64_t>(value, uint64_count, false));
+        remainder.copy_from_slice(ConstSlice<uint64_t>(value, uint64_count, false, nullptr));
         string output;
         while (!is_zero_uint(remainder.const_reference()))
         {
-            divide_uint_inplace(remainder.reference(), base.const_reference(), quotient.reference());
+            divide_uint_inplace(remainder.reference(), base.const_reference(), quotient.reference(), nullptr);
             char digit = static_cast<char>(remainder[0] + static_cast<uint64_t>('0'));
             output += digit;
             Array<uint64_t> t = std::move(remainder);
