@@ -3,8 +3,12 @@
 void register_key_generator(pybind11::module& m) {
     
     py::class_<KeyGenerator>(m, "KeyGenerator")
-        .def(py::init<HeContextPointer>())
-        .def(py::init<HeContextPointer, const SecretKey&>())
+        .def(py::init([](HeContextPointer context, MemoryPoolHandleArgument pool){
+            return KeyGenerator(context, nullopt_default_pool(pool));
+        }), py::arg("context"), MEMORY_POOL_ARGUMENT)
+        .def(py::init([](HeContextPointer context, const SecretKey& secret_key, MemoryPoolHandleArgument pool){
+            return KeyGenerator(context, secret_key, nullopt_default_pool(pool));
+        }), py::arg("context"), py::arg("secret_key"), MEMORY_POOL_ARGUMENT)
         .def("context", &KeyGenerator::context)
         .def("on_device", &KeyGenerator::on_device)
         .def("to_device_inplace", [](KeyGenerator& self, MemoryPoolHandleArgument pool){

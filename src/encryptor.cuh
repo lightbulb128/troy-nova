@@ -1,6 +1,7 @@
 #pragma once
 #include "key.cuh"
 #include "he_context.cuh"
+#include "utils/memory_pool.cuh"
 #include "utils/rlwe.cuh"
 #include "utils/scaling_variant.cuh"
 
@@ -77,8 +78,8 @@ namespace troy {
             return secret_key_.value();
         }
 
-        inline void set_public_key(const PublicKey& public_key) {
-            PublicKey cloned = public_key.clone(public_key.pool());
+        inline void set_public_key(const PublicKey& public_key, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+            PublicKey cloned = public_key.clone(pool);
             public_key_ = std::move(cloned);
             if (this->secret_key_.has_value()) {
                 if (this->secret_key_.value().on_device() != public_key.on_device()) {
@@ -87,8 +88,8 @@ namespace troy {
             }
         }
 
-        inline void set_secret_key(const SecretKey& secret_key) {
-            secret_key_ = secret_key.clone(secret_key.pool());
+        inline void set_secret_key(const SecretKey& secret_key, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+            secret_key_ = secret_key.clone(pool);
             if (this->public_key_.has_value()) {
                 if (this->public_key_.value().on_device() != secret_key.on_device()) {
                     throw std::runtime_error("[Encryptor::set_secret_key] public key and secret key are not on the same device");

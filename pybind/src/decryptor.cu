@@ -3,7 +3,9 @@
 void register_decryptor(pybind11::module& m) {
     
     py::class_<Decryptor>(m, "Decryptor")
-        .def(py::init<HeContextPointer, const SecretKey&>())
+        .def(py::init([](HeContextPointer context, const SecretKey& secret_key, MemoryPoolHandleArgument pool) {
+            return Decryptor(context, secret_key, nullopt_default_pool(pool));
+        }), py::arg("context"), py::arg("secret_key"), MEMORY_POOL_ARGUMENT)
         .def("context", &Decryptor::context)
         .def("on_device", &Decryptor::on_device)
         .def("to_device_inplace", [](Decryptor& self, MemoryPoolHandleArgument pool) {
