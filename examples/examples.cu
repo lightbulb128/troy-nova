@@ -26,6 +26,7 @@ int main()
         cout << "| 10. BFV MatMul             | 10_bfv_matmul.cu           |" << endl;
         cout << "| 11. CKKS MatMul            | 11_ckks_matmul.cu          |" << endl;
         cout << "| 20. Memory Pools           | 20_memory_pools.cu         |" << endl;
+        cout << "| 99. Quickstart             | 99_quickstart.cu           |" << endl;
         cout << "+----------------------------+----------------------------+" << endl;
 
         int selection = 0;
@@ -89,6 +90,10 @@ int main()
 
         case 20:
             example_memory_pools();
+            break;
+
+        case 99:
+            example_quickstart();
             break;
 
         case 0:

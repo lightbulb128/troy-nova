@@ -20,6 +20,7 @@
 #include <thread>
 #include <vector>
 
+void example_quickstart();
 void example_bfv_basics();
 void example_encoders();
 void example_levels();
