@@ -1,0 +1,64 @@
+#include "memory_pool.cuh"
+
+namespace troy::utils {
+
+    struct MemoryPool::Impl {};
+
+    // User shouldn't call this but call create() instead
+    MemoryPool::MemoryPool(size_t device_index): device_index(device_index) {
+        this->impl_ = std::make_shared<Impl>();
+        // see if the device exists
+        cudaDeviceProp props; 
+        cudaError_t status = cudaGetDeviceProperties(&props, device_index);
+        if (status != cudaSuccess) {
+            std::string msg = "[MemoryPool(none)::MemoryPool] cudaGetDeviceProperties failed: ";
+            msg += cudaGetErrorString(status);
+            throw std::runtime_error(msg);
+        }
+        denying = false;
+    }
+
+    void* MemoryPool::try_allocate(size_t required) {
+        throw std::runtime_error("[MemoryPool(none)::try_allocate] Should never call this.");
+    }
+
+
+    void* MemoryPool::allocate(size_t required) {
+        if (denying) {
+            throw std::runtime_error("[MemoryPool(none)::get] DEBUG: The pool is denying allocation.");
+        }
+        void* ptr = nullptr;
+        set_device();
+        cudaError_t status = cudaMalloc(&ptr, required);
+        if (status != cudaSuccess) {
+            std::string msg = "[MemoryPool(none)::Allocate] cudaMalloc failed: ";
+            msg += cudaGetErrorString(status);
+            throw std::runtime_error(msg);
+        }
+        return ptr;
+    }
+
+    void MemoryPool::release(void* ptr) {
+        set_device();
+        cudaError_t status = cudaFree(ptr);
+        if (status != cudaSuccess) {
+            std::string msg = "[MemoryPool(none)::Free] cudaFree failed: ";
+            msg += cudaGetErrorString(status);
+            throw std::runtime_error(msg);
+        }
+    }
+
+    void MemoryPool::destroy() {
+        // do nothing
+    }
+
+    void MemoryPool::release_unused() {
+        // do nothing
+    }
+
+    MemoryPool::~MemoryPool() {
+        // do nothing
+    }
+
+
+}
