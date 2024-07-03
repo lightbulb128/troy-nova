@@ -25,6 +25,7 @@ int main()
         cout << "|  7. Serialization          |  7_serialization.cu        |" << endl;
         cout << "| 10. BFV MatMul             | 10_bfv_matmul.cu           |" << endl;
         cout << "| 11. CKKS MatMul            | 11_ckks_matmul.cu          |" << endl;
+        cout << "| 20. Memory Pools           | 20_memory_pools.cu         |" << endl;
         cout << "+----------------------------+----------------------------+" << endl;
 
         int selection = 0;
@@ -84,6 +85,10 @@ int main()
 
         case 11:
             example_ckks_matmul();
+            break;
+
+        case 20:
+            example_memory_pools();
             break;
 
         case 0:
