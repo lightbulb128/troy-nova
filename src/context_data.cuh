@@ -45,7 +45,7 @@ namespace troy {
     public:
 
         inline MemoryPoolHandle pool() const { return parms_.pool(); }
-        inline bool device_index() const { return parms_.device_index(); }
+        inline size_t device_index() const { return parms_.device_index(); }
 
         std::optional<std::shared_ptr<HeContext>> context() const;
         std::shared_ptr<HeContext> context_pointer() const;

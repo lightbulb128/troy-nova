@@ -21,7 +21,7 @@ namespace troy {namespace utils {
     public:
 
         inline MemoryPoolHandle pool() const { return root_powers_.pool(); }
-        inline bool device_index() const { return root_powers_.device_index(); }
+        inline size_t device_index() const { return root_powers_.device_index(); }
 
         NTTTables(): device(false) {}
 

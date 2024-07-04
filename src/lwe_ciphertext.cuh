@@ -18,7 +18,7 @@ namespace troy {
     public:
 
         inline MemoryPoolHandle pool() const { return c1_.pool(); }
-        inline bool device_index() const { return c1_.device_index(); }
+        inline size_t device_index() const { return c1_.device_index(); }
 
         inline LWECiphertext() : 
             coeff_modulus_size_(0), poly_modulus_degree_(0),

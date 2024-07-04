@@ -23,7 +23,7 @@ namespace troy {
     public:
 
         inline MemoryPoolHandle pool() const { return data_.pool(); }
-        inline bool device_index() const { return data_.device_index(); }
+        inline size_t device_index() const { return data_.device_index(); }
 
         inline Plaintext():
             coeff_count_(0),

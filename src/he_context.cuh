@@ -22,7 +22,7 @@ namespace troy {
     public:
 
         inline MemoryPoolHandle pool() const { return first_context_data_pointer()->pool(); }
-        inline bool device_index() const { return first_context_data_pointer()->device_index(); }
+        inline size_t device_index() const { return first_context_data_pointer()->device_index(); }
 
         inline bool on_device() const noexcept {
             return device;

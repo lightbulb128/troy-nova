@@ -10,7 +10,7 @@ namespace troy {namespace utils {
     public:
 
         MemoryPoolHandle pool() const { return inner.pool(); }
-        bool device_index() const { return inner.device_index(); }
+        size_t device_index() const { return inner.device_index(); }
 
         DynamicArray() : inner() {}
         DynamicArray(size_t count, bool device, MemoryPoolHandle pool = MemoryPool::GlobalPool()) : inner(count, device, pool) {}
