@@ -20,7 +20,7 @@ namespace troy {
             }
             throw std::runtime_error("[KSwitchKeys::pool] KSwitchKeys is empty.");
         }
-        inline bool device_index() const { 
+        inline size_t device_index() const { 
             // find first non-empty vector
             for (auto& v : keys) {
                 if (v.size() > 0) {
@@ -166,7 +166,7 @@ namespace troy {
     
     public:
         inline MemoryPoolHandle pool() const { return keys.pool(); }
-        inline bool device_index() const { return keys.device_index(); }
+        inline size_t device_index() const { return keys.device_index(); }
 
         inline RelinKeys() {}
         inline RelinKeys(KSwitchKeys&& keys): keys(std::move(keys)) {}
@@ -262,7 +262,7 @@ namespace troy {
     
     public:
         inline MemoryPoolHandle pool() const { return keys.pool(); }
-        inline bool device_index() const { return keys.device_index(); }
+        inline size_t device_index() const { return keys.device_index(); }
 
         inline GaloisKeys() {}
         inline GaloisKeys(KSwitchKeys&& keys): keys(std::move(keys)) {}

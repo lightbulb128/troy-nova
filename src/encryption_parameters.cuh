@@ -51,7 +51,7 @@ namespace troy {
     public:
 
         inline MemoryPoolHandle pool() const { return coeff_modulus_.pool(); }
-        inline bool device_index() const { return coeff_modulus_.device_index(); }
+        inline size_t device_index() const { return coeff_modulus_.device_index(); }
 
         inline EncryptionParameters(SchemeType scheme_type) : 
             scheme_(scheme_type), device(false), plain_modulus_(new Modulus(0), false, nullptr),

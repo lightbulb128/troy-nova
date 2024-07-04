@@ -19,7 +19,7 @@ namespace troy {namespace utils {
     public:
 
         inline MemoryPoolHandle pool() const { return base_.pool(); }
-        inline bool device_index() const { return base_.device_index(); }
+        inline size_t device_index() const { return base_.device_index(); }
 
         inline RNSBase(): device(false) {}
 
@@ -164,7 +164,7 @@ namespace troy {namespace utils {
     public:
 
         inline MemoryPoolHandle pool() const { return ibase.pool(); }
-        inline bool device_index() const { return ibase.device_index(); }
+        inline size_t device_index() const { return ibase.device_index(); }
 
         __host__ __device__ inline bool on_device() const { return device; }
         

@@ -12,7 +12,7 @@ namespace troy {
     public:
 
         inline MemoryPoolHandle pool() const { return sk.pool(); }
-        inline bool device_index() const { return sk.device_index(); }
+        inline size_t device_index() const { return sk.device_index(); }
 
         inline SecretKey() {}
         inline SecretKey(const Plaintext& sk): sk(sk.clone(sk.pool())) {}
@@ -95,7 +95,7 @@ namespace troy {
     public:
 
         inline MemoryPoolHandle pool() const { return pk.pool(); }
-        inline bool device_index() const { return pk.device_index(); }
+        inline size_t device_index() const { return pk.device_index(); }
 
         inline PublicKey() {}
         inline PublicKey(const Ciphertext& pk): pk(pk.clone(pk.pool())) {}

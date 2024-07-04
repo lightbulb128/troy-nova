@@ -10,7 +10,7 @@ namespace troy {namespace utils {
     public:
 
         MemoryPoolHandle pool() const { return data_.pool(); }
-        bool device_index() const { return data_.device_index(); }
+        size_t device_index() const { return data_.device_index(); }
 
         Buffer(size_t poly_count, size_t coeff_modulus_size, size_t coeff_count, bool device, MemoryPoolHandle pool) :
             poly_count_(poly_count), coeff_modulus_size_(coeff_modulus_size), coeff_count_(coeff_count),

@@ -1,6 +1,7 @@
 #pragma once
 #include "plaintext.cuh"
 #include "he_context.cuh"
+#include "utils/box.cuh"
 
 namespace troy {
 
@@ -11,12 +12,23 @@ namespace troy {
         size_t slots_;
         utils::Array<size_t> matrix_reps_index_map;
 
+        inline bool pool_compatible(MemoryPoolHandle pool) const {
+            if (this->on_device()) {
+                return pool != nullptr && pool->get_device() == this->device_index();
+            } else {
+                return true;
+            }
+        }
+
     public:
 
         BatchEncoder(HeContextPointer context);
 
         inline bool on_device() const noexcept {
             return matrix_reps_index_map.on_device();
+        }
+        inline size_t device_index() const {
+            return matrix_reps_index_map.device_index();
         }
 
         inline void to_device_inplace(MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
@@ -47,30 +59,64 @@ namespace troy {
         /// The length of the vector must be a power of 2.
         static void reverse_bits(utils::Slice<uint64_t> input);
 
-        void encode(const std::vector<uint64_t>& values, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        void encode_slice(utils::ConstSlice<uint64_t> values, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        inline Plaintext encode_slice_new(utils::ConstSlice<uint64_t> values, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            Plaintext destination;
+            encode_slice(values, destination, pool);
+            return destination;
+        }
+        inline void encode(const std::vector<uint64_t>& values, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            encode_slice(utils::ConstSlice(values.data(), values.size(), false, nullptr), destination, pool);
+        }
         inline Plaintext encode_new(const std::vector<uint64_t>& values, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Plaintext destination;
             encode(values, destination, pool);
             return destination;
         }
 
-        void encode_polynomial(const std::vector<uint64_t>& values, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        void encode_polynomial_slice(utils::ConstSlice<uint64_t> values, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        inline Plaintext encode_polynomial_slice_new(utils::ConstSlice<uint64_t> values, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            Plaintext destination;
+            encode_polynomial_slice(values, destination, pool);
+            return destination;
+        }
+        void encode_polynomial(const std::vector<uint64_t>& values, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            encode_polynomial_slice(utils::ConstSlice(values.data(), values.size(), false, nullptr), destination, pool);
+        }
         inline Plaintext encode_polynomial_new(const std::vector<uint64_t>& values, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Plaintext destination;
             encode_polynomial(values, destination, pool);
             return destination;
         }
 
-        void decode(const Plaintext& plaintext, std::vector<uint64_t>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        void decode_slice(const Plaintext& plaintext, utils::Slice<uint64_t> destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        inline utils::Array<uint64_t> decode_slice_new(const Plaintext& plaintext, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            utils::Array<uint64_t> destination(slot_count(), on_device(), pool);
+            decode_slice(plaintext, destination.reference(), pool);
+            return destination;
+        }
+        inline void decode(const Plaintext& plaintext, std::vector<uint64_t>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            destination.resize(slot_count());
+            decode_slice(plaintext, utils::Slice(destination.data(), destination.size(), false, nullptr), pool);
+        }
         inline std::vector<uint64_t> decode_new(const Plaintext& plaintext, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             std::vector<uint64_t> destination(slot_count());
             decode(plaintext, destination, pool);
             return destination;
         }
 
-        void decode_polynomial(const Plaintext& plaintext, std::vector<uint64_t>& destination) const;
+        void decode_polynomial_slice(const Plaintext& plaintext, utils::Slice<uint64_t> destination) const;
+        inline utils::Array<uint64_t> decode_polynomial_slice_new(const Plaintext& plaintext, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            utils::Array<uint64_t> destination(plaintext.data().size(), on_device(), pool);
+            decode_polynomial_slice(plaintext, destination.reference());
+            return destination;
+        }
+        inline void decode_polynomial(const Plaintext& plaintext, std::vector<uint64_t>& destination) const {
+            destination.resize(plaintext.data().size());
+            decode_polynomial_slice(plaintext, utils::Slice(destination.data(), destination.size(), false, nullptr));
+        }
         inline std::vector<uint64_t> decode_polynomial_new(const Plaintext& plaintext) const {
-            std::vector<uint64_t> destination(slot_count());
+            std::vector<uint64_t> destination(plaintext.data().size());
             decode_polynomial(plaintext, destination);
             return destination;
         }

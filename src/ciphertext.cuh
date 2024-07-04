@@ -26,7 +26,7 @@ namespace troy {
     public:
     
         inline MemoryPoolHandle pool() const { return data_.pool(); }
-        inline bool device_index() const { return data_.device_index(); }
+        inline size_t device_index() const { return data_.device_index(); }
 
         inline static Ciphertext from_members(
             size_t polynomial_count, size_t coeff_modulus_size, size_t poly_modulus_degree, 

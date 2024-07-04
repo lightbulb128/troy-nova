@@ -55,7 +55,7 @@ namespace troy {namespace utils {
     public:
 
         inline MemoryPoolHandle pool() const { return base_q_.pool(); }
-        inline bool device_index() const { return base_q_.device_index(); }
+        inline size_t device_index() const { return base_q_.device_index(); }
 
         inline size_t coeff_count() const noexcept { return coeff_count_; }
 

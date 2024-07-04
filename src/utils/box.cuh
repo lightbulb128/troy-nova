@@ -34,7 +34,7 @@ namespace troy { namespace utils {
             return ConstPointer<T>(&reference, device, memory_pool_handle);
         }
         __host__ __device__ MemoryPool* pool() const { return memory_pool_handle_; }
-        bool device_index() const { return memory_pool_handle_->get_device(); }
+        size_t device_index() const { return memory_pool_handle_->get_device(); }
     };
 
     template<class T>
@@ -65,7 +65,7 @@ namespace troy { namespace utils {
             return Pointer<T>(&reference, device, memory_pool_handle);
         }
         MemoryPool* pool() const { return memory_pool_handle_; }
-        bool device_index() const { return memory_pool_handle_->get_device(); }
+        size_t device_index() const { return memory_pool_handle_->get_device(); }
     };
 
     template<class T>
@@ -76,7 +76,7 @@ namespace troy { namespace utils {
     public:
 
         MemoryPoolHandle pool() const { return memory_pool_handle_; }
-        bool device_index() const { return memory_pool_handle_->get_device(); }
+        size_t device_index() const { return memory_pool_handle_->get_device(); }
 
         Box(): pointer(nullptr), device(false), memory_pool_handle_(nullptr) {}
         Box(T* object, bool device, MemoryPoolHandle memory_pool_handle = MemoryPool::GlobalPool()) : pointer(object), device(device), memory_pool_handle_(device ? memory_pool_handle : nullptr) {
@@ -223,7 +223,7 @@ namespace troy { namespace utils {
     public:
     
         MemoryPool* pool() const { return memory_pool_handle_; }
-        bool device_index() const { return memory_pool_handle_->get_device(); }
+        size_t device_index() const { return memory_pool_handle_->get_device(); }
 
         __host__ __device__ ConstSlice(const T* pointer, size_t len, bool device, MemoryPool* memory_pool_handle) 
             : pointer(pointer), len(len), device(device), memory_pool_handle_(memory_pool_handle) {}
@@ -248,7 +248,7 @@ namespace troy { namespace utils {
     public:
 
         MemoryPool* pool() const { return memory_pool_handle_; }
-        bool device_index() const { return memory_pool_handle_->get_device(); }
+        size_t device_index() const { return memory_pool_handle_->get_device(); }
 
         __host__ __device__ Slice(T* pointer, size_t len, bool device, MemoryPool* memory_pool_handle) 
             : pointer(pointer), len(len), device(device), memory_pool_handle_(memory_pool_handle) {}
@@ -299,7 +299,7 @@ namespace troy { namespace utils {
     public:
 
         MemoryPoolHandle pool() const { return memory_pool_handle_; }
-        bool device_index() const { return memory_pool_handle_->get_device(); }
+        size_t device_index() const { return memory_pool_handle_->get_device(); }
 
         Array() : len(0), device(false), pointer(nullptr), memory_pool_handle_(nullptr) {}
         Array(size_t count, bool device, MemoryPoolHandle memory_pool_handle = MemoryPool::GlobalPool()) : len(count), device(device), memory_pool_handle_(device ? memory_pool_handle : nullptr) {
