@@ -6,6 +6,8 @@ namespace troy::utils {
     // the device memory allocation and freeing. User should call
     // `Destroy()` before the program exit to free all the memory, and
     // all further operations after destruction will fail.
+    
+    int MemoryPool::implementation_type() {return 2;}
 
     struct MemoryPool::Impl {
         static const int PRESERVED_MEMORY_BYTES = 1024 * 1024 * 32;

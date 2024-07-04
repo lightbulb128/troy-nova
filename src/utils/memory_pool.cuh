@@ -49,6 +49,7 @@ namespace troy {namespace utils {
         void* try_allocate(size_t required);
 
     public:
+        static int implementation_type();
         inline void set_device() {
             cudaError_t status = cudaSetDevice(device_index);
             if (status != cudaSuccess) {

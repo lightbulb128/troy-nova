@@ -3,6 +3,8 @@
 namespace troy::utils {
 
     struct MemoryPool::Impl {};
+    
+    int MemoryPool::implementation_type() {return 0;}
 
     // User shouldn't call this but call create() instead
     MemoryPool::MemoryPool(size_t device_index): device_index(device_index) {
