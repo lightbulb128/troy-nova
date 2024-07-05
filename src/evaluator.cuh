@@ -35,7 +35,7 @@ namespace troy {
 
         void mod_switch_scale_to_next_internal(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool) const;
         void mod_switch_drop_to_next_internal(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool) const;
-        void mod_switch_drop_to_next_plain_inplace_internal(Plaintext& plain, MemoryPoolHandle pool) const;
+        void mod_switch_drop_to_next_plain_inplace_internal(Plaintext& plain) const;
 
         void translate_plain_inplace(Ciphertext& encrypted, const Plaintext& plain, bool subtract, MemoryPoolHandle pool) const;
 
@@ -50,7 +50,7 @@ namespace troy {
         inline HeContextPointer context() const { return context_; }
         inline bool on_device() const {return this->context()->on_device();}
 
-        void negate_inplace(Ciphertext& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        void negate_inplace(Ciphertext& encrypted) const;
         inline void negate(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             destination = encrypted.clone(pool);
             negate_inplace(destination);
@@ -144,16 +144,16 @@ namespace troy {
             return destination;
         }
 
-        inline void mod_switch_plain_to_next_inplace(Plaintext& plain, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            this->mod_switch_drop_to_next_plain_inplace_internal(plain, pool);
+        inline void mod_switch_plain_to_next_inplace(Plaintext& plain) const {
+            this->mod_switch_drop_to_next_plain_inplace_internal(plain);
         }
         inline void mod_switch_plain_to_next(const Plaintext& plain, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             destination = plain.clone(pool);
-            this->mod_switch_drop_to_next_plain_inplace_internal(destination, pool);
+            this->mod_switch_drop_to_next_plain_inplace_internal(destination);
         }
         inline Plaintext mod_switch_plain_to_next_new(const Plaintext& plain, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Plaintext destination = plain.clone(pool);
-            this->mod_switch_drop_to_next_plain_inplace_internal(destination, pool);
+            this->mod_switch_drop_to_next_plain_inplace_internal(destination);
             return destination;
         }
 
@@ -168,14 +168,14 @@ namespace troy {
             return destination;
         }
 
-        void mod_switch_plain_to_inplace(Plaintext& plain, const ParmsID& parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        void mod_switch_plain_to_inplace(Plaintext& plain, const ParmsID& parms_id) const;
         inline void mod_switch_plain_to(const Plaintext& plain, const ParmsID& parms_id, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             destination = plain.clone(pool);
-            mod_switch_plain_to_inplace(destination, parms_id, pool);
+            mod_switch_plain_to_inplace(destination, parms_id);
         }
         inline Plaintext mod_switch_plain_to_new(const Plaintext& plain, const ParmsID& parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Plaintext destination = plain.clone(pool);
-            mod_switch_plain_to_inplace(destination, parms_id, pool);
+            mod_switch_plain_to_inplace(destination, parms_id);
             return destination;
         }
 

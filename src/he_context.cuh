@@ -17,7 +17,7 @@ namespace troy {
 
         ParmsID create_next_context_data(ParmsID prev_parms_id);
 
-        HeContext(): context_data_map_(), device(false) {}
+        HeContext(): device(false), context_data_map_(){}
 
     public:
 

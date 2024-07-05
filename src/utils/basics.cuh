@@ -1,6 +1,7 @@
 #pragma once
 #include "constants.h"
 #include <cstdint>
+#include <cmath>
 #include "box.cuh"
 
 namespace troy { namespace utils {
@@ -680,9 +681,9 @@ namespace troy { namespace utils {
     __host__ __device__
     inline int compare_uint(ConstSlice<uint64_t> operand1, ConstSlice<uint64_t> operand2) {
         size_t n = max(operand1.size(), operand2.size());
-        for (int i = n - 1; i >= 0; i--) {
-            uint64_t a = i < operand1.size() ? operand1[i] : 0;
-            uint64_t b = i < operand2.size() ? operand2[i] : 0;
+        for (int i = static_cast<int>(n - 1); i >= 0; i--) {
+            uint64_t a = static_cast<size_t>(i) < operand1.size() ? operand1[i] : 0;
+            uint64_t b = static_cast<size_t>(i) < operand2.size() ? operand2[i] : 0;
             if (a > b) return 1;
             if (a < b) return -1;
         }

@@ -193,7 +193,6 @@ namespace troy {namespace utils {
     }
 
     void RandomGenerator::sample_poly_uniform(Slice<uint64_t> destination, size_t degree, ConstSlice<Modulus> moduli) {
-        bool device = destination.on_device();
         if (!utils::device_compatible(destination, moduli)) {
             throw std::runtime_error("[RandomGenerator::sample_poly_uniform] destination and modulus must be on the same device");
         }

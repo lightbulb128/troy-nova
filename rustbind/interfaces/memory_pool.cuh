@@ -1,4 +1,6 @@
+#include "cuda_runtime.h"
 #include <memory>
+#include "troy/troy.cuh"
 
 namespace troy::utils {
     class MemoryPool;

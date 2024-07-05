@@ -63,7 +63,7 @@ namespace troy {namespace utils {
                 cloned.permutation_tables.push_back(this->permutation_tables[i].clone(pool));
             }
             cloned.initialized = this->initialized;
-            return std::move(cloned);
+            return cloned;
         }
 
         inline void to_device_inplace(MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
@@ -80,7 +80,7 @@ namespace troy {namespace utils {
         inline GaloisTool to_device(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             GaloisTool result = this->clone(pool);
             result.to_device_inplace(pool);
-            return std::move(result);
+            return result;
         }
     
         inline GaloisTool() : device(false) {}

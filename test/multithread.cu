@@ -471,7 +471,7 @@ namespace multithread {
             }
             { // negate_inplace
                 Ciphertext encrypted = context.encryptor().encrypt_asymmetric_new(encoded, nullptr, pool);
-                context.evaluator().negate_inplace(encrypted, pool);
+                context.evaluator().negate_inplace(encrypted);
                 IF_FALSE_PRINT_RETURN(good_pool(encrypted.pool(), pool), "negate_inplace/pool");
                 Plaintext decrypted = context.decryptor().decrypt_new(encrypted, pool);
                 GeneralVector decoded = context.encoder().decode_simd(decrypted, pool);
@@ -969,7 +969,7 @@ namespace multithread {
             }
             { // mod_switch_plain_to_next_inplace
                 Plaintext mod_switched = encoded.clone(pool);
-                context.evaluator().mod_switch_plain_to_next_inplace(mod_switched, pool);
+                context.evaluator().mod_switch_plain_to_next_inplace(mod_switched);
                 IF_FALSE_PRINT_RETURN(good_pool(mod_switched.pool(), pool), "mod_switch_plain_to_next_inplace/pool");
                 GeneralVector decoded = context.encoder().decode_simd(mod_switched, pool);
                 IF_FALSE_PRINT_RETURN(context.near_equal(message, decoded), "mod_switch_plain_to_next_inplace/correct");

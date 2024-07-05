@@ -1,4 +1,5 @@
 #pragma once
+#include <cuda_runtime.h>
 #include "basics.cuh"
 #include "box.cuh"
 

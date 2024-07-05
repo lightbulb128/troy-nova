@@ -7,6 +7,9 @@
 
 namespace troy { namespace utils {
 
+// allow class-memaccess for gcc
+#pragma GCC diagnostic ignored "-Wclass-memaccess"
+
     template<class T>
     class ConstPointer {
         const T* pointer;
@@ -532,5 +535,8 @@ namespace troy { namespace utils {
         os << array.const_reference();
         return os;
     }
+
+// continue warning class-memaccess for gcc
+#pragma GCC diagnostic pop
 
 }}

@@ -80,7 +80,7 @@ namespace troy {
     }
     */
 
-    __host__ __device__
+    __device__
     static CustomComplex conj(CustomComplex root) {
         return CustomComplex(root.real, -root.imag);
     }
@@ -514,7 +514,6 @@ namespace troy {
     static void set_plaintext_value_array_128bits(size_t coeff_count, ConstSlice<double> real_values, ConstSlice<Modulus> coeff_modulus, Slice<uint64_t> destination) {
         bool device = real_values.on_device();
         if (!device) {
-            double two_pow_64 = std::pow(2.0, 64.0);
             for (size_t i = 0; i < real_values.size(); i++) {
                 double coeffd = real_values[i];
                 bool is_negative = coeffd < 0;
@@ -561,7 +560,6 @@ namespace troy {
 
     static void decompose_double_absolute_array(
         ConstSlice<double> real_values,
-        size_t n,
         size_t coeff_modulus_size,
         Slice<uint64_t> destination
     ) {
@@ -645,7 +643,7 @@ namespace troy {
         size_t coeff_modulus_size = coeff_modulus.size();
         Array<uint64_t> coeffu_array(coeff_modulus_size * coeff_count, device, pool);
         decompose_double_absolute_array(
-            real_values, coeff_count, coeff_modulus_size, coeffu_array.reference()
+            real_values, coeff_modulus_size, coeffu_array.reference()
         );
         context_data->rns_tool().base_q().decompose_array(coeffu_array.reference(), pool);
         set_decomposed_value_array(
@@ -656,8 +654,6 @@ namespace troy {
     
 
     static void set_plaintext_value_array(ContextDataPointer context_data, size_t coeff_count, ConstSlice<double> real_values, ConstSlice<Modulus> coeff_modulus, Plaintext& destination, MemoryPoolHandle pool) {
-        size_t n = coeff_count;
-        size_t logn = utils::get_power_of_two(n);
         size_t coeff_modulus_size = coeff_modulus.size();
 
         // Verify that the values are not too large to fit in coeff_modulus
@@ -665,8 +661,6 @@ namespace troy {
         // Don't compute logarithmis of numbers less than 1
         double max_coeff = reduction::max(real_values, pool);
         size_t max_coeff_bit_count = static_cast<size_t>(std::ceil(std::log2(std::max(max_coeff, 1.0))));
-
-        double two_pow_64 = std::pow(2.0, 64.0);
 
         // Resize destination to appropriate size
         // Need to first set parms_id to zero, otherwise resize
@@ -996,7 +990,6 @@ namespace troy {
             throw std::invalid_argument("[CKKSEncoder::encode_internal_integer_polynomial_slice] parms_id not valid for context.");
         }
         ContextDataPointer context_data = context_data_optional.value();
-        size_t slots = this->slot_count();
         const EncryptionParameters& parms = context_data->parms();
         ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
         size_t coeff_modulus_size = coeff_modulus.size();
@@ -1251,7 +1244,6 @@ namespace troy {
 
         ConstSlice<uint64_t> decryption_modulus = context_data->total_coeff_modulus();
         ConstSlice<uint64_t> upper_half_threshold = context_data->upper_half_threshold();
-        size_t logn = utils::get_power_of_two(coeff_count);
 
         double inv_scale = 1.0 / plain.scale();
         if (plain.data().size() != coeff_count * coeff_modulus_size) {

@@ -129,6 +129,9 @@ void register_matmul_helper(pybind11::module& m) {
         .def("sub_plain_inplace", [](Cipher2d& self, const Evaluator& evaluator, const Plain2d& plain, MemoryPoolHandleArgument pool) {
             self.sub_plain_inplace(evaluator, plain, nullopt_default_pool(pool));
         }, py::arg("evaluator"), py::arg("plain"), MEMORY_POOL_ARGUMENT)
+        .def("decrypt", [](const Cipher2d& self, const Decryptor& decryptor, MemoryPoolHandleArgument pool) {
+            return self.decrypt(decryptor, nullopt_default_pool(pool));
+        }, py::arg("decryptor"), MEMORY_POOL_ARGUMENT)
 
     ;
 

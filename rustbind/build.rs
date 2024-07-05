@@ -25,6 +25,7 @@ fn main() {
 
     cxx_build::bridge("src/lib.rs")
         .cuda(true)
+        .flag("-std=c++17")
         .include(out_dir + "/include")
         .file("interfaces/memory_pool.cu")
         .compile("rustbind");

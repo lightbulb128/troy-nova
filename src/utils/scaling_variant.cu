@@ -283,7 +283,6 @@ namespace troy {namespace scaling_variant {
     }
 
     void centralize(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, MemoryPoolHandle pool) {
-        bool device = plain.on_device();
         if (!utils::device_compatible(*context_data, plain, destination)) {
             throw std::invalid_argument("[scaling_variant::centralize] Arguments are not on the same device.");
         }
@@ -295,8 +294,6 @@ namespace troy {namespace scaling_variant {
             throw std::invalid_argument("[scaling_variant::centralize] Plain coeff count too large.");
         }
         size_t coeff_modulus_size = coeff_modulus.size();
-        ConstSlice<uint64_t> plain_data = plain.data().const_reference();
-        ConstSlice<MultiplyUint64Operand> coeff_div_plain_modulus = context_data->coeff_div_plain_modulus();
         uint64_t plain_upper_half_threshold = context_data->plain_upper_half_threshold();
         ConstSlice<uint64_t> plain_upper_half_increment = context_data->plain_upper_half_increment();
         if (destination.size() != coeff_modulus_size * coeff_count) {

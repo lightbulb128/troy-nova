@@ -38,13 +38,13 @@ namespace troy {
     class EncryptionParameters {
     private:
         bool device;
+        bool use_special_prime_for_encryption_;
         SchemeType scheme_;
         ParmsID parms_id_;
         size_t poly_modulus_degree_;
         utils::Array<Modulus> coeff_modulus_;
         utils::Box<Modulus> plain_modulus_;
         Modulus plain_modulus_host_;
-        bool use_special_prime_for_encryption_;
 
         void compute_parms_id();
 
@@ -54,8 +54,8 @@ namespace troy {
         inline size_t device_index() const { return coeff_modulus_.device_index(); }
 
         inline EncryptionParameters(SchemeType scheme_type) : 
-            scheme_(scheme_type), device(false), plain_modulus_(new Modulus(0), false, nullptr),
-            plain_modulus_host_(0), use_special_prime_for_encryption_(false)
+            device(false), use_special_prime_for_encryption_(false), scheme_(scheme_type), plain_modulus_(new Modulus(0), false, nullptr),
+            plain_modulus_host_(0)
         {}
 
         inline EncryptionParameters() : EncryptionParameters(SchemeType::Nil) {}

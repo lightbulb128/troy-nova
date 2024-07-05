@@ -44,8 +44,6 @@ namespace troy { namespace linear {
                 size_t o = slot_count / b / i;
                 if (o > output_dims) {o = output_dims;}
                 if (o < 1) {continue;}
-                size_t ic = ceil_div(input_dims, i);
-                size_t oc = ceil_div(output_dims, o);
                 size_t c = 0;
                 if (objective == MatmulObjective::EncryptLeft) {
                     c = bc * ceil_div(input_dims, i);

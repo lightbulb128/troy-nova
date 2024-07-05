@@ -104,7 +104,7 @@ namespace troy {
             prime_table[size].pop_back();
             i++;
         }
-        return std::move(result);
+        return result;
     }
 
 }

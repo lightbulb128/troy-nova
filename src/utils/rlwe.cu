@@ -31,7 +31,6 @@ namespace troy {namespace rlwe {
         ContextDataPointer context_data = context_data_optional.value();
         const EncryptionParameters& parms = context_data->parms();
         ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
-        ConstPointer<Modulus> plain_modulus = parms.plain_modulus();
         size_t coeff_modulus_size = coeff_modulus.size();
         size_t coeff_count = parms.poly_modulus_degree();
         ConstSlice<NTTTables> ntt_tables = context_data->small_ntt_tables();
@@ -128,7 +127,6 @@ namespace troy {namespace rlwe {
         ContextDataPointer context_data = context_data_optional.value();
         const EncryptionParameters& parms = context_data->parms();
         ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
-        ConstPointer<Modulus> plain_modulus = parms.plain_modulus();
         size_t coeff_modulus_size = coeff_modulus.size();
         size_t coeff_count = parms.poly_modulus_degree();
         ConstSlice<NTTTables> ntt_tables = context_data->small_ntt_tables();

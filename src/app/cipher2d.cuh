@@ -228,6 +228,17 @@ namespace troy { namespace linear {
             translate_plain_inplace(evaluator, other, true, pool);
         }
 
+        inline Plain2d decrypt(const Decryptor& decryptor, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            Plain2d result;
+            for (const std::vector<Ciphertext>& row : inner) {
+                std::vector<Plaintext>& new_row = result.new_row();
+                for (const Ciphertext& cipher : row) {
+                    new_row.push_back(decryptor.decrypt_new(cipher, pool));
+                }
+            }
+            return result;
+        }
+
     };
 
 }}

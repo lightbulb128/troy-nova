@@ -370,7 +370,6 @@ namespace troy {namespace utils {
     static void host_divide_and_round_q_last_inplace(const RNSTool& self, Slice<uint64_t> input) {
         
         size_t base_q_size = self.base_q().size();
-        ConstPointer<Modulus> last_modulus = self.base_q().base().at(base_q_size - 1);
         size_t coeff_count = self.coeff_count();
         size_t last_input_offset = (base_q_size - 1) * coeff_count;
         size_t half = self.q_last_half();
@@ -404,7 +403,6 @@ namespace troy {namespace utils {
         size_t i = global_index / coeff_count;
         size_t j = global_index % coeff_count;
 
-        const Modulus& last_modulus = *base_q.at(base_q_size - 1);
         size_t last_input_offset = (base_q.size() - 1) * coeff_count;
         Slice<uint64_t> input_last = input.slice(last_input_offset, last_input_offset + coeff_count);
         Slice<uint64_t> input_i = input.slice(i * coeff_count, (i + 1) * coeff_count);
@@ -447,7 +445,6 @@ namespace troy {namespace utils {
     }
 
     static void host_divide_and_round_q_last_ntt_inplace_step1(const RNSTool& self, Slice<uint64_t> input, Slice<uint64_t> temp) {
-        
         size_t base_q_size = self.base_q().size();
         size_t coeff_count = self.coeff_count();
         Slice<uint64_t> input_last = input.slice((base_q_size - 1) * coeff_count, base_q_size * coeff_count);
@@ -455,7 +452,6 @@ namespace troy {namespace utils {
 
         for (size_t i = 0; i < base_q_size - 1; i++) {
             ConstPointer<Modulus> modulus = self.base_q().base().at(i);
-            Slice<uint64_t> input_i = input.slice(i * coeff_count, (i + 1) * coeff_count);
             Slice<uint64_t> temp_i = temp.slice(i * coeff_count, (i + 1) * coeff_count);
             if (modulus->value() < last_modulus->value()) {
                 utils::modulo(input_last.as_const(), modulus, temp_i);
@@ -480,7 +476,6 @@ namespace troy {namespace utils {
         const Modulus& last_modulus = *base_q.at(base_q_size - 1);
         size_t last_input_offset = (base_q.size() - 1) * coeff_count;
         Slice<uint64_t> input_last = input.slice(last_input_offset, last_input_offset + coeff_count);
-        Slice<uint64_t> input_i = input.slice(i * coeff_count, (i + 1) * coeff_count);
         Slice<uint64_t> temp_i = temp.slice(i * coeff_count, (i + 1) * coeff_count);
         uint64_t temp_value;
         const Modulus& modulus = *base_q.at(i);
@@ -497,8 +492,6 @@ namespace troy {namespace utils {
     static void divide_and_round_q_last_ntt_inplace_step1(const RNSTool& self, Slice<uint64_t> input, Slice<uint64_t> temp) {
         bool device = self.on_device();
         size_t base_q_size = self.base_q().size();
-        size_t coeff_count = self.coeff_count();
-        Slice<uint64_t> input_last = input.slice((base_q_size - 1) * coeff_count, base_q_size * coeff_count);
         if (device) {
             size_t block_count = utils::ceil_div(self.coeff_count() * (base_q_size - 1), utils::KERNEL_THREAD_COUNT);
             kernel_divide_and_round_q_last_ntt_inplace_step1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
@@ -518,8 +511,6 @@ namespace troy {namespace utils {
         
         size_t base_q_size = self.base_q().size();
         size_t coeff_count = self.coeff_count();
-        Slice<uint64_t> input_last = input.slice((base_q_size - 1) * coeff_count, base_q_size * coeff_count);
-        ConstPointer<Modulus> last_modulus = self.base_q().base().at(base_q_size - 1);
 
         for (size_t i = 0; i < base_q_size - 1; i++) {
             ConstPointer<Modulus> modulus = self.base_q().base().at(i);
@@ -543,9 +534,6 @@ namespace troy {namespace utils {
         size_t i = global_index / coeff_count;
         size_t j = global_index % coeff_count;
 
-        const Modulus& last_modulus = *base_q.at(base_q_size - 1);
-        size_t last_input_offset = (base_q.size() - 1) * coeff_count;
-        Slice<uint64_t> input_last = input.slice(last_input_offset, last_input_offset + coeff_count);
         Slice<uint64_t> input_i = input.slice(i * coeff_count, (i + 1) * coeff_count);
         ConstSlice<uint64_t> temp_i = temp.const_slice(i * coeff_count, (i + 1) * coeff_count);
         uint64_t temp_value;
@@ -560,8 +548,6 @@ namespace troy {namespace utils {
     static void divide_and_round_q_last_ntt_inplace_step2(const RNSTool& self, Slice<uint64_t> input, ConstSlice<uint64_t> temp) {
         bool device = self.on_device();
         size_t base_q_size = self.base_q().size();
-        size_t coeff_count = self.coeff_count();
-        Slice<uint64_t> input_last = input.slice((base_q_size - 1) * coeff_count, base_q_size * coeff_count);
         if (device) {
             size_t block_count = utils::ceil_div(self.coeff_count() * (base_q_size - 1), utils::KERNEL_THREAD_COUNT);
             kernel_divide_and_round_q_last_ntt_inplace_step2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
@@ -1032,7 +1018,6 @@ namespace troy {namespace utils {
 
     __global__ static void kernel_mod_t_and_divide_q_last_inplace_step1(
         ConstSlice<Modulus> base_q,
-        ConstPointer<Modulus> t,
         size_t coeff_count,
         ConstSlice<uint64_t> neg_c_last_mod_t,
         ConstSlice<MultiplyUint64Operand> inv_q_last_mod_q,
@@ -1066,7 +1051,6 @@ namespace troy {namespace utils {
             size_t block_count = utils::ceil_div(coeff_count * (base_q_size - 1), utils::KERNEL_THREAD_COUNT);
             kernel_mod_t_and_divide_q_last_inplace_step1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 self.base_q().base(),
-                self.t(),
                 coeff_count,
                 neg_c_last_mod_t,
                 self.inv_q_last_mod_q(),

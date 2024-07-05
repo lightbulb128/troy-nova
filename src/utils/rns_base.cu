@@ -249,7 +249,6 @@ namespace troy {namespace utils {
     void host_rnsbase_compose_rearrange_array(const RNSBase& self, ConstSlice<uint64_t> from, Slice<uint64_t> result) {
         size_t n = self.size();
         size_t count = from.size() / n;
-        ConstSlice<Modulus> base = self.base();
         for (size_t i = 0; i < count; i++) {
             for (size_t j = 0; j < n; j++) {
                 result[i * n + j] = from[j * count + i];

@@ -68,7 +68,7 @@ namespace troy {
             result.is_ntt_form_ = is_ntt_form_;
             result.correction_factor_ = correction_factor_;
             result.seed_ = seed_;
-            return std::move(result);
+            return result;
         }
 
         inline Ciphertext(Ciphertext&& source) = default;

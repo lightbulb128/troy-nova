@@ -114,10 +114,6 @@ namespace troy {
             throw std::invalid_argument("[Decryptor::bfv_decrypt] Ciphertext is in NTT form.");
         }
         ContextDataPointer context_data = this->context()->get_context_data(encrypted.parms_id()).value();
-        const EncryptionParameters& parms = context_data->parms();
-        ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
-        size_t coeff_modulus_size = coeff_modulus.size();
-        size_t coeff_count = parms.poly_modulus_degree();
         
         // Firstly find c_0 + c_1 *s + ... + c_{count-1} * s^{count-1} mod q
         // This is equal to Delta m + v where ||v|| < Delta/2.

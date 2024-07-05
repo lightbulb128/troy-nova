@@ -36,7 +36,7 @@ namespace troy {namespace utils {
     inline std::ostream& operator<<(std::ostream& os, const HashFunction::HashBlock& hash)
     {
         os << "[";
-        for (auto i = 0; i < HashFunction::hash_block_uint64_count; ++i) {
+        for (size_t i = 0; i < HashFunction::hash_block_uint64_count; ++i) {
             os << std::hex << std::setfill('0') << std::setw(16) << hash[i];
             if (i < HashFunction::hash_block_uint64_count - 1) {
                 os << ", ";
