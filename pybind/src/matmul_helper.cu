@@ -68,6 +68,9 @@ void register_matmul_helper(pybind11::module& m) {
         .def("encrypt_symmetric", [](const Plain2d& self, const Encryptor& encryptor, MemoryPoolHandleArgument pool) {
             return self.encrypt_symmetric(encryptor, nullopt_default_pool(pool));
         }, py::arg("encryptor"), MEMORY_POOL_ARGUMENT)
+        .def("get", [](const Plain2d& self, size_t i, size_t j) {
+            return self[i][j];
+        }, py::arg("i"), py::arg("j"), py::return_value_policy::reference)
     ;
 
     py::class_<Cipher2d>(m, "Cipher2d")
@@ -132,6 +135,10 @@ void register_matmul_helper(pybind11::module& m) {
         .def("decrypt", [](const Cipher2d& self, const Decryptor& decryptor, MemoryPoolHandleArgument pool) {
             return self.decrypt(decryptor, nullopt_default_pool(pool));
         }, py::arg("decryptor"), MEMORY_POOL_ARGUMENT)
+
+        .def("get", [](const Cipher2d& self, size_t i, size_t j) {
+            return self[i][j];
+        }, py::arg("i"), py::arg("j"), py::return_value_policy::reference)
 
     ;
 
