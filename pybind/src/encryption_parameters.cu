@@ -8,7 +8,7 @@ void register_encryption_parameters(pybind11::module& m) {
         })
         .def("to_vector", [](const ParmsID& p){
             vector<uint64_t> ret; ret.reserve(utils::HashFunction::hash_block_uint64_count);
-            for (int i = 0; i < utils::HashFunction::hash_block_uint64_count; i++) {
+            for (size_t i = 0; i < utils::HashFunction::hash_block_uint64_count; i++) {
                 ret.push_back(p[i]);
             }
             return get_buffer_from_vector(ret);

@@ -1,7 +1,7 @@
 fn main() {
 
-    println!("cargo:rerun-if-changed=src/lib.rs");
-    println!("cargo:rerun-if-changed=interfaces");
+    println!("cargo:rerun-if-changed=src");
+    println!("cargo:rerun-if-changed=reexports");
     
     let mut cmake_config = cmake::Config::new("../");
 
@@ -23,11 +23,17 @@ fn main() {
 
     let out_dir = std::env::var("OUT_DIR").unwrap();
 
-    cxx_build::bridge("src/lib.rs")
+    // link static library of troy
+    println!("cargo:rustc-link-search=native={}", out_dir.clone() + "/lib");
+
+    cxx_build::bridge("src/interfaces.rs")
         .cuda(true)
         .flag("-std=c++17")
-        .include(out_dir + "/include")
-        .file("interfaces/memory_pool.cu")
+        .flag("-Xcompiler")
+        .flag("-w")
+        .include(out_dir.clone() + "/include")
+        .cpp_link_stdlib("troy")
         .compile("rustbind");
+
     
 }

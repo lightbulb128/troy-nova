@@ -1,5 +1,6 @@
 #include "header.cuh"
 
+#pragma GCC diagnostic ignored "-Wunused-local-typedefs"
 
 template<typename T>
 static void register_methods_matmul_polynomial_encoder_ring2k(pybind11::class_<MatmulHelper>& c, const char* bitwidth_name) {
@@ -11,7 +12,7 @@ static void register_methods_matmul_polynomial_encoder_ring2k(pybind11::class_<M
             throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be flattened.");
         if (weights.strides(0) != sizeof(T))
             throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be contiguous.");
-        if (weights.size() != self.input_dims * self.output_dims) 
+        if (static_cast<size_t>(weights.size()) != self.input_dims * self.output_dims) 
             throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be of size input_dims * output_dims.");
         return self.encode_weights_ring2k<T>(encoder, get_pointer_from_buffer(weights), parms_id);
     };
@@ -22,7 +23,7 @@ static void register_methods_matmul_polynomial_encoder_ring2k(pybind11::class_<M
             throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be flattened.");
         if (inputs.strides(0) != sizeof(T))
             throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be contiguous.");
-        if (inputs.size() != self.batch_size * self.input_dims)
+        if (static_cast<size_t>(inputs.size()) != self.batch_size * self.input_dims)
             throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be of size batch_size * input_dims.");
         return self.encode_inputs_ring2k<T>(encoder, get_pointer_from_buffer(inputs), parms_id);
     };
@@ -33,7 +34,7 @@ static void register_methods_matmul_polynomial_encoder_ring2k(pybind11::class_<M
             throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be flattened.");
         if (outputs.strides(0) != sizeof(T))
             throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be contiguous.");
-        if (outputs.size() != self.batch_size * self.output_dims)
+        if (static_cast<size_t>(outputs.size()) != self.batch_size * self.output_dims)
             throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be of size batch_size * output_dims.");
         return self.encode_outputs_ring2k<T>(encoder, get_pointer_from_buffer(outputs), parms_id);
     };
@@ -154,7 +155,7 @@ void register_matmul_helper(pybind11::module& m) {
             throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be flattened.");
         if (weights.strides(0) != sizeof(uint64_t))
             throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be contiguous.");
-        if (weights.size() != self.input_dims * self.output_dims) 
+        if (static_cast<size_t>(weights.size()) != self.input_dims * self.output_dims) 
             throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be of size input_dims * output_dims.");
         return self.encode_weights_uint64s(encoder, get_pointer_from_buffer(weights));
     };
@@ -163,7 +164,7 @@ void register_matmul_helper(pybind11::module& m) {
             throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be flattened.");
         if (inputs.strides(0) != sizeof(uint64_t))
             throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be contiguous.");
-        if (inputs.size() != self.batch_size * self.input_dims)
+        if (static_cast<size_t>(inputs.size()) != self.batch_size * self.input_dims)
             throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be of size batch_size * input_dims.");
         return self.encode_inputs_uint64s(encoder, get_pointer_from_buffer(inputs));
     };
@@ -172,7 +173,7 @@ void register_matmul_helper(pybind11::module& m) {
             throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be flattened.");
         if (outputs.strides(0) != sizeof(uint64_t))
             throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be contiguous.");
-        if (outputs.size() != self.batch_size * self.output_dims)
+        if (static_cast<size_t>(outputs.size()) != self.batch_size * self.output_dims)
             throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be of size batch_size * output_dims.");
         return self.encode_outputs_uint64s(encoder, get_pointer_from_buffer(outputs));
     };
@@ -186,7 +187,7 @@ void register_matmul_helper(pybind11::module& m) {
             throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be flattened.");
         if (weights.strides(0) != sizeof(uint64_t))
             throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be contiguous.");
-        if (weights.size() != self.input_dims * self.output_dims) 
+        if (static_cast<size_t>(weights.size()) != self.input_dims * self.output_dims) 
             throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be of size input_dims * output_dims.");
         return self.encode_weights_doubles(encoder, get_pointer_from_buffer(weights), parms_id, scale);
     };
@@ -195,7 +196,7 @@ void register_matmul_helper(pybind11::module& m) {
             throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be flattened.");
         if (inputs.strides(0) != sizeof(uint64_t))
             throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be contiguous.");
-        if (inputs.size() != self.batch_size * self.input_dims)
+        if (static_cast<size_t>(inputs.size()) != self.batch_size * self.input_dims)
             throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be of size batch_size * input_dims.");
         return self.encode_inputs_doubles(encoder, get_pointer_from_buffer(inputs), parms_id, scale);
     };
@@ -204,7 +205,7 @@ void register_matmul_helper(pybind11::module& m) {
             throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be flattened.");
         if (outputs.strides(0) != sizeof(uint64_t))
             throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be contiguous.");
-        if (outputs.size() != self.batch_size * self.output_dims)
+        if (static_cast<size_t>(outputs.size()) != self.batch_size * self.output_dims)
             throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be of size batch_size * output_dims.");
         return self.encode_outputs_doubles(encoder, get_pointer_from_buffer(outputs), parms_id, scale);
     };
@@ -267,3 +268,5 @@ void register_matmul_helper(pybind11::module& m) {
     register_methods_matmul_polynomial_encoder_ring2k<uint64_t>(pythonMatmulHelperClass, "64");
 
 }
+
+#pragma GCC diagnostic pop

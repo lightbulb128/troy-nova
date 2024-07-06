@@ -34,7 +34,7 @@ vector<T> get_vector_from_buffer(const py::array_t<T>& values) {
     py::buffer_info buf = values.request();
     T* ptr = reinterpret_cast<T*>(buf.ptr);
     vector<T> vec(buf.shape[0]);
-    for (int i = 0; i < buf.shape[0]; i++) {
+    for (ssize_t i = 0; i < buf.shape[0]; i++) {
         vec[i] = ptr[i];
     }
     return vec;
@@ -52,7 +52,7 @@ py::array_t<T> get_buffer_from_vector(const vector<T>& vec) {
     py::array_t<T> buffer(vec.size());
     py::buffer_info buf = buffer.request();
     T* ptr = reinterpret_cast<T*>(buf.ptr);
-    for (int i = 0; i < vec.size(); i++) {
+    for (size_t i = 0; i < vec.size(); i++) {
         ptr[i] = vec[i];
     }
     return buffer;
@@ -68,7 +68,7 @@ py::array_t<T> get_buffer_from_slice(ConstSlice<T> slice) {
     py::array_t<T> buffer(slice.size());
     py::buffer_info buf = buffer.request();
     T* ptr = reinterpret_cast<T*>(buf.ptr);
-    for (int i = 0; i < slice.size(); i++) {
+    for (size_t i = 0; i < slice.size(); i++) {
         ptr[i] = slice[i];
     }
     return buffer;
@@ -87,7 +87,7 @@ vector<T> get_vector_from_slice(ConstSlice<T> slice) {
         return get_vector_from_slice(host.const_reference());
     }
     vector<T> buffer(slice.size());
-    for (int i = 0; i < slice.size(); i++) {
+    for (size_t i = 0; i < slice.size(); i++) {
         buffer[i] = slice[i];
     }
     return buffer;

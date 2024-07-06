@@ -11,7 +11,7 @@ namespace rns_tool {
 
     bool same_array_vector(ConstSlice<uint64_t> arr, const vector<uint64_t>& vec) {
         if (arr.size() != vec.size()) return false;
-        for (int i = 0; i < arr.size(); i++) {
+        for (size_t i = 0; i < arr.size(); i++) {
             if (arr[i] != vec[i]) return false;
         }
         return true;
@@ -19,7 +19,7 @@ namespace rns_tool {
 
     Array<Modulus> to_moduli(vector<uint64_t> m) {
         Array<Modulus> moduli(m.size(), false);
-        for (int i = 0; i < m.size(); i++) {
+        for (size_t i = 0; i < m.size(); i++) {
             moduli[i] = Modulus(m[i]);
         }
         return moduli;

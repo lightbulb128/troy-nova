@@ -11,7 +11,7 @@ namespace he_context {
 
     Array<Modulus> to_moduli(vector<uint64_t> m) {
         Array<Modulus> moduli(m.size(), false);
-        for (int i = 0; i < m.size(); i++) {
+        for (size_t i = 0; i < m.size(); i++) {
             moduli[i] = Modulus(m[i]);
         }
         return moduli;

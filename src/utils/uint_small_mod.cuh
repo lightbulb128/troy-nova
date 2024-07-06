@@ -156,7 +156,7 @@ namespace troy { namespace utils {
                 value[0] = modulus.reduce(value[0]);
             }
         }
-        for (int i = value.size() - 2; i >= 0; i--) {
+        for (int i = static_cast<int>(value.size()) - 2; i >= 0; i--) {
             value[i] = modulus.reduce_uint128_limbs(value.const_slice(i, i + 2));
             value[i + 1] = 0;
         }
@@ -173,7 +173,7 @@ namespace troy { namespace utils {
         } else {
             uint64_t temp[2]; temp[0] = 0; temp[1] = value[value.size() - 1];
             ConstSlice<uint64_t> temp_slice(temp, 2, on_device(), nullptr);
-            for (int i = value.size() - 2; i >= 0; i--) {
+            for (int i = static_cast<int>(value.size()) - 2; i >= 0; i--) {
                 temp[0] = value[i];
                 temp[1] = modulus.reduce_uint128_limbs(temp_slice);
             }

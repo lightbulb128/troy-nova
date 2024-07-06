@@ -1,31 +1,12 @@
-#[cxx::bridge]
-mod ffi {
-    #[namespace = "troy_rust"]
-    unsafe extern "C++" {
-        include!("troy-rustbind/interfaces/memory_pool.cuh");
-        type MemoryPool;
-        fn create_memory_pool(device_index: usize) -> UniquePtr<MemoryPool>;
-    }
-}
+mod interfaces;
+pub(crate) use interfaces::ffi;
 
+mod basics;
+mod memory_pool;
+mod modulus;
+mod encryption_parameters;
 
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-
-    #[test]
-    fn create_pool() {
-        let pool = ffi::create();
-        assert!(!pool.is_null());
-    }
-}
+// re-export
+pub use basics::{device_count, SchemeType, SecurityLevel};
+pub use memory_pool::MemoryPool;
+pub use encryption_parameters::{ParmsID};
