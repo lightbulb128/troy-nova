@@ -1,6 +1,8 @@
 #include "encryption_parameters.h"
 #include "evaluator.h"
+#include "utils/dynamic_array.h"
 #include "utils/polynomial_buffer.h"
+#include <thread>
 
 namespace troy {
 
@@ -756,6 +758,7 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(coeff_count * key_component_count, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(t_poly_lazy.device_index());
             kernel_ski_util1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_poly_lazy, coeff_count, key_component_count, 
                 key_vector_j, key_poly_coeff_size, t_operand, key_index, key_modulus
@@ -810,6 +813,7 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(coeff_count * key_component_count, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(t_poly_lazy.device_index());
             kernel_ski_util2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_poly_lazy, coeff_count, key_component_count, 
                 key_vector_j, key_poly_coeff_size, t_operand, key_index
@@ -850,6 +854,7 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(coeff_count * key_component_count, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(t_poly_lazy.device_index());
             kernel_ski_util3<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_poly_lazy, coeff_count, key_component_count, rns_modulus_size, t_poly_prod_iter
             );
@@ -896,6 +901,7 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(coeff_count * key_component_count, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(t_poly_lazy.device_index());
             kernel_ski_util4<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_poly_lazy, coeff_count, key_component_count, 
                 rns_modulus_size, t_poly_prod_iter, key_modulus
@@ -1000,6 +1006,7 @@ namespace troy {
         } else {
             Array<uint64_t> delta(coeff_count * decomp_modulus_size, true, pool);
             size_t block_count = utils::ceil_div(coeff_count * decomp_modulus_size, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(t_last.device_index());
             kernel_ski_util5_step1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_last, coeff_count, plain_modulus, key_modulus, 
                 decomp_modulus_size, qk_inv_qp, qk,
@@ -1007,6 +1014,7 @@ namespace troy {
             );
             cudaStreamSynchronize(0);
             utils::ntt_negacyclic_harvey_p(delta.reference(), coeff_count, key_ntt_tables.const_slice(0, decomp_modulus_size));
+            cudaSetDevice(t_poly_prod_i.device_index());
             kernel_ski_util5_step2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_poly_prod_i, coeff_count, key_modulus, 
                 decomp_modulus_size, modswitch_factors, encrypted_i, delta.const_reference()
@@ -1066,6 +1074,7 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(t_last.device_index());
             kernel_ski_util6<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_last, coeff_count, qk, key_modulus, decomp_modulus_size, t_ntt
             );
@@ -1121,6 +1130,7 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(coeff_count * decomp_modulus_size, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(t_poly_prod_i.device_index());
             kernel_ski_util7<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_poly_prod_i, t_ntt, coeff_count, encrypted_i, is_ckks, 
                 decomp_modulus_size, key_modulus, modswitch_factors
@@ -1793,6 +1803,7 @@ namespace troy {
         } else {
             size_t total = plain_coeff_count * coeff_modulus_size;
             size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(plain.device_index());
             kernel_transform_plain_to_ntt_fast_plain_lift<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 plain_coeff_count, coeff_count, coeff_modulus_size,
                 plain, plain_upper_half_threshold, plain_upper_half_increment
@@ -2043,10 +2054,12 @@ namespace troy {
         } else {
             if (coeff_modulus_size >= utils::KERNEL_THREAD_COUNT) {
                 size_t block_count = utils::ceil_div(coeff_modulus_size, utils::KERNEL_THREAD_COUNT);
+                cudaSetDevice(c0.device_index());
                 kernel_extract_lwe_gather_c0<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                     coeff_modulus_size, coeff_count, term, rlwe_c0, c0
                 );
             } else {
+                cudaSetDevice(c0.device_index());
                 kernel_extract_lwe_gather_c0<<<1, coeff_modulus_size>>>(
                     coeff_modulus_size, coeff_count, term, rlwe_c0, c0
                 );

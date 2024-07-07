@@ -1,5 +1,6 @@
 #include "batch_encoder.h"
 #include "encryption_parameters.h"
+#include "utils/basics.h"
 #include "utils/scaling_variant.h"
 
 namespace troy {
@@ -90,6 +91,7 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(n, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(input.device_index());
             kernel_reverse_bits<<<block_count, utils::KERNEL_THREAD_COUNT>>>(logn, input);
             cudaStreamSynchronize(0);
         }
@@ -108,7 +110,7 @@ namespace troy {
 
     static void encode_set_values(ConstSlice<uint64_t> values, ConstSlice<size_t> index_map, Slice<uint64_t> destination) {
         size_t device = index_map.on_device();
-        if (!utils::same(device, values.on_device(), destination.on_device())) {
+        if (!utils::device_compatible(values, index_map, destination)) {
             throw std::invalid_argument("[BatchEncoder::encode_set_values] All inputs must reside on same device.");
         }
         if (!device) {
@@ -120,6 +122,7 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(destination.size(), utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(values.device_index());
             kernel_encode_set_values<<<block_count, utils::KERNEL_THREAD_COUNT>>>(values, index_map, destination);
             cudaStreamSynchronize(0);
         }
@@ -242,7 +245,7 @@ namespace troy {
 
     static void decode_set_values(ConstSlice<uint64_t> values, ConstSlice<size_t> index_map, Slice<uint64_t> destination) {
         size_t device = index_map.on_device();
-        if (!utils::same(device, values.on_device(), destination.on_device())) {
+        if (!utils::device_compatible(values, index_map, destination)) {
             throw std::invalid_argument("[BatchEncoder::decode_set_values] All inputs must reside on same device.");
         }
         if (!device) {
@@ -251,6 +254,7 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(destination.size(), utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(values.device_index());
             kernel_decode_set_values<<<block_count, utils::KERNEL_THREAD_COUNT>>>(values, index_map, destination);
             cudaStreamSynchronize(0);
         }

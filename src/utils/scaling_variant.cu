@@ -55,6 +55,7 @@ namespace troy {namespace scaling_variant {
         } else {
             size_t total = coeff_modulus_size * plain_coeff_count;
             size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(plain_data.device_index());
             kernel_translate_plain<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 plain_coeff_count,
                 coeff_count,
@@ -170,6 +171,7 @@ namespace troy {namespace scaling_variant {
         } else {
             size_t total = plain_coeff_count * coeff_modulus_size;
             size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(destination.device_index());
             kernel_multiply_translate_plain<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 plain_coeff_count,
                 coeff_count,
@@ -231,6 +233,7 @@ namespace troy {namespace scaling_variant {
             } 
         } else {
             size_t block_count = utils::ceil_div(plain_coeff_count, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(temp.device_index());
             kernel_multiply_plain_normal_no_fast_plain_lift<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 plain_coeff_count, coeff_modulus_size,
                 plain, temp, plain_upper_half_threshold, plain_upper_half_increment
@@ -274,6 +277,7 @@ namespace troy {namespace scaling_variant {
         } else {
             size_t total = plain_coeff_count * coeff_modulus_size;
             size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(temp.device_index());
             kernel_multiply_plain_normal_fast_plain_lift<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 plain_coeff_count, coeff_count, coeff_modulus_size,
                 plain, temp, plain_upper_half_threshold, plain_upper_half_increment

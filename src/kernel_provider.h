@@ -59,6 +59,9 @@ namespace troy {
             if (status != cudaSuccess) {
                 runtime_error("[kernel_provider::copy_device_to_device] cudaMemcpy device to device failed", status);
             }
+            // Note: CUDA ensures that copies BETWEEN HOST AND DEVICE are synchronous
+            // but copies BETWEEN DEVICES may not be synchronous
+            cudaStreamSynchronize(0);
         }
 
         template <typename T>

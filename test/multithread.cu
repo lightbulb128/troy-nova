@@ -111,7 +111,7 @@ namespace multithread {
     }
     TEST(MultithreadTest, DeviceSinglePoolMultiThread) {
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, false, 0x123, 0);
-        test_single_pool_multi_thread(ghe, 64, 4);
+        test_single_pool_multi_thread(ghe, 128, 8);
         utils::MemoryPool::Destroy();
     }
 
