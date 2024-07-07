@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include "../../src/utils/uint_small_mod.cuh"
-#include "../test.cuh"
+#include "../../src/utils/uint_small_mod.h"
+#include "../test.h"
 
 using namespace troy::utils;
 using namespace troy;

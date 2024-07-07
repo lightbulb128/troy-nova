@@ -1,4 +1,4 @@
-#include "reduction.cuh"
+#include "reduction.h"
 
 namespace troy { namespace reduction {
 

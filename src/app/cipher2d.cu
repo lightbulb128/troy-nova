@@ -1,4 +1,4 @@
-#include "cipher2d.cuh"
+#include "cipher2d.h"
 
 namespace troy { namespace linear {
 

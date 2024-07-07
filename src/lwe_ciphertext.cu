@@ -1,4 +1,4 @@
-#include "lwe_ciphertext.cuh"
+#include "lwe_ciphertext.h"
 
 namespace troy {
 

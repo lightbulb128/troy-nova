@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include "../test.cuh"
-#include "../../src/utils/rns_tool.cuh"
+#include "../test.h"
+#include "../../src/utils/rns_tool.h"
 #include <vector>
 
 using namespace troy;

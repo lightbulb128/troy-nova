@@ -1,6 +1,6 @@
-#include "batch_encoder.cuh"
-#include "encryption_parameters.cuh"
-#include "utils/scaling_variant.cuh"
+#include "batch_encoder.h"
+#include "encryption_parameters.h"
+#include "utils/scaling_variant.h"
 
 namespace troy {
 

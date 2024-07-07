@@ -1,4 +1,4 @@
-#include "ntt.cuh"
+#include "ntt.h"
 #include "timer.h"
 #include <cassert>
 

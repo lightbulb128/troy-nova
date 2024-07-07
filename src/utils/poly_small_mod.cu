@@ -1,4 +1,4 @@
-#include "poly_small_mod.cuh"
+#include "poly_small_mod.h"
 
 namespace troy {namespace utils {
 

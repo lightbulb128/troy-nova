@@ -1,4 +1,4 @@
-#include "header.cuh"
+#include "header.h"
 
 void register_batch_encoder(pybind11::module& m) {
     

@@ -1,4 +1,4 @@
-#include "he_context.cuh"
+#include "he_context.h"
 
 namespace troy {
 

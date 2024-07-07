@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include "../src/modulus.cuh"
-#include "test.cuh"
+#include "../src/modulus.h"
+#include "test.h"
 
 using namespace troy;
 using namespace troy::utils;

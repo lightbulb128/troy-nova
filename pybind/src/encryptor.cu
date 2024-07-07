@@ -1,4 +1,4 @@
-#include "header.cuh"
+#include "header.h"
 
 void register_encryptor(pybind11::module& m) {
 

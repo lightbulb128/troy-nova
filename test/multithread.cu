@@ -1,4 +1,4 @@
-#include "test_adv.cuh"
+#include "test_adv.h"
 #include "gtest/gtest.h"
 #include <gtest/gtest.h>
 #include <thread>

@@ -1,4 +1,4 @@
-#include "examples.cuh"
+#include "examples.h"
 
 using namespace troy;
 

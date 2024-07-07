@@ -1,16 +1,16 @@
 [package]
-name = "troy-rustbind"
+name = "rustbind"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cxx = { version = "1.0.124", features = ["c++17"] }
 
 [build-dependencies]
+bindgen = { version = "0.69.4", features = ["experimental"] }
+cc = "1.0.104"
 cmake = "0.1.50"
-cxx-build = "1.0.124"
 
 [features]
 default = ["memory-pool-safe"]

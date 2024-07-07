@@ -1,4 +1,4 @@
-#include "ckks_encoder.cuh"
+#include "ckks_encoder.h"
 
 namespace troy {
 

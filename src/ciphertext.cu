@@ -1,4 +1,4 @@
-#include "ciphertext.cuh"
+#include "ciphertext.h"
 
 namespace troy {
 

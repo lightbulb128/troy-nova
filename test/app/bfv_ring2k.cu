@@ -1,7 +1,7 @@
 #include <cstdlib>
 #include <gtest/gtest.h>
-#include "../../src/app/bfv_ring2k.cuh"
-#include "../../src/troy.cuh"
+#include "../../src/app/bfv_ring2k.h"
+#include "../../src/troy.h"
 
 namespace bfv_ring2k {
 

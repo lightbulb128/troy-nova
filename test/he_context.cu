@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 #include <vector>
-#include "test.cuh"
-#include "../src/he_context.cuh"
+#include "test.h"
+#include "../src/he_context.h"
 
 using namespace troy;
 using troy::utils::Array;

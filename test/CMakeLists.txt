@@ -49,10 +49,6 @@ if(TROY_TEST)
 
     include(GoogleTest)
     gtest_discover_tests(troytest)
-
-    add_executable(custom)
-    target_sources(custom PRIVATE custom.cu test_adv.cu)
-    target_link_libraries(custom troy)
     
 endif()
 

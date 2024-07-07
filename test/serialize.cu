@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "test_adv.cuh"
+#include "test_adv.h"
 #include <sstream>
 
 namespace serialize {

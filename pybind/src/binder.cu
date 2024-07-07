@@ -1,4 +1,4 @@
-#include "header.cuh"
+#include "header.h"
 
 PYBIND11_MODULE(pytroy_raw, m) {
 

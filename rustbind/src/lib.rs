@@ -1,12 +1,17 @@
-mod interfaces;
-pub(crate) use interfaces::ffi;
-
-mod basics;
+mod ffi;
 mod memory_pool;
-mod modulus;
-mod encryption_parameters;
 
-// re-export
-pub use basics::{device_count, SchemeType, SecurityLevel};
-pub use memory_pool::MemoryPool;
-pub use encryption_parameters::{ParmsID};
+pub fn add(left: usize, right: usize) -> usize {
+    left + right
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_works() {
+        let result = add(2, 2);
+        assert_eq!(result, 4);
+    }
+}

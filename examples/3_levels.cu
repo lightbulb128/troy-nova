@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
 
-#include "examples.cuh"
+#include "examples.h"
 
 using namespace std;
 using namespace troy;

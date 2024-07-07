@@ -1,4 +1,4 @@
-#include "rns_base.cuh"
+#include "rns_base.h"
 
 namespace troy {namespace utils {
 

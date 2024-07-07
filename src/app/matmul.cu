@@ -1,4 +1,4 @@
-#include "matmul.cuh"
+#include "matmul.h"
 
 namespace troy { namespace linear {
 

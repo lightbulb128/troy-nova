@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include "../test.cuh"
-#include "../../src/utils/galois.cuh"
+#include "../test.h"
+#include "../../src/utils/galois.h"
 
 using namespace std;
 using namespace troy;

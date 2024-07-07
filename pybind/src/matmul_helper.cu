@@ -1,4 +1,4 @@
-#include "header.cuh"
+#include "header.h"
 
 #pragma GCC diagnostic ignored "-Wunused-local-typedefs"
 

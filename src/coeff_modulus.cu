@@ -1,4 +1,4 @@
-#include "coeff_modulus.cuh"
+#include "coeff_modulus.h"
 #include <map>
 
 namespace troy {

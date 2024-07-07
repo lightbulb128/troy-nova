@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
-#include "../test.cuh"
-#include "../../src/utils/basics.cuh"
-#include "../../src/utils/box.cuh"
+#include "../test.h"
+#include "../../src/utils/basics.h"
+#include "../../src/utils/box.h"
 
 using namespace troy::utils;
 

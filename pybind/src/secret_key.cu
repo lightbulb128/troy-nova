@@ -1,4 +1,4 @@
-#include "header.cuh"
+#include "header.h"
 
 void register_secret_key(pybind11::module& m) {
     

@@ -1,4 +1,4 @@
-#include "header.cuh"
+#include "header.h"
 
 void register_lwe_ciphertext(pybind11::module& m) {
 

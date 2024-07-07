@@ -1,4 +1,4 @@
-#include "encryption_parameters.cuh"
+#include "encryption_parameters.h"
 
 namespace troy {
 

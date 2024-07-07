@@ -1,4 +1,4 @@
-#include "conv2d.cuh"
+#include "conv2d.h"
 
 namespace troy { namespace linear {
 

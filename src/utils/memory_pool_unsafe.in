@@ -1,4 +1,4 @@
-#include "memory_pool.cuh"
+#include "memory_pool.h"
 
 namespace troy::utils {
 

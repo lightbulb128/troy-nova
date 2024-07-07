@@ -1,4 +1,4 @@
-#include "plaintext.cuh"
+#include "plaintext.h"
 
 namespace troy {
 

@@ -1,4 +1,4 @@
-#include "key_generator.cuh"
+#include "key_generator.h"
 #include <thread>
 
 namespace troy {

@@ -1,4 +1,4 @@
-#include "header.cuh"
+#include "header.h"
 
 template <typename K, bool as_keyswitch_keys>
 static void register_keyswitch_key_derived(pybind11::module& m, const char* name) {

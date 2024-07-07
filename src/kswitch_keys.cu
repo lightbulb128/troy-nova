@@ -1,4 +1,4 @@
-#include "kswitch_keys.cuh"
+#include "kswitch_keys.h"
 
 namespace troy {
 

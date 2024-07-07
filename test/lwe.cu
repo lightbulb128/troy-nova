@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
-#include "test.cuh"
-#include "test_adv.cuh"
-#include "../src/lwe_ciphertext.cuh"
+#include "test.h"
+#include "test_adv.h"
+#include "../src/lwe_ciphertext.h"
 
 namespace lwe {    
     

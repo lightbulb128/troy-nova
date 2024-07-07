@@ -1,4 +1,4 @@
-#include "header.cuh"
+#include "header.h"
 
 void register_conv2d_helper(pybind11::module& m) {
     

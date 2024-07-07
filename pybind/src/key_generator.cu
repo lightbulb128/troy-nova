@@ -1,4 +1,4 @@
-#include "header.cuh"
+#include "header.h"
 
 void register_key_generator(pybind11::module& m) {
     

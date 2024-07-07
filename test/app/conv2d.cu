@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 #include <sstream>
-#include "../test_adv.cuh"
-#include "../../src/app/conv2d.cuh"
+#include "../test_adv.h"
+#include "../../src/app/conv2d.h"
 
 
 namespace matmul {

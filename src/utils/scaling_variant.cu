@@ -1,4 +1,4 @@
-#include "scaling_variant.cuh"
+#include "scaling_variant.h"
 
 namespace troy {namespace scaling_variant {
 

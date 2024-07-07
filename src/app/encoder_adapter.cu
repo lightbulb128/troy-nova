@@ -1,4 +1,4 @@
-#include "encoder_adapter.cuh"
+#include "encoder_adapter.h"
 
 namespace troy::linear {
 

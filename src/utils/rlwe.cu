@@ -1,4 +1,4 @@
-#include "rlwe.cuh"
+#include "rlwe.h"
 
 namespace troy {namespace rlwe {
 

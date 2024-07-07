@@ -1,6 +1,6 @@
 #pragma once
 #include <iostream>
-#include "box.cuh"
+#include "box.h"
 
 namespace troy {namespace serialize {
 

@@ -1,4 +1,4 @@
-#include "test_multithread.cuh"
+#include "test_multithread.h"
 
 namespace tool {
 

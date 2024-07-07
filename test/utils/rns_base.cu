@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include "../test.cuh"
-#include "../../src/utils/rns_base.cuh"
+#include "../test.h"
+#include "../../src/utils/rns_base.h"
 #include <vector>
 
 using namespace std;

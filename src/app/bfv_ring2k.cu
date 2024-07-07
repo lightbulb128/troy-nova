@@ -1,4 +1,4 @@
-#include "bfv_ring2k.cuh"
+#include "bfv_ring2k.h"
 
 #include <sstream>
 #include <stdexcept>

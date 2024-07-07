@@ -1,6 +1,7 @@
+#include "cuda_runtime.h"
 #include <gtest/gtest.h>
-#include "test.cuh"
-#include "../src/ckks_encoder.cuh"
+#include "test.h"
+#include "../src/ckks_encoder.h"
 
 using namespace troy;
 using troy::utils::Array;

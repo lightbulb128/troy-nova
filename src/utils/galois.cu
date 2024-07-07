@@ -1,4 +1,4 @@
-#include "galois.cuh"
+#include "galois.h"
 #include <thread>
 
 namespace troy {namespace utils {

@@ -1,4 +1,4 @@
-#include "../test_multithread.cuh"
+#include "../test_multithread.h"
 #include "../argparse.h"
 #include "../../src/utils/timer.h"
 #include "argument_helper.h"

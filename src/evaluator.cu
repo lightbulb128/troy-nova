@@ -1,6 +1,6 @@
-#include "encryption_parameters.cuh"
-#include "evaluator.cuh"
-#include "utils/polynomial_buffer.cuh"
+#include "encryption_parameters.h"
+#include "evaluator.h"
+#include "utils/polynomial_buffer.h"
 
 namespace troy {
 

@@ -1,4 +1,4 @@
-#include "random_generator.cuh"
+#include "random_generator.h"
 
 #include "aes_impl.inc"
 

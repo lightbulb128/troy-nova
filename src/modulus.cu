@@ -1,6 +1,6 @@
-#include "modulus.cuh"
+#include "modulus.h"
 #include <stdexcept>
-#include "utils/uint_small_mod.cuh"
+#include "utils/uint_small_mod.h"
 
 namespace troy {
     

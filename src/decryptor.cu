@@ -1,5 +1,5 @@
-#include "decryptor.cuh"
-#include "encryption_parameters.cuh"
+#include "decryptor.h"
+#include "encryption_parameters.h"
 #include "utils/constants.h"
 
 namespace troy {

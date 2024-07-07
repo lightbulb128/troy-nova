@@ -1,5 +1,5 @@
-#include "../../src/app/matmul.cuh"
-#include "../test_multithread.cuh"
+#include "../../src/app/matmul.h"
+#include "../test_multithread.h"
 #include "../../src/utils/timer.h"
 #include "argument_helper.h"
 #include "../argparse.h"

@@ -1,5 +1,5 @@
-#include "rns_tool.cuh"
-#include "uint_small_mod.cuh"
+#include "rns_tool.h"
+#include "uint_small_mod.h"
 
 namespace troy {namespace utils {
 

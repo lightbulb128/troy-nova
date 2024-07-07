@@ -1,5 +1,5 @@
-#include "encryptor.cuh"
-#include "utils/scaling_variant.cuh"
+#include "encryptor.h"
+#include "utils/scaling_variant.h"
 
 namespace troy {
 

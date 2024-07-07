@@ -1,4 +1,4 @@
-#include "header.cuh"
+#include "header.h"
 
 void register_encryption_parameters(pybind11::module& m) {
 
