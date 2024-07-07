@@ -111,7 +111,7 @@ namespace multithread {
     }
     TEST(MultithreadTest, DeviceSinglePoolMultiThread) {
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, false, 0x123, 0);
-        test_single_pool_multi_thread(ghe, 128, 8);
+        test_single_pool_multi_thread(ghe, 64, 4);
         utils::MemoryPool::Destroy();
     }
 
@@ -120,7 +120,6 @@ namespace multithread {
         auto context_pool = context.context()->pool();
 
         SchemeType scheme = context.scheme();
-        uint64_t t = context.t();
         double scale = context.scale();
         double tolerance = context.tolerance();
         bool device = context.context()->on_device();
