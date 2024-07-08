@@ -119,7 +119,7 @@ namespace troy { namespace linear {
         inline size_t rows() const {
             return inner.size();
         }
-        inline size_t columns() {
+        inline size_t columns() const {
             if (inner.size() == 0) return 0;
             size_t size = inner[0].size();
             for (size_t i = 1; i < inner.size(); i++) {
