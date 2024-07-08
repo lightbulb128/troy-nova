@@ -24,14 +24,14 @@ namespace troy { namespace linear {
         template <typename E, typename T>
         Plaintext encode_weights_small(
             const E& encoder, const T* weights,
-            size_t li, size_t ui, size_t lj, size_t uj
+            size_t li, size_t ui, size_t lj, size_t uj, bool for_cipher
         ) const;
 
         template <typename E, typename T>
-        Plain2d encode_weights(const E& encoder, const T* weights) const;
+        Plain2d encode_weights(const E& encoder, const T* weights, bool for_cipher) const;
 
         template <typename E, typename T>
-        Plain2d encode_inputs(const E& encoder, const T* inputs) const;
+        Plain2d encode_inputs(const E& encoder, const T* inputs, bool for_cipher) const;
 
         template <typename E, typename T>
         Plain2d encode_outputs(const E& encoder, const T* outputs) const;
@@ -62,12 +62,12 @@ namespace troy { namespace linear {
         Plain2d encode_weights_uint64s(const BatchEncoder& encoder, const uint64_t* weights) const;
         Plain2d encode_weights_doubles(const CKKSEncoder& encoder, const double* weights, std::optional<ParmsID> parms_id, double scale) const;
         template <typename T>
-        Plain2d encode_weights_ring2k(const PolynomialEncoderRing2k<T>& encoder, const T* weights, std::optional<ParmsID> parms_id) const;
+        Plain2d encode_weights_ring2k(const PolynomialEncoderRing2k<T>& encoder, const T* weights, std::optional<ParmsID> parms_id, bool for_cipher) const;
 
         Plain2d encode_inputs_uint64s(const BatchEncoder& encoder, const uint64_t* inputs) const;
         Plain2d encode_inputs_doubles(const CKKSEncoder& encoder, const double* inputs, std::optional<ParmsID> parms_id, double scale) const;
         template <typename T>
-        Plain2d encode_inputs_ring2k(const PolynomialEncoderRing2k<T>& encoder, const T* inputs, std::optional<ParmsID> parms_id) const;
+        Plain2d encode_inputs_ring2k(const PolynomialEncoderRing2k<T>& encoder, const T* inputs, std::optional<ParmsID> parms_id, bool for_cipher) const;
 
         Cipher2d encrypt_inputs_uint64s(const Encryptor& encryptor, const BatchEncoder& encoder, const uint64_t* inputs) const;
         Cipher2d encrypt_inputs_doubles(const Encryptor& encryptor, const CKKSEncoder& encoder,  const double* inputs, std::optional<ParmsID> parms_id, double scale) const;
