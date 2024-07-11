@@ -70,8 +70,8 @@ namespace troy {
             return sk.data();
         }
 
-        inline void save(std::ostream& stream) const {
-            sk.save(stream);
+        inline size_t save(std::ostream& stream, CompressionMode mode = CompressionMode::Nil) const {
+            return sk.save(stream, mode);
         }
         inline void load(std::istream& stream, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
             sk.load(stream, pool);
@@ -81,8 +81,8 @@ namespace troy {
             sk.load(stream, pool);
             return sk;
         }
-        inline size_t serialized_size() const {
-            return sk.serialized_size();
+        inline size_t serialized_size_upperbound(CompressionMode mode = CompressionMode::Nil) const {
+            return sk.serialized_size_upperbound(mode);
         }
 
     };
@@ -160,8 +160,8 @@ namespace troy {
             pk.expand_seed(context);
         }
 
-        inline void save(std::ostream& stream, HeContextPointer context) const {
-            pk.save(stream, context);
+        inline size_t save(std::ostream& stream, HeContextPointer context, CompressionMode mode = CompressionMode::Nil) const {
+            return pk.save(stream, context, mode);
         }
         inline void load(std::istream& stream, HeContextPointer context, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
             pk.load(stream, context, pool);
@@ -171,8 +171,8 @@ namespace troy {
             result.load(stream, context, pool);
             return result;
         }
-        inline size_t serialized_size(HeContextPointer context) const {
-            return pk.serialized_size(context);
+        inline size_t serialized_size_upperbound(HeContextPointer context, CompressionMode mode = CompressionMode::Nil) const {
+            return pk.serialized_size_upperbound(context, mode);
         }
     };
 

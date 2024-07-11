@@ -23,6 +23,14 @@ namespace troy {
 
         void resize_internal(size_t polynomial_count, size_t coeff_modulus_size, size_t poly_modulus_degree);
 
+        size_t save_raw(std::ostream& stream, HeContextPointer context) const;
+        void load_raw(std::istream& stream, HeContextPointer context, MemoryPoolHandle pool);
+        size_t serialized_raw_size(HeContextPointer context) const;
+
+        size_t save_terms_raw(std::ostream& stream, HeContextPointer context, const std::vector<size_t>& terms, MemoryPoolHandle pool) const;
+        void load_terms_raw(std::istream& stream, HeContextPointer context, const std::vector<size_t>& terms, MemoryPoolHandle pool);
+        size_t serialized_terms_raw_size(HeContextPointer context, const std::vector<size_t>& terms) const;
+
     public:
     
         inline MemoryPoolHandle pool() const { return data_.pool(); }
@@ -237,23 +245,35 @@ namespace troy {
 
         void expand_seed(HeContextPointer context);
 
-        void save(std::ostream& stream, HeContextPointer context) const;
-        void load(std::istream& stream, HeContextPointer context, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+        inline size_t save(std::ostream& stream, HeContextPointer context, CompressionMode mode = CompressionMode::Nil) const {
+            return serialize::compress(stream, [this, &context](std::ostream& stream){return this->save_raw(stream, context);}, mode);
+        }
+        inline void load(std::istream& stream, HeContextPointer context, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+            serialize::decompress(stream, [this, &context, &pool](std::istream& stream){this->load_raw(stream, context, pool);});
+        }
         inline static Ciphertext load_new(std::istream& stream, HeContextPointer context, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
             Ciphertext result;
             result.load(stream, context, pool);
             return result;
         }
-        size_t serialized_size(HeContextPointer context) const;
+        inline size_t serialized_size_upperbound(HeContextPointer context, CompressionMode mode = CompressionMode::Nil) const {
+            return serialize::serialized_size_upperbound(this->serialized_raw_size(context), mode);
+        }
 
-        void save_terms(std::ostream& stream, HeContextPointer context, const std::vector<size_t>& terms, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
-        void load_terms(std::istream& stream, HeContextPointer context, const std::vector<size_t>& terms, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+        inline size_t save_terms(std::ostream& stream, HeContextPointer context, const std::vector<size_t>& terms, MemoryPoolHandle pool = MemoryPool::GlobalPool(), CompressionMode mode = CompressionMode::Nil) const {
+            return serialize::compress(stream, [this, &context, &terms, &pool](std::ostream& stream){return this->save_terms_raw(stream, context, terms, pool);}, mode);
+        }
+        inline void load_terms(std::istream& stream, HeContextPointer context, const std::vector<size_t>& terms, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+            serialize::decompress(stream, [this, &context, &terms, &pool](std::istream& stream){this->load_terms_raw(stream, context, terms, pool);});
+        }
         inline static Ciphertext load_terms_new(std::istream& stream, HeContextPointer context, const std::vector<size_t>& terms, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
             Ciphertext result;
             result.load_terms(stream, context, terms, pool);
             return result;
         }
-        size_t serialized_terms_size(HeContextPointer context, const std::vector<size_t>& terms) const;
+        inline size_t serialized_terms_size_upperbound(HeContextPointer context, const std::vector<size_t>& terms, CompressionMode mode = CompressionMode::Nil) const {
+            return serialize::serialized_size_upperbound(this->serialized_terms_raw_size(context, terms), mode);
+        }
 
     };
 

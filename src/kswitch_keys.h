@@ -149,14 +149,14 @@ namespace troy {
             }
         }
 
-        void save(std::ostream& stream, HeContextPointer context) const;
+        size_t save(std::ostream& stream, HeContextPointer context, CompressionMode mode = CompressionMode::Nil) const;
         void load(std::istream& stream, HeContextPointer context, MemoryPoolHandle pool = MemoryPool::GlobalPool());
         inline static KSwitchKeys load_new(std::istream& stream, HeContextPointer context, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
             KSwitchKeys result;
             result.load(stream, context, pool);
             return result;
         }
-        size_t serialized_size(HeContextPointer context) const;
+        size_t serialized_size_upperbound(HeContextPointer context, CompressionMode mode = CompressionMode::Nil) const;
 
     };
 
@@ -240,8 +240,8 @@ namespace troy {
             keys.expand_seed(context);
         }
         
-        inline void save(std::ostream& stream, HeContextPointer context) const {
-            keys.save(stream, context);
+        inline size_t save(std::ostream& stream, HeContextPointer context, CompressionMode mode = CompressionMode::Nil) const {
+            return keys.save(stream, context, mode);
         }
         inline void load(std::istream& stream, HeContextPointer context, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
             keys.load(stream, context, pool);
@@ -251,8 +251,8 @@ namespace troy {
             result.load(stream, context, pool);
             return result;
         }
-        size_t serialized_size(HeContextPointer context) const {
-            return keys.serialized_size(context);
+        size_t serialized_size_upperbound(HeContextPointer context, CompressionMode mode = CompressionMode::Nil) const {
+            return keys.serialized_size_upperbound(context, mode);
         }
     };
 
@@ -333,8 +333,8 @@ namespace troy {
             keys.expand_seed(context);
         }
 
-        inline void save(std::ostream& stream, HeContextPointer context) const {
-            keys.save(stream, context);
+        inline size_t save(std::ostream& stream, HeContextPointer context, CompressionMode mode = CompressionMode::Nil) const {
+            return keys.save(stream, context, mode);
         }
         inline void load(std::istream& stream, HeContextPointer context, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
             keys.load(stream, context, pool);
@@ -344,8 +344,8 @@ namespace troy {
             result.load(stream, context, pool);
             return result;
         }
-        size_t serialized_size(HeContextPointer context) const {
-            return keys.serialized_size(context);
+        size_t serialized_size_upperbound(HeContextPointer context, CompressionMode mode = CompressionMode::Nil) const {
+            return keys.serialized_size_upperbound(context, mode);
         }
     };
 }

@@ -20,6 +20,10 @@ namespace troy {
         
         void resize_rns_internal(size_t poly_modulus_degree, size_t coeff_modulus_size);
 
+        size_t save_raw(std::ostream& stream) const;
+        void load_raw(std::istream& stream, MemoryPoolHandle pool);
+        size_t serialized_raw_size() const;
+
     public:
 
         inline MemoryPoolHandle pool() const { return data_.pool(); }
@@ -202,14 +206,20 @@ namespace troy {
             return is_ntt_form_;
         }
 
-        void save(std::ostream& stream) const;
-        void load(std::istream& stream, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+        inline size_t save(std::ostream& stream, CompressionMode mode = CompressionMode::Nil) const {
+            return serialize::compress(stream, [this](std::ostream& stream){return this->save_raw(stream);}, mode);
+        }
+        inline void load(std::istream& stream, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+            serialize::decompress(stream, [this, &pool](std::istream& stream){this->load_raw(stream, pool);});
+        }
         inline static Plaintext load_new(std::istream& stream, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
             Plaintext result;
             result.load(stream, pool);
             return result;
         }
-        size_t serialized_size() const;
+        inline size_t serialized_size_upperbound(CompressionMode mode = CompressionMode::Nil) const {
+            return serialize::serialized_size_upperbound(this->serialized_raw_size(), mode);
+        }
 
         inline std::string to_string() const {
             if (is_ntt_form() || parms_id_ != parms_id_zero)
