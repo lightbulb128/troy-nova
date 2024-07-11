@@ -26,6 +26,36 @@ namespace serialize {
         t = T::load_new(ss, context);
     }
 
+
+    void test_encryptionm_parameters(EncryptionParameters params) {
+        ParmsID id = params.parms_id();
+        reserialize(params);
+        ASSERT_TRUE(params.parms_id() == id);
+    }
+
+    TEST(SerializeTest, BFVEncryptionParameters) {
+        EncryptionParameters params(SchemeType::BFV);
+        params.set_poly_modulus_degree(4096);
+        params.set_coeff_modulus({ 60, 40, 40, 60 });
+        params.set_plain_modulus(1 << 10);
+        test_encryptionm_parameters(params);
+    }
+
+    TEST(SerializeTest, BGVEncryptionParameters) {
+        EncryptionParameters params(SchemeType::BGV);
+        params.set_poly_modulus_degree(4096);
+        params.set_coeff_modulus({ 60, 40, 40, 60 });
+        params.set_plain_modulus(1 << 10);
+        test_encryptionm_parameters(params);
+    }
+
+    TEST(SerializeTest, CKKSEncryptionParameters) {
+        EncryptionParameters params(SchemeType::CKKS);
+        params.set_poly_modulus_degree(4096);
+        params.set_coeff_modulus({ 60, 40, 40, 60 });
+        test_encryptionm_parameters(params);
+    }
+
     void test_plaintext(const GeneralHeContext& context) {
         double scale = context.scale();
         double tolerance = context.tolerance();
