@@ -33,6 +33,13 @@ if(TROY_MEMORY_POOL_UNSAFE)
   target_compile_definitions(troy_static PUBLIC TROY_MEMORY_POOL_UNSAFE)
 endif()
 
+if(TROY_ZSTD)
+  target_compile_definitions(troy        PUBLIC TROY_ZSTD)
+  target_compile_definitions(troy_static PUBLIC TROY_ZSTD)
+  target_link_libraries(troy        PRIVATE libzstd_static)
+  target_link_libraries(troy_static PRIVATE libzstd_static)
+endif()
+
 install(TARGETS troy troy_static
   EXPORT troyTargets
   LIBRARY DESTINATION lib

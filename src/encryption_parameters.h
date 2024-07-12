@@ -61,14 +61,15 @@ namespace troy {
         inline EncryptionParameters() : EncryptionParameters(SchemeType::Nil) {}
 
         inline EncryptionParameters(const EncryptionParameters& parms):
+            device(parms.device),
+            use_special_prime_for_encryption_(parms.use_special_prime_for_encryption_),
             scheme_(parms.scheme_),
             parms_id_(parms.parms_id_),
             poly_modulus_degree_(parms.poly_modulus_degree_),
             coeff_modulus_(parms.coeff_modulus_.clone(parms.pool())),
             plain_modulus_(parms.plain_modulus_.clone(parms.pool())),
-            plain_modulus_host_(parms.plain_modulus_host_),
-            use_special_prime_for_encryption_(parms.use_special_prime_for_encryption_),
-            device(parms.device) {}
+            plain_modulus_host_(parms.plain_modulus_host_)
+            {}
             
         EncryptionParameters(EncryptionParameters&& parms) = default;
 
@@ -219,6 +220,15 @@ namespace troy {
             cloned.to_host_inplace();
             return cloned;
         }
+
+        size_t save(std::ostream& stream) const;
+        void load(std::istream& stream);
+        inline static EncryptionParameters load_new(std::istream& stream) {
+            EncryptionParameters parms;
+            parms.load(stream);
+            return parms;
+        }
+        size_t serialized_size_upperbound() const;
 
     };
 

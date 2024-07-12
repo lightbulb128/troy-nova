@@ -45,8 +45,8 @@ namespace troy { namespace linear {
         size_t slot_count;
         size_t batch_block, input_block, output_block;
         MatmulObjective objective; 
-        MemoryPoolHandle pool;
         bool pack_lwe;
+        MemoryPoolHandle pool;
 
         inline void set_pool(MemoryPoolHandle pool) {
             this->pool = pool;
@@ -90,9 +90,9 @@ namespace troy { namespace linear {
 
         Cipher2d pack_outputs(const Evaluator& evaluator, const GaloisKeys& autoKey, const Cipher2d& cipher) const;
 
-        void serialize_encoded_weights(const Plain2d& w, std::ostream& stream) const;
+        void serialize_encoded_weights(const Plain2d& w, std::ostream& stream, CompressionMode mode = CompressionMode::Nil) const;
         Plain2d deserialize_encoded_weights(std::istream& stream) const;
-        void serialize_outputs(const Evaluator &evaluator, const Cipher2d& x, std::ostream& stream) const;
+        void serialize_outputs(const Evaluator &evaluator, const Cipher2d& x, std::ostream& stream, CompressionMode mode = CompressionMode::Nil) const;
         Cipher2d deserialize_outputs(const Evaluator &evaluator, std::istream& stream) const;
 
     };

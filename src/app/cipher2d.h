@@ -152,14 +152,14 @@ namespace troy { namespace linear {
             }
         }
 
-        void save(std::ostream& stream, HeContextPointer context) const;
+        size_t save(std::ostream& stream, HeContextPointer context, CompressionMode mode = CompressionMode::Nil) const;
         void load(std::istream& stream, HeContextPointer context, MemoryPoolHandle pool = MemoryPool::GlobalPool());
         inline static Cipher2d load_new(std::istream& stream, HeContextPointer context, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
             Cipher2d result;
             result.load(stream, context, pool);
             return result;
         }
-        size_t serialized_size(HeContextPointer context) const;
+        size_t serialized_size_upperbound(HeContextPointer context, CompressionMode mode = CompressionMode::Nil) const;
 
         inline void mod_switch_to_next_inplace(const Evaluator& evaluator, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
             for (std::vector<Ciphertext>& row : this->data()) {

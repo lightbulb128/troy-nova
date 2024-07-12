@@ -586,7 +586,7 @@ namespace troy { namespace linear {
         return ret;
     }
 
-    void MatmulHelper::serialize_encoded_weights(const Plain2d& w, std::ostream& stream) const {
+    void MatmulHelper::serialize_encoded_weights(const Plain2d& w, std::ostream& stream, CompressionMode mode) const {
         size_t rows = w.data().size();
         size_t cols = w[0].size();
         if (rows == 0) throw std::invalid_argument("[MatmulHelper::serialize_encoded_weights] No rows in weight matrix.");
@@ -598,7 +598,7 @@ namespace troy { namespace linear {
         serialize::save_object(stream, cols);
         for (size_t i = 0; i < rows; i++) {
             for (size_t j = 0; j < cols; j++) {
-                w[i][j].save(stream);
+                w[i][j].save(stream, mode);
             }
         }
     }
@@ -620,7 +620,7 @@ namespace troy { namespace linear {
         return ret;
     }
 
-    void MatmulHelper::serialize_outputs(const Evaluator &evaluator, const Cipher2d& x, std::ostream& stream) const {
+    void MatmulHelper::serialize_outputs(const Evaluator &evaluator, const Cipher2d& x, std::ostream& stream, CompressionMode mode) const {
         HeContextPointer context = evaluator.context();
         if (!this->pack_lwe) {
             size_t vecsize = output_block;
@@ -635,7 +635,7 @@ namespace troy { namespace linear {
                     for (size_t i = li; i < ui; i++)
                         for (size_t j = lj; j < uj; j++) 
                             required[rid++] = (i - li) * input_block * output_block + (j - lj) * input_block + input_block - 1;
-                    x[di][dj].save_terms(stream, context, required, pool);
+                    x[di][dj].save_terms(stream, context, required, pool, mode);
                     dj += 1;
                 }
                 di += 1;
@@ -647,7 +647,7 @@ namespace troy { namespace linear {
                 throw std::invalid_argument("[MatmulHelper::serialize_outputs] Output ciphertext count incorrect");
             }
             for (size_t i = 0; i < x.data()[0].size(); i++) {
-                x[0][i].save(stream, context);
+                x[0][i].save(stream, context, mode);
             }
         }
     }
