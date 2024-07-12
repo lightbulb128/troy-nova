@@ -36,8 +36,8 @@ endif()
 if(TROY_ZSTD)
   target_compile_definitions(troy        PUBLIC TROY_ZSTD)
   target_compile_definitions(troy_static PUBLIC TROY_ZSTD)
-  target_link_libraries(troy        PRIVATE libzstd_static)
-  target_link_libraries(troy_static PRIVATE libzstd_static)
+  target_link_libraries(troy        PRIVATE ${TROY_ZSTD_STATIC_LINK_NAME})
+  target_link_libraries(troy_static PRIVATE ${TROY_ZSTD_STATIC_LINK_NAME})
 endif()
 
 install(TARGETS troy troy_static

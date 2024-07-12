@@ -72,20 +72,40 @@ endfunction()
 set(TROY_ZSTD_GIT_HASH "ab02fd342f5c06be9fc309098f4bd54b0c1b1de9")
 
 if(TROY_ZSTD)
-  directory_nonexistent_or_empty("${CMAKE_CURRENT_SOURCE_DIR}/extern/zstd" TROY_ZSTD_NOT_FOUND)
-  if(TROY_ZSTD_NOT_FOUND)
-    message(STATUS "TROY_ZSTD is enabled, but not found in extern/zstd. Try to git clone.")
-    FetchContent_Declare(
-      zstd
-      GIT_REPOSITORY "https://github.com/facebook/zstd.git"
-      GIT_TAG        ${TROY_ZSTD_GIT_HASH}
-      SOURCE_SUBDIR build/cmake
-    )
-    FetchContent_MakeAvailable(zstd)
-  else()
-    add_subdirectory(extern/zstd/build/cmake)
+  # first try to find package
+  find_package(zstd CONFIG)
+  if(zstd_FOUND)
+    if(TARGET zstd::libzstd_static)
+      message(STATUS "TROY_ZSTD is enabled and found in system.")
+      set(TROY_ZSTD_STATIC_LINK_NAME "zstd::libzstd_static")
+    elseif(TARGET libzstd)
+      get_target_property(libzstd_type libzstd TYPE)
+      if(libzstd_type STREQUAL "STATIC_LIBRARY")
+        message(STATUS "TROY_ZSTD is enabled and found in system.")
+        set(TROY_ZSTD_STATIC_LINK_NAME "libzstd")
+      else()
+        message(FATAL_ERROR "libzstd is not a static library.")
+      endif()
+    endif()
   endif()
-  unset(TROY_ZSTD_NOT_FOUND)
+  if(NOT DEFINED TROY_ZSTD_STATIC_LINK_NAME)
+    directory_nonexistent_or_empty("${CMAKE_CURRENT_SOURCE_DIR}/extern/zstd" TROY_ZSTD_NOT_FOUND)
+    if(TROY_ZSTD_NOT_FOUND)
+      message(STATUS "TROY_ZSTD is enabled, but not found in extern/zstd. Try to git clone.")
+      FetchContent_Declare(
+        zstd
+        GIT_REPOSITORY "https://github.com/facebook/zstd.git"
+        GIT_TAG        ${TROY_ZSTD_GIT_HASH}
+        SOURCE_SUBDIR build/cmake
+      )
+      FetchContent_MakeAvailable(zstd)
+      set(TROY_ZSTD_STATIC_LINK_NAME "libzstd_static")
+    else()
+      add_subdirectory(extern/zstd/build/cmake)
+      set(TROY_ZSTD_STATIC_LINK_NAME "libzstd_static")
+    endif()
+    unset(TROY_ZSTD_NOT_FOUND)
+  endif()
 endif()
 
 set(TROY_PYBIND11_GIT_HASH "8a099e44b3d5f85b20f05828d919d2332a8de841")
