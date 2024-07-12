@@ -16,6 +16,11 @@ void register_basics(pybind11::module& m) {
         .value("Classical256", SecurityLevel::Classical256)
     ;
 
+    py::enum_<CompressionMode>(m, "CompressionMode")
+        .value("Nil", CompressionMode::Nil)
+        .value("Zstd", CompressionMode::Zstd)
+    ;
+
     py::class_<MemoryPool, std::shared_ptr<MemoryPool>>(m, "MemoryPool")
         .def_static("global_pool", &MemoryPool::GlobalPool)
         .def(py::init([](size_t device){

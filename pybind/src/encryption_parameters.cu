@@ -40,6 +40,17 @@ void register_encryption_parameters(pybind11::module& m) {
         })
         .def("__str__", [](const EncryptionParameters& self){ return to_string(self); })
         .def("__repr__", [](const EncryptionParameters& self){ return to_string(self); })
+    
+        .def("save", [](const EncryptionParameters& self) {
+            std::ostringstream ss; self.save(ss); return py::bytes(ss.str());
+        })
+        .def("load", [](EncryptionParameters& self, const py::bytes& str) {
+            std::istringstream ss(str); self.load(ss);
+        })
+        .def_static("load_new", [](const py::bytes& str) {
+            std::istringstream ss(str); EncryptionParameters ret; ret.load(ss); return ret;
+        })
+        .def("serialized_size_upperbound", &EncryptionParameters::serialized_size_upperbound)
     ;
     
 }

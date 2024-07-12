@@ -111,9 +111,9 @@ std::string to_string(const T& object) {
 }
 
 template <typename T>
-py::bytes save(const T& object) {
+py::bytes save(const T& object, CompressionMode mode) {
     std::ostringstream ss;
-    object.save(ss);
+    object.save(ss, mode);
     return py::bytes(ss.str());
 }
 
@@ -133,14 +133,14 @@ T load_new(const py::bytes& str, MemoryPoolHandle pool) {
 
 
 template <typename T>
-size_t serialized_size(const T& object) {
-    return object.serialized_size();
+size_t serialized_size_upperbound(const T& object, CompressionMode mode) {
+    return object.serialized_size_upperbound(mode);
 }
 
 template <typename T>
-py::bytes save_he(const T& object, HeContextPointer context) {
+py::bytes save_he(const T& object, HeContextPointer context, CompressionMode mode) {
     std::ostringstream ss;
-    object.save(ss, context);
+    object.save(ss, context, mode);
     return py::bytes(ss.str());
 }
 
@@ -160,8 +160,8 @@ T load_new_he(const py::bytes& str, HeContextPointer context, MemoryPoolHandle p
 
 
 template <typename T>
-size_t serialized_size_he(const T& object, HeContextPointer context) {
-    return object.serialized_size(context);
+size_t serialized_size_upperbound_he(const T& object, HeContextPointer context, CompressionMode mode) {
+    return object.serialized_size_upperbound(context, mode);
 }
 
 typedef std::optional<MemoryPoolHandle> MemoryPoolHandleArgument;
@@ -174,6 +174,7 @@ inline MemoryPoolHandle nullopt_default_pool(MemoryPoolHandleArgument pool) {
 }
 
 #define MEMORY_POOL_ARGUMENT py::arg_v("pool", std::nullopt, "MemoryPool.global_pool()")
+#define COMPRESSION_MODE_ARGUMENT py::arg_v("mode", CompressionMode::Nil, "CompressionMode.Nil")
 #define OPTIONAL_PARMS_ID_ARGUMENT py::arg("parms_id") = std::nullopt
 
 void register_basics(pybind11::module& m);

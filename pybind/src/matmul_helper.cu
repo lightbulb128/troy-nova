@@ -83,15 +83,16 @@ void register_matmul_helper(pybind11::module& m) {
             return self.clone(nullopt_default_pool(pool));
         }, MEMORY_POOL_ARGUMENT)
         .def("expand_seed", &Cipher2d::expand_seed)
-        .def("save", [](const Cipher2d& self, HeContextPointer context) {return save_he(self, context); })
-        .def("load", [](Cipher2d& self, const py::bytes& str, HeContextPointer context, MemoryPoolHandleArgument pool) {
-            return load_he<Cipher2d>(self, str, context, nullopt_default_pool(pool)); 
-        }, py::arg("str"), py::arg("context"), MEMORY_POOL_ARGUMENT)
-        .def_static("load_new", [](const py::bytes& str, HeContextPointer context, MemoryPoolHandleArgument pool) {
-            return load_new_he<Cipher2d>(str, context, nullopt_default_pool(pool)); 
-        }, py::arg("str"), py::arg("context"), MEMORY_POOL_ARGUMENT)
-        .def("serialized_size", [](const Cipher2d& self, HeContextPointer context) {return serialized_size_he(self, context); })
 
+        .def("save", [](const Cipher2d& self, HeContextPointer context, CompressionMode mode) {return save_he(self, context, mode); },
+            py::arg("context"), COMPRESSION_MODE_ARGUMENT)
+        .def("load", [](Cipher2d& self, const py::bytes& str, HeContextPointer context, MemoryPoolHandleArgument pool) {return load_he<Cipher2d>(self, str, context, nullopt_default_pool(pool)); },
+            py::arg("str"), py::arg("context"), MEMORY_POOL_ARGUMENT)
+        .def_static("load_new", [](const py::bytes& str, HeContextPointer context, MemoryPoolHandleArgument pool) {return load_new_he<Cipher2d>(str, context, nullopt_default_pool(pool)); },
+            py::arg("str"), py::arg("context"), MEMORY_POOL_ARGUMENT)
+        .def("serialized_size_upperbound", [](const Cipher2d& self, HeContextPointer context, CompressionMode mode) {return serialized_size_upperbound_he(self, context, mode); },
+            py::arg("context") = nullptr, COMPRESSION_MODE_ARGUMENT)
+            
         .def("mod_switch_to_next_inplace", [](Cipher2d& self, const Evaluator& evaluator, MemoryPoolHandleArgument pool) {
             self.mod_switch_to_next_inplace(evaluator, nullopt_default_pool(pool));
         }, py::arg("evaluator"), MEMORY_POOL_ARGUMENT)
@@ -243,9 +244,10 @@ void register_matmul_helper(pybind11::module& m) {
         .def("matmul_reverse", &MatmulHelper::matmul_reverse)
         .def("matmul_cipher", &MatmulHelper::matmul_cipher)
         .def("pack_outputs", &MatmulHelper::pack_outputs)
-        .def("serialize_outputs", [](const MatmulHelper& self, const Evaluator &evaluator, const Cipher2d& x) {
-            ostringstream ss; self.serialize_outputs(evaluator, x, ss); return py::bytes(ss.str());
-        })
+
+        .def("serialize_outputs", [](const MatmulHelper& self, const Evaluator &evaluator, const Cipher2d& x, CompressionMode mode) {
+            ostringstream ss; self.serialize_outputs(evaluator, x, ss, mode); return py::bytes(ss.str());
+        }, py::arg("evaluator"), py::arg("x"), COMPRESSION_MODE_ARGUMENT)
         .def("deserialize_outputs", [](const MatmulHelper& self, const Evaluator &evaluator, const py::bytes& str) {
             istringstream ss(str); return self.deserialize_outputs(evaluator, ss);
         })

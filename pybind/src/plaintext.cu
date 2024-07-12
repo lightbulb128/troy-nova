@@ -27,12 +27,15 @@ void register_plaintext(pybind11::module& m) {
         .def("resize", &Plaintext::resize)
         .def("is_ntt_form", py::overload_cast<>(&Plaintext::is_ntt_form, py::const_))
         .def("set_is_ntt_form", [](Plaintext& self, bool is_ntt_form){ self.is_ntt_form() = is_ntt_form; })
-        .def("save", [](const Plaintext& self) {return save(self); })
+        
+        .def("save", [](const Plaintext& self, CompressionMode mode) {return save(self, mode); },
+            COMPRESSION_MODE_ARGUMENT)
         .def("load", [](Plaintext& self, const py::bytes& str, MemoryPoolHandleArgument pool) {return load<Plaintext>(self, str, nullopt_default_pool(pool)); },
             py::arg("str"), MEMORY_POOL_ARGUMENT)
         .def_static("load_new", [](const py::bytes& str, MemoryPoolHandleArgument pool) {return load_new<Plaintext>(str, nullopt_default_pool(pool)); },
             py::arg("str"), MEMORY_POOL_ARGUMENT)
-        .def("serialized_size", [](const Plaintext& self) {return serialized_size(self); })
+        .def("serialized_size_upperbound", [](const Plaintext& self, CompressionMode mode) {return serialized_size_upperbound(self, mode); }
+            , COMPRESSION_MODE_ARGUMENT)
     ;
 
 }
