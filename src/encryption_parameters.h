@@ -45,6 +45,7 @@ namespace troy {
         utils::Array<Modulus> coeff_modulus_;
         utils::Box<Modulus> plain_modulus_;
         Modulus plain_modulus_host_;
+        std::vector<Modulus> coeff_modulus_host_;
 
         void compute_parms_id();
 
@@ -55,7 +56,7 @@ namespace troy {
 
         inline EncryptionParameters(SchemeType scheme_type) : 
             device(false), use_special_prime_for_encryption_(false), scheme_(scheme_type), plain_modulus_(new Modulus(0), false, nullptr),
-            plain_modulus_host_(0)
+            plain_modulus_host_(0), coeff_modulus_host_()
         {}
 
         inline EncryptionParameters() : EncryptionParameters(SchemeType::Nil) {}
@@ -68,7 +69,8 @@ namespace troy {
             poly_modulus_degree_(parms.poly_modulus_degree_),
             coeff_modulus_(parms.coeff_modulus_.clone(parms.pool())),
             plain_modulus_(parms.plain_modulus_.clone(parms.pool())),
-            plain_modulus_host_(parms.plain_modulus_host_)
+            plain_modulus_host_(parms.plain_modulus_host_),
+            coeff_modulus_host_(parms.coeff_modulus_host_)
             {}
             
         EncryptionParameters(EncryptionParameters&& parms) = default;
@@ -82,6 +84,7 @@ namespace troy {
             parms_id_ = parms.parms_id_;
             poly_modulus_degree_ = parms.poly_modulus_degree_;
             coeff_modulus_ = parms.coeff_modulus_.clone(parms.pool());
+            coeff_modulus_host_ = parms.coeff_modulus_host_;
             plain_modulus_ = parms.plain_modulus_.clone(parms.pool());
             plain_modulus_host_ = parms.plain_modulus_host_;
             use_special_prime_for_encryption_ = parms.use_special_prime_for_encryption_;
@@ -116,6 +119,10 @@ namespace troy {
             return plain_modulus_host_;
         }
 
+        inline utils::ConstSlice<Modulus> coeff_modulus_host() const noexcept {
+            return utils::ConstSlice<Modulus>(coeff_modulus_host_.data(), coeff_modulus_host_.size(), false, nullptr);
+        }
+
         inline bool use_special_prime_for_encryption() const noexcept {
             return use_special_prime_for_encryption_;
         }
@@ -137,6 +144,10 @@ namespace troy {
                 throw std::invalid_argument("[EncryptionParameters::set_coeff_modulus] Can only set coeff_modulus on host");
             }
             coeff_modulus_ = utils::Array<Modulus>::create_and_copy_from_slice(coeff_modulus, pool());
+            coeff_modulus_host_.resize(coeff_modulus.size());
+            for (size_t i = 0; i < coeff_modulus.size(); i++) {
+                coeff_modulus_host_[i] = coeff_modulus[i];
+            }
             compute_parms_id();
         }
 
@@ -186,6 +197,7 @@ namespace troy {
             ret.coeff_modulus_ = this->coeff_modulus_.clone(pool);
             ret.plain_modulus_ = this->plain_modulus_.clone(pool);
             ret.plain_modulus_host_ = this->plain_modulus_host_;
+            ret.coeff_modulus_host_ = this->coeff_modulus_host_;
             ret.use_special_prime_for_encryption_ = this->use_special_prime_for_encryption_;
             ret.device = this->device;
             return ret;
