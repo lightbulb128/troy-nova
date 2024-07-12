@@ -1,4 +1,4 @@
-#include "header.cuh"
+#include "header.h"
 
 void register_modulus(pybind11::module& m) {
 
@@ -24,7 +24,7 @@ void register_modulus(pybind11::module& m) {
         }, py::arg("poly_modulus_degree"), py::arg_v("sec_level", SecurityLevel::Classical128, "SecurityLevel.Classical128"))
         .def_static("create", [](size_t poly_modulus_degree, const std::vector<int>& bit_sizes){
             vector<size_t> bit_sizes_copy(bit_sizes.size(), 0);
-            for (int i = 0; i < bit_sizes.size(); i++) {
+            for (size_t i = 0; i < bit_sizes.size(); i++) {
                 bit_sizes_copy[i] = bit_sizes[i];
             }
             return CoeffModulus::create(poly_modulus_degree, bit_sizes_copy).to_vector();
@@ -36,7 +36,7 @@ void register_modulus(pybind11::module& m) {
             py::arg("poly_modulus_degree"), py::arg_v("sec_level", SecurityLevel::Classical128, "SecurityLevel.Classical128"))
         .def_static("batching_multiple", [](size_t poly_modulus_degree, const std::vector<int>& bit_sizes){
             vector<size_t> bit_sizes_copy(bit_sizes.size(), 0);
-            for (int i = 0; i < bit_sizes.size(); i++) {
+            for (size_t i = 0; i < bit_sizes.size(); i++) {
                 bit_sizes_copy[i] = bit_sizes[i];
             }
             return PlainModulus::batching_multiple(poly_modulus_degree, bit_sizes_copy).to_vector();

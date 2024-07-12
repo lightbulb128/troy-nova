@@ -1,4 +1,4 @@
-#include "header.cuh"
+#include "header.h"
 
 void register_public_key(pybind11::module& m) {
     
@@ -25,14 +25,16 @@ void register_public_key(pybind11::module& m) {
         .def("get_ciphertext", [](const PublicKey& self, MemoryPoolHandleArgument pool) {
             return self.as_ciphertext().clone(nullopt_default_pool(pool)); 
         }, MEMORY_POOL_ARGUMENT)
-        .def("save", [](const PublicKey& self, HeContextPointer context) {return save_he(self, context); })
-        .def("load", [](PublicKey& self, const py::bytes& str, HeContextPointer context, MemoryPoolHandleArgument pool) {
-            return load_he<PublicKey>(self, str, context, nullopt_default_pool(pool)); 
-        }, py::arg("str"), py::arg("context"), MEMORY_POOL_ARGUMENT)
-        .def_static("load_new", [](const py::bytes& str, HeContextPointer context, MemoryPoolHandleArgument pool) {
-            return load_new_he<PublicKey>(str, context, nullopt_default_pool(pool));
-        }, py::arg("str"), py::arg("context"), MEMORY_POOL_ARGUMENT)
-        .def("serialized_size", [](const PublicKey& self, HeContextPointer context) {return serialized_size_he(self, context); })
+
+        .def("save", [](const PublicKey& self, HeContextPointer context, CompressionMode mode) {return save_he(self, context, mode); },
+            py::arg("context"), COMPRESSION_MODE_ARGUMENT)
+        .def("load", [](PublicKey& self, const py::bytes& str, HeContextPointer context, MemoryPoolHandleArgument pool) {return load_he<PublicKey>(self, str, context, nullopt_default_pool(pool)); },
+            py::arg("str"), py::arg("context"), MEMORY_POOL_ARGUMENT)
+        .def_static("load_new", [](const py::bytes& str, HeContextPointer context, MemoryPoolHandleArgument pool) {return load_new_he<PublicKey>(str, context, nullopt_default_pool(pool)); },
+            py::arg("str"), py::arg("context"), MEMORY_POOL_ARGUMENT)
+        .def("serialized_size_upperbound", [](const PublicKey& self, HeContextPointer context, CompressionMode mode) {return serialized_size_upperbound_he(self, context, mode); },
+            py::arg("context") = nullptr, COMPRESSION_MODE_ARGUMENT)
+
         .def("contains_seed", &PublicKey::contains_seed)
         .def("expand_seed", &PublicKey::expand_seed)
     ;

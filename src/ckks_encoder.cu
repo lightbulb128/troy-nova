@@ -1,4 +1,4 @@
-#include "ckks_encoder.cuh"
+#include "ckks_encoder.h"
 
 namespace troy {
 
@@ -80,7 +80,7 @@ namespace troy {
     }
     */
 
-    __host__ __device__
+    __device__
     static CustomComplex conj(CustomComplex root) {
         return CustomComplex(root.real, -root.imag);
     }
@@ -197,6 +197,7 @@ namespace troy {
         } else {
             size_t total = operand.size();
             size_t block_size = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(operand.device_index());
             kernel_multiply_complex_scalar<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 CustomComplex::slice(operand), fix
             );
@@ -219,6 +220,7 @@ namespace troy {
         } else {
             size_t total = operand.size();
             size_t block_size = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(operand.device_index());
             kernel_multiply_double_scalar<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 operand, fix
             );
@@ -265,6 +267,7 @@ namespace troy {
         } else {
             size_t total = 1 << (logn - 1);
             size_t block_size = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(operand.device_index());
             kernel_fft_transform_from_rev_layer<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 layer, CustomComplex::slice(operand), logn, CustomComplex::slice(roots)
             );
@@ -329,6 +332,7 @@ namespace troy {
         } else {
             size_t total = 1 << (logn - 1);
             size_t block_size = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(operand.device_index());
             kernel_fft_transform_to_rev_layer<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 layer, CustomComplex::slice(operand), logn, CustomComplex::slice(roots)
             );
@@ -366,7 +370,7 @@ namespace troy {
 
     static void set_conjugate_values(ConstSlice<complex<double>> from, ConstSlice<size_t> index_map, Slice<complex<double>> target) {
         bool device = from.on_device();
-        if (device != target.on_device()) {
+        if (!utils::device_compatible(from, target, index_map)) {
             throw std::invalid_argument("[CKKSEncoder::set_conjugate_values] from and target must be on the same device.");
         }
         size_t count = target.size() / 2;
@@ -377,6 +381,7 @@ namespace troy {
             }
         } else {
             size_t block_size = utils::ceil_div(from.size() * 2, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(target.device_index());
             kernel_set_conjugate_values<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 CustomComplex::slice(from),
                 index_map,
@@ -396,7 +401,7 @@ namespace troy {
 
     static void retrieve_conjugate_values(ConstSlice<complex<double>> from, ConstSlice<size_t> index_map, Slice<complex<double>> target) {
         bool device = from.on_device();
-        if (device != target.on_device()) {
+        if (!utils::device_compatible(from, target, index_map)) {
             throw std::invalid_argument("[CKKSEncoder::retrieve_conjugate_values] from and target must be on the same device.");
         }
         size_t count = target.size();
@@ -406,6 +411,7 @@ namespace troy {
             }
         } else {
             size_t block_size = utils::ceil_div(count, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(target.device_index());
             kernel_retrieve_conjugate_values<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 CustomComplex::slice(from),
                 index_map,
@@ -423,7 +429,7 @@ namespace troy {
 
     static void gather_real(ConstSlice<complex<double>> complex_array, Slice<double> real_array) {
         bool device = complex_array.on_device();
-        if (device != real_array.on_device()) {
+        if (!utils::device_compatible(complex_array, real_array)) {
             throw std::invalid_argument("[CKKSEncoder::gather_real] complex_array and real_array must be on the same device.");
         }
         size_t n = complex_array.size();
@@ -436,6 +442,7 @@ namespace troy {
             }
         } else {
             size_t block_size = utils::ceil_div(n, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(complex_array.device_index());
             kernel_gather_real<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 CustomComplex::slice(complex_array),
                 real_array
@@ -485,6 +492,7 @@ namespace troy {
         } else {
             size_t total = real_values.size() * coeff_modulus.size();
             size_t block_size = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(real_values.device_index());
             kernel_set_plaintext_value_array_64bits<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 coeff_count, real_values, coeff_modulus, destination
             );
@@ -514,7 +522,6 @@ namespace troy {
     static void set_plaintext_value_array_128bits(size_t coeff_count, ConstSlice<double> real_values, ConstSlice<Modulus> coeff_modulus, Slice<uint64_t> destination) {
         bool device = real_values.on_device();
         if (!device) {
-            double two_pow_64 = std::pow(2.0, 64.0);
             for (size_t i = 0; i < real_values.size(); i++) {
                 double coeffd = real_values[i];
                 bool is_negative = coeffd < 0;
@@ -534,6 +541,7 @@ namespace troy {
         } else {
             size_t total = real_values.size() * coeff_modulus.size();
             size_t block_size = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(real_values.device_index());
             kernel_set_plaintext_value_array_128bits<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 coeff_count, real_values, coeff_modulus, destination
             );
@@ -561,7 +569,6 @@ namespace troy {
 
     static void decompose_double_absolute_array(
         ConstSlice<double> real_values,
-        size_t n,
         size_t coeff_modulus_size,
         Slice<uint64_t> destination
     ) {
@@ -580,6 +587,7 @@ namespace troy {
         } else {
             size_t total = real_values.size();
             size_t block_size = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(real_values.device_index());
             kernel_decompose_double_absolute_array<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 real_values, total, coeff_modulus_size, destination
             );
@@ -628,6 +636,7 @@ namespace troy {
         } else {
             size_t total = n * coeff_modulus.size();
             size_t block_size = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(real_values.device_index());
             kernel_set_decomposed_value_array<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 real_values, decomposed_values, n, coeff_modulus, destination
             );
@@ -645,7 +654,7 @@ namespace troy {
         size_t coeff_modulus_size = coeff_modulus.size();
         Array<uint64_t> coeffu_array(coeff_modulus_size * coeff_count, device, pool);
         decompose_double_absolute_array(
-            real_values, coeff_count, coeff_modulus_size, coeffu_array.reference()
+            real_values, coeff_modulus_size, coeffu_array.reference()
         );
         context_data->rns_tool().base_q().decompose_array(coeffu_array.reference(), pool);
         set_decomposed_value_array(
@@ -656,8 +665,6 @@ namespace troy {
     
 
     static void set_plaintext_value_array(ContextDataPointer context_data, size_t coeff_count, ConstSlice<double> real_values, ConstSlice<Modulus> coeff_modulus, Plaintext& destination, MemoryPoolHandle pool) {
-        size_t n = coeff_count;
-        size_t logn = utils::get_power_of_two(n);
         size_t coeff_modulus_size = coeff_modulus.size();
 
         // Verify that the values are not too large to fit in coeff_modulus
@@ -665,8 +672,6 @@ namespace troy {
         // Don't compute logarithmis of numbers less than 1
         double max_coeff = reduction::max(real_values, pool);
         size_t max_coeff_bit_count = static_cast<size_t>(std::ceil(std::log2(std::max(max_coeff, 1.0))));
-
-        double two_pow_64 = std::pow(2.0, 64.0);
 
         // Resize destination to appropriate size
         // Need to first set parms_id to zero, otherwise resize
@@ -685,7 +690,28 @@ namespace troy {
         }
     }
     
-    void CKKSEncoder::encode_internal_complex_simd(const std::vector<std::complex<double>>& values, ParmsID parms_id, double scale, Plaintext& destination, MemoryPoolHandle pool) const {
+    void CKKSEncoder::encode_internal_complex_simd_slice(ConstSlice<std::complex<double>> values, ParmsID parms_id, double scale, Plaintext& destination, MemoryPoolHandle pool) const {
+        
+        if (!pool_compatible(pool)) {
+            throw std::invalid_argument("[CKKSEncoder::encode_internal_complex_simd_slice] Memory pool is not compatible with device.");
+        }
+
+        // if values and this is not on the same device, convert first
+        if (this->on_device() && (!values.on_device() || values.device_index() != this->device_index())) {
+            Array<std::complex<double>> values_device = Array<std::complex<double>>::create_and_copy_from_slice(values, true, pool);
+            encode_internal_complex_simd_slice(values_device.const_reference(), parms_id, scale, destination, pool);
+            return;
+        } else if (!this->on_device() && values.on_device()) {
+            Array<std::complex<double>> values_host = Array<std::complex<double>>::create_and_copy_from_slice(values, false, nullptr);
+            encode_internal_complex_simd_slice(values_host.const_reference(), parms_id, scale, destination, pool);
+            return;
+        }
+        
+        // check compatible
+        if (!utils::device_compatible(values, *this)) {
+            throw std::invalid_argument("[BatchEncoder::encode_slice] Values and destination are not compatible.");
+        }
+        
         std::optional<ContextDataPointer> context_data_optional = this->context()->get_context_data(parms_id);
         if (!context_data_optional.has_value()) {
             throw std::invalid_argument("[CKKSEncoder::encode_internal_complex_array] parms_id not valid for context.");
@@ -719,21 +745,11 @@ namespace troy {
 
         size_t n = slots * 2;
         Array<complex<double>> conj_values(n, device, pool);
-        if (!device) {
-            set_conjugate_values(
-                ConstSlice<complex<double>>(values.data(), values.size(), false, nullptr),
-                this->matrix_reps_index_map.const_reference(),
-                conj_values.reference()
-            );
-        } else {
-            Array<complex<double>> values_device(values.size(), true, pool);
-            values_device.copy_from_slice(ConstSlice<complex<double>>(values.data(), values.size(), false, nullptr));
-            set_conjugate_values(
-                values_device.const_reference(),
-                this->matrix_reps_index_map.const_reference(),
-                conj_values.reference()
-            );
-        }
+        set_conjugate_values(
+            values,
+            this->matrix_reps_index_map.const_reference(),
+            conj_values.reference()
+        );
 
         size_t logn = utils::get_power_of_two(n);
         double fix = scale / static_cast<double>(n);
@@ -757,7 +773,28 @@ namespace troy {
         destination.poly_modulus_degree() = coeff_count;
     }
 
-    void CKKSEncoder::encode_internal_double_polynomial(const std::vector<double>& values, ParmsID parms_id, double scale, Plaintext& destination, MemoryPoolHandle pool) const {
+    void CKKSEncoder::encode_internal_double_polynomial_slice(utils::ConstSlice<double> values, ParmsID parms_id, double scale, Plaintext& destination, MemoryPoolHandle pool) const {
+        
+        if (!pool_compatible(pool)) {
+            throw std::invalid_argument("[CKKSEncoder::encode_internal_double_polynomial_slice] Memory pool is not compatible with device.");
+        }
+
+        // if values and this is not on the same device, convert first
+        if (this->on_device() && (!values.on_device() || values.device_index() != this->device_index())) {
+            Array<double> values_device = Array<double>::create_and_copy_from_slice(values, true, pool);
+            encode_internal_double_polynomial_slice(values_device.const_reference(), parms_id, scale, destination, pool);
+            return;
+        } else if (!this->on_device() && values.on_device()) {
+            Array<double> values_host = Array<double>::create_and_copy_from_slice(values, false, nullptr);
+            encode_internal_double_polynomial_slice(values_host.const_reference(), parms_id, scale, destination, pool);
+            return;
+        }
+        
+        // check compatible
+        if (!utils::device_compatible(values, *this)) {
+            throw std::invalid_argument("[CKKSEncoder::encode_internal_double_polynomial_slice] Values and destination are not compatible.");
+        }
+        
         std::optional<ContextDataPointer> context_data_optional = this->context()->get_context_data(parms_id);
         if (!context_data_optional.has_value()) {
             throw std::invalid_argument("[CKKSEncoder::encode_internal_double_polynomial] parms_id not valid for context.");
@@ -794,7 +831,7 @@ namespace troy {
         
         size_t n = slots * 2;
         Array<double> real_values(n, device, pool);
-        real_values.slice(0, values.size()).copy_from_slice(ConstSlice<double>(values.data(), values.size(), false, nullptr));
+        real_values.slice(0, values.size()).copy_from_slice(values);
         multiply_double_scalar(real_values.reference(), scale);
 
         set_plaintext_value_array(context_data, coeff_count, real_values.const_reference(), coeff_modulus, destination, pool);
@@ -824,6 +861,7 @@ namespace troy {
         } else {
             size_t total = destination.size();
             size_t block_size = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(destination.device_index());
             kernel_broadcast_double<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 d, destination
             );
@@ -929,6 +967,7 @@ namespace troy {
         } else {
             size_t total = values.size() * modulus.size();
             size_t block_size = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(values.device_index());
             kernel_reduce_values<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 values, coeff_count, modulus, destination
             );
@@ -937,13 +976,33 @@ namespace troy {
 
     }
     
-    void CKKSEncoder::encode_internal_integer_polynomial(const std::vector<int64_t>& values, ParmsID parms_id, Plaintext& destination, MemoryPoolHandle pool) const {
+    void CKKSEncoder::encode_internal_integer_polynomial_slice(utils::ConstSlice<int64_t> values, ParmsID parms_id, Plaintext& destination, MemoryPoolHandle pool) const {
+        
+        if (!pool_compatible(pool)) {
+            throw std::invalid_argument("[BatchEncoder::encode_slice] Memory pool is not compatible with device.");
+        }
+
+        // if values and this is not on the same device, convert first
+        if (this->on_device() && (!values.on_device() || values.device_index() != this->device_index())) {
+            Array<int64_t> values_device = Array<int64_t>::create_and_copy_from_slice(values, true, pool);
+            encode_internal_integer_polynomial_slice(values_device.const_reference(), parms_id, destination, pool);
+            return;
+        } else if (!this->on_device() && values.on_device()) {
+            Array<int64_t> values_host = Array<int64_t>::create_and_copy_from_slice(values, false, nullptr);
+            encode_internal_integer_polynomial_slice(values_host.const_reference(), parms_id, destination, pool);
+            return;
+        }
+        
+        // check compatible
+        if (!utils::device_compatible(values, *this)) {
+            throw std::invalid_argument("[CKKSEncoder::encode_internal_integer_polynomial_slice] Values and destination are not compatible.");
+        }
+        
         std::optional<ContextDataPointer> context_data_optional = this->context()->get_context_data(parms_id);
         if (!context_data_optional.has_value()) {
-            throw std::invalid_argument("[CKKSEncoder::encode_internal_integer_polynomial] parms_id not valid for context.");
+            throw std::invalid_argument("[CKKSEncoder::encode_internal_integer_polynomial_slice] parms_id not valid for context.");
         }
         ContextDataPointer context_data = context_data_optional.value();
-        size_t slots = this->slot_count();
         const EncryptionParameters& parms = context_data->parms();
         ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
         size_t coeff_modulus_size = coeff_modulus.size();
@@ -964,19 +1023,10 @@ namespace troy {
         destination.resize(coeff_count * coeff_modulus_size);
         destination.poly().set_zero();
 
-        if (!device) {
-            reduce_values(
-                ConstSlice<int64_t>(values.data(), values.size(), false, nullptr),
-                coeff_count, coeff_modulus, destination.poly()
-            );
-        } else {
-            Array<int64_t> values_device(values.size(), true, pool);
-            values_device.copy_from_slice(ConstSlice<int64_t>(values.data(), values.size(), false, nullptr));
-            reduce_values(
-                values_device.const_reference(),
-                coeff_count, coeff_modulus, destination.poly()
-            );
-        }
+        reduce_values(
+            values,
+            coeff_count, coeff_modulus, destination.poly()
+        );
 
         // Transform to NTT domain
         utils::ntt_negacyclic_harvey_p(destination.poly(), coeff_count, ntt_tables);
@@ -1100,6 +1150,7 @@ namespace troy {
         } else {
             size_t total = coeff_count;
             size_t block_size = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(inputs.device_index());
             kernel_accumulate_complex<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 inputs, coeff_count, decryption_modulus, coeff_modulus_size, upper_half_threshold, 
                 CustomComplex::slice(destination), inv_scale
@@ -1108,17 +1159,19 @@ namespace troy {
         }
     }
     
-    void CKKSEncoder::decode_internal_simd(const Plaintext& plain, std::vector<std::complex<double>>& destination, MemoryPoolHandle pool) const {
+    void CKKSEncoder::decode_internal_simd_slice(const Plaintext& plain, Slice<std::complex<double>> destination, MemoryPoolHandle pool) const {
         if (!plain.is_ntt_form()) {
-            throw std::invalid_argument("[CKKSEncoder::decode_internal_simd] Plaintext is not in NTT form.");
+            throw std::invalid_argument("[CKKSEncoder::decode_internal_simd_slice] Plaintext is not in NTT form.");
         }
         size_t slots = this->slot_count();
         bool device = plain.on_device();
-        destination.resize(slots);
+        if (destination.size() != slots) {
+            throw std::invalid_argument("[CKKSEncoder::decode_internal_simd_slice] Destination size is not correct.");
+        }
 
         std::optional<ContextDataPointer> context_data_optional = this->context()->get_context_data(plain.parms_id());
         if (!context_data_optional.has_value()) {
-            throw std::invalid_argument("[CKKSEncoder::decode_internal_simd] parms_id not valid for context.");
+            throw std::invalid_argument("[CKKSEncoder::decode_internal_simd_slice] parms_id not valid for context.");
         }
         ContextDataPointer context_data = context_data_optional.value();
         const EncryptionParameters& parms = context_data->parms();
@@ -1127,7 +1180,7 @@ namespace troy {
         size_t coeff_count = parms.poly_modulus_degree();
         
         if (!utils::same(device, this->on_device(), context_data->on_device(), plain.on_device())) {
-            throw std::invalid_argument("[CKKSEncoder::decode_internal_simd] Operands must be on the same device.");
+            throw std::invalid_argument("[CKKSEncoder::decode_internal_simd_slice] Operands must be on the same device.");
         }
 
         ConstSlice<uint64_t> decryption_modulus = context_data->total_coeff_modulus();
@@ -1136,7 +1189,7 @@ namespace troy {
 
         double inv_scale = 1.0 / plain.scale();
         if (plain.data().size() != coeff_count * coeff_modulus_size) {
-            throw std::invalid_argument("[CKKSEncoder::decode_internal_simd] Plaintext data length is not correct.");
+            throw std::invalid_argument("[CKKSEncoder::decode_internal_simd_slice] Plaintext data length is not correct.");
         }
         Array<uint64_t> plain_copy = plain.data().get_inner().clone(pool);
 
@@ -1163,7 +1216,7 @@ namespace troy {
             retrieve_conjugate_values(
                 res.const_reference(),
                 this->matrix_reps_index_map.const_reference(),
-                Slice<complex<double>>(destination.data(), destination.size(), false, nullptr)
+                destination
             );
         } else {
             Array<complex<double>> destination_device(destination.size(), true, pool);
@@ -1173,22 +1226,24 @@ namespace troy {
                 destination_device.reference()
             );
             destination_device.to_host_inplace();
-            Slice<complex<double>>(destination.data(), destination.size(), false, nullptr).copy_from_slice(
+            destination.copy_from_slice(
                 destination_device.const_reference()
             );
         }
     }
 
-    void CKKSEncoder::decode_internal_polynomial(const Plaintext& plain, std::vector<double>& destination, MemoryPoolHandle pool) const {
+    void CKKSEncoder::decode_internal_polynomial_slice(const Plaintext& plain, Slice<double> destination, MemoryPoolHandle pool) const {
         if (!plain.is_ntt_form()) {
-            throw std::invalid_argument("[CKKSEncoder::decode_internal_polynomial] Plaintext is not in NTT form.");
+            throw std::invalid_argument("[CKKSEncoder::decode_internal_polynomial_slice] Plaintext is not in NTT form.");
         }
         size_t slots = this->slot_count();
-        destination.resize(slots * 2);
+        if (destination.size() != slots * 2) {
+            throw std::invalid_argument("[CKKSEncoder::decode_internal_polynomial_slice] Destination size is not correct.");
+        }
 
         std::optional<ContextDataPointer> context_data_optional = this->context()->get_context_data(plain.parms_id());
         if (!context_data_optional.has_value()) {
-            throw std::invalid_argument("[CKKSEncoder::decode_internal_polynomial] parms_id not valid for context.");
+            throw std::invalid_argument("[CKKSEncoder::decode_internal_polynomial_slice] parms_id not valid for context.");
         }
         ContextDataPointer context_data = context_data_optional.value();
         const EncryptionParameters& parms = context_data->parms();
@@ -1198,16 +1253,15 @@ namespace troy {
         
         bool device = plain.on_device();
         if (!utils::same(device, this->on_device(), context_data->on_device())) {
-            throw std::invalid_argument("[CKKSEncoder::decode_internal_polynomial] Operands must be on the same device.");
+            throw std::invalid_argument("[CKKSEncoder::decode_internal_polynomial_slice] Operands must be on the same device.");
         }
 
         ConstSlice<uint64_t> decryption_modulus = context_data->total_coeff_modulus();
         ConstSlice<uint64_t> upper_half_threshold = context_data->upper_half_threshold();
-        size_t logn = utils::get_power_of_two(coeff_count);
 
         double inv_scale = 1.0 / plain.scale();
         if (plain.data().size() != coeff_count * coeff_modulus_size) {
-            throw std::invalid_argument("[CKKSEncoder::decode_internal_polynomial] Plaintext data length is not correct.");
+            throw std::invalid_argument("[CKKSEncoder::decode_internal_polynomial_slice] Plaintext data length is not correct.");
         }
         Array<uint64_t> plain_copy = plain.data().get_inner().clone(pool);
 
@@ -1228,9 +1282,7 @@ namespace troy {
         Array<double> real_values(coeff_count, device, pool);
         gather_real(res.const_reference(), real_values.reference());
 
-        Slice<double>(destination.data(), destination.size(), false, nullptr).copy_from_slice(
-            real_values.const_reference()
-        );
+        destination.copy_from_slice(real_values.const_reference());
     }
 
 }

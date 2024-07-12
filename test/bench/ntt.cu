@@ -1,5 +1,5 @@
-#include "../../src/utils/ntt.cuh"
-#include "../../src/coeff_modulus.cuh"
+#include "../../src/utils/ntt.h"
+#include "../../src/coeff_modulus.h"
 #include "../../src/utils/timer.h"
 
 using troy::utils::NTTTables;

@@ -1,4 +1,4 @@
-#include "rns_base.cuh"
+#include "rns_base.h"
 
 namespace troy {namespace utils {
 
@@ -150,6 +150,7 @@ namespace troy {namespace utils {
         bool device = self.on_device();
         if (device) {
             size_t block_count = ceil_div<size_t>(from.size(), KERNEL_THREAD_COUNT);
+            cudaSetDevice(result.device_index());
             kernel_rnsbase_decompose_array<<<block_count, KERNEL_THREAD_COUNT>>>(self.base(), from, result);
             cudaStreamSynchronize(0);
         } else {
@@ -236,6 +237,7 @@ namespace troy {namespace utils {
         bool device = self.on_device();
         if (device) {
             size_t block_count = ceil_div<size_t>(from.size() / self.size(), KERNEL_THREAD_COUNT);
+            cudaSetDevice(result.device_index());
             kernel_rnsbase_compose_array<<<block_count, KERNEL_THREAD_COUNT>>>(
                 self.base(), self.base_product(), self.punctured_product(), self.inv_punctured_product_mod_base(),
                 from, result, temp_mpi
@@ -249,7 +251,6 @@ namespace troy {namespace utils {
     void host_rnsbase_compose_rearrange_array(const RNSBase& self, ConstSlice<uint64_t> from, Slice<uint64_t> result) {
         size_t n = self.size();
         size_t count = from.size() / n;
-        ConstSlice<Modulus> base = self.base();
         for (size_t i = 0; i < count; i++) {
             for (size_t j = 0; j < n; j++) {
                 result[i * n + j] = from[j * count + i];
@@ -276,6 +277,7 @@ namespace troy {namespace utils {
         bool device = self.on_device();
         if (device) {
             size_t block_count = ceil_div<size_t>(from.size(), KERNEL_THREAD_COUNT);
+            cudaSetDevice(result.device_index());
             kernel_rnsbase_compose_rearrange_array<<<block_count, KERNEL_THREAD_COUNT>>>(self.size(), from, result);
             cudaStreamSynchronize(0);
         } else {
@@ -343,6 +345,7 @@ namespace troy {namespace utils {
         bool device = self.on_device();
         if (device) {
             size_t block_count = ceil_div<size_t>(input.size(), KERNEL_THREAD_COUNT);
+            cudaSetDevice(input.device_index());
             kernel_fast_convert_array_step1<<<block_count, KERNEL_THREAD_COUNT>>>(
                 self.input_base().base(), self.input_base().inv_punctured_product_mod_base(),
                 input, temp
@@ -396,6 +399,7 @@ namespace troy {namespace utils {
         bool device = self.on_device();
         if (device) {
             size_t block_count = ceil_div<size_t>(output.size(), KERNEL_THREAD_COUNT);
+            cudaSetDevice(output.device_index());
             kernel_fast_convert_array_step2<<<block_count, KERNEL_THREAD_COUNT>>>(
                 self.input_base().size(),
                 self.output_base().base(),
@@ -478,6 +482,7 @@ namespace troy {namespace utils {
         bool device = self.on_device();
         if (device) {
             size_t block_count = ceil_div<size_t>(input.size(), KERNEL_THREAD_COUNT);
+            cudaSetDevice(input.device_index());
             kernel_exact_convey_array_step1<<<block_count, KERNEL_THREAD_COUNT>>>(
                 self.input_base().base(), self.input_base().inv_punctured_product_mod_base(),
                 input, temp, v
@@ -546,6 +551,7 @@ namespace troy {namespace utils {
         bool device = self.on_device();
         if (device) {
             size_t block_count = ceil_div<size_t>(output.size(), KERNEL_THREAD_COUNT);
+            cudaSetDevice(output.device_index());
             kernel_exact_convey_array_step2<<<block_count, KERNEL_THREAD_COUNT>>>(
                 self.input_base().size(),
                 self.input_base().base_product(),

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
 
-#include "examples.cuh"
+#include "examples.h"
 
 using namespace std;
 using namespace troy;
@@ -40,10 +40,10 @@ void example_serialization()
 
     // Saving the public key requires the knowledge of the HE context.
     public_key_with_seed.save(pk_stream1, context);
-    std::cout << "PublicKey with seed size = " << pk_stream1.str().size() << std::endl;
+    std::cout << "PublicKey with seed size                = " << pk_stream1.str().size() << " bytes" << std::endl;
     stringstream pk_stream2;
     public_key_without_seed.save(pk_stream2, context);
-    std::cout << "PublicKey without seed size = " << pk_stream2.str().size() << std::endl;
+    std::cout << "PublicKey without seed size             = " << pk_stream2.str().size() << " bytes" << std::endl;
     
     // To deserialize, the HE context is also required.
     // If a public key with a seed is loaded, the seed is expanded automatically when
@@ -72,7 +72,7 @@ void example_serialization()
 
     stringstream ct_stream1;
     encrypted.save(ct_stream1, context);
-    std::cout << "Ciphertext asymmetrical size = " << ct_stream1.str().size() << std::endl;
+    std::cout << "Ciphertext asymmetrical size            = " << ct_stream1.str().size() << " bytes" << std::endl;
 
     // Symmetric encryption
     SecretKey secret_key = keygen.secret_key();
@@ -84,7 +84,7 @@ void example_serialization()
     Ciphertext encrypted_symmetric = encryptor.encrypt_symmetric_new(plain, true);
     stringstream ct_stream2;
     encrypted_symmetric.save(ct_stream2, context);
-    std::cout << "Ciphertext with seed size = " << ct_stream2.str().size() << std::endl;
+    std::cout << "Ciphertext with seed size               = " << ct_stream2.str().size() << " bytes" << std::endl;
 
     // To deserialize, the HE context is also required.
     Ciphertext deserialized_ct;
@@ -95,11 +95,27 @@ void example_serialization()
     Ciphertext encrypted_symmetric_no_seed = encryptor.encrypt_symmetric_new(plain, false);
     stringstream ct_stream3;
     encrypted_symmetric_no_seed.save(ct_stream3, context);
-    std::cout << "Ciphertext without seed size = " << ct_stream3.str().size() << std::endl;
+    std::cout << "Ciphertext without seed size            = " << ct_stream3.str().size() << " bytes" << std::endl;
     encrypted_symmetric.expand_seed(context);
     stringstream ct_stream4;
     encrypted_symmetric.save(ct_stream4, context);
-    std::cout << "Ciphertext expanded size = " << ct_stream4.str().size() << std::endl;
+    std::cout << "Ciphertext expanded size                = " << ct_stream4.str().size() << " bytes" << std::endl;
+
+
+
+
+
+    if (troy::utils::compression::available(CompressionMode::Zstd)) {
+        // Optionally, one can use Zstandard to compress the serialized objects,
+        // by providing the compression mode to the save functions. The load functions will automatically
+        // decompress it.
+        // This feature requires that you provide "TROY_ZSTD" in the CMake configuration,
+        // which is on by default.
+        stringstream ct_stream5;
+        encrypted.save(ct_stream5, context, CompressionMode::Zstd);
+        // We can see this has a smaller size.
+        std::cout << "Ciphertext asymmetrical compressed size = " << ct_stream5.str().size() << " bytes" << std::endl;
+    }
 
     std::cout << std::endl;
     

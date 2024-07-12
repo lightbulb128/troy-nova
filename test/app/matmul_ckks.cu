@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 #include <sstream>
-#include "../test_adv.cuh"
-#include "../../src/app/matmul.cuh"
+#include "../test_adv.h"
+#include "../../src/app/matmul.h"
 
 namespace matmul_ckks {
 

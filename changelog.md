@@ -32,3 +32,7 @@
 - Allow user to create `MemoryPoolHandle`s and supply them to API calls.
     - Add multithread tests and benchmark.
     - Update pybind11 encapsulation and test folder structure.
+
+## 2024-07-03
+
+- Move the implementation of MemoryPool to different input files. Directly using macros in the header may lead to user's on including troy wrong with defines not given.

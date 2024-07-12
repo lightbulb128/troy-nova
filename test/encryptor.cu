@@ -1,11 +1,12 @@
+#include "cuda_runtime.h"
 #include <gtest/gtest.h>
 #include <optional>
-#include "test.cuh"
-#include "../src/batch_encoder.cuh"
-#include "../src/ckks_encoder.cuh"
-#include "../src/encryptor.cuh"
-#include "../src/decryptor.cuh"
-#include "../src/evaluator.cuh"
+#include "test.h"
+#include "../src/batch_encoder.h"
+#include "../src/ckks_encoder.h"
+#include "../src/encryptor.h"
+#include "../src/decryptor.h"
+#include "../src/evaluator.h"
 
 namespace encryptor {
 

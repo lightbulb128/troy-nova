@@ -1,4 +1,4 @@
-#include "cipher2d.cuh"
+#include "cipher2d.h"
 
 namespace troy { namespace linear {
 
@@ -26,15 +26,16 @@ namespace troy { namespace linear {
         return encrypt_internal(encryptor, true, pool);
     }
 
-    void Cipher2d::save(std::ostream& stream, HeContextPointer context) const {
+    size_t Cipher2d::save(std::ostream& stream, HeContextPointer context, CompressionMode mode) const {
         troy::serialize::save_object(stream, (*this).rows());
         for (size_t i = 0; i < this->rows(); i++) {
             size_t row_size = (*this)[i].size();
             troy::serialize::save_object(stream, row_size);
             for (size_t j = 0; j < row_size; j++) {
-                (*this)[i][j].save(stream, context);
+                (*this)[i][j].save(stream, context, mode);
             }
         }
+        return this->serialized_size_upperbound(context, mode);
     }
 
     void Cipher2d::load(std::istream& stream, HeContextPointer context, MemoryPoolHandle pool) {
@@ -53,14 +54,13 @@ namespace troy { namespace linear {
         }
     }
     
-    size_t Cipher2d::serialized_size(HeContextPointer context) const {
-        throw std::runtime_error("[Cipher2d::serialized_size] Not implemented.");
+    size_t Cipher2d::serialized_size_upperbound(HeContextPointer context, CompressionMode mode) const {
         size_t bytes = 0;
         bytes += sizeof(size_t); // rows
         for (size_t i = 0; i < this->rows(); i++) {
             bytes += sizeof(size_t); // row size
             for (size_t j = 0; j < (*this)[i].size(); j++) {
-                bytes += (*this)[i][j].serialized_size(context);
+                bytes += (*this)[i][j].serialized_size_upperbound(context, mode);
             }
         }
         return bytes;

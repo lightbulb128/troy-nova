@@ -1,4 +1,4 @@
-#include "basics.cuh"
+#include "basics.h"
 
 namespace troy {namespace utils {
 

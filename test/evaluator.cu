@@ -1,10 +1,11 @@
+#include "cuda_runtime.h"
 #include <gtest/gtest.h>
-#include "test.cuh"
-#include "test_adv.cuh"
-#include "../src/key_generator.cuh"
-#include "../src/encryptor.cuh"
-#include "../src/decryptor.cuh"
-#include "../src/evaluator.cuh"
+#include "test.h"
+#include "test_adv.h"
+#include "../src/key_generator.h"
+#include "../src/encryptor.h"
+#include "../src/decryptor.h"
+#include "../src/evaluator.h"
 
 namespace evaluator {
 

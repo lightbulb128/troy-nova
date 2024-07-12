@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "test_adv.cuh"
+#include "test_adv.h"
 #include <sstream>
 
 namespace serialize {
@@ -14,7 +14,7 @@ namespace serialize {
     void reserialize(T& t) {
         stringstream ss;
         t.save(ss);
-        ASSERT_TRUE(t.serialized_size() == ss.str().size());
+        ASSERT_TRUE(t.serialized_size_upperbound() == ss.str().size());
         t = T::load_new(ss);
     }
 
@@ -22,8 +22,38 @@ namespace serialize {
     void reserialize(T& t, HeContextPointer context) {
         stringstream ss;
         t.save(ss, context);
-        ASSERT_TRUE(t.serialized_size(context) == ss.str().size());
+        ASSERT_TRUE(t.serialized_size_upperbound(context) == ss.str().size());
         t = T::load_new(ss, context);
+    }
+
+
+    void test_encryptionm_parameters(EncryptionParameters params) {
+        ParmsID id = params.parms_id();
+        reserialize(params);
+        ASSERT_TRUE(params.parms_id() == id);
+    }
+
+    TEST(SerializeTest, BFVEncryptionParameters) {
+        EncryptionParameters params(SchemeType::BFV);
+        params.set_poly_modulus_degree(4096);
+        params.set_coeff_modulus({ 60, 40, 40, 60 });
+        params.set_plain_modulus(1 << 10);
+        test_encryptionm_parameters(params);
+    }
+
+    TEST(SerializeTest, BGVEncryptionParameters) {
+        EncryptionParameters params(SchemeType::BGV);
+        params.set_poly_modulus_degree(4096);
+        params.set_coeff_modulus({ 60, 40, 40, 60 });
+        params.set_plain_modulus(1 << 10);
+        test_encryptionm_parameters(params);
+    }
+
+    TEST(SerializeTest, CKKSEncryptionParameters) {
+        EncryptionParameters params(SchemeType::CKKS);
+        params.set_poly_modulus_degree(4096);
+        params.set_coeff_modulus({ 60, 40, 40, 60 });
+        test_encryptionm_parameters(params);
     }
 
     void test_plaintext(const GeneralHeContext& context) {
@@ -96,6 +126,14 @@ namespace serialize {
         decrypted = context.decryptor().decrypt_new(encrypted);
         decoded = context.encoder().decode_simd(decrypted);
         ASSERT_TRUE(message.near_equal(decoded, tolerance));
+
+        // test ciphertext with 3 polys
+        Ciphertext squared = context.evaluator().square_new(encrypted);
+        reserialize(squared, context.context());
+        decrypted = context.decryptor().decrypt_new(squared);
+        decoded = context.encoder().decode_simd(decrypted);
+        GeneralVector truth = context.square(message);
+        ASSERT_TRUE(truth.near_equal(decoded, tolerance));
     }
 
     TEST(SerializeTest, HostBFVCiphertext) {
@@ -322,7 +360,7 @@ namespace serialize {
     void reserialize_terms(Ciphertext& t, HeContextPointer context, const std::vector<size_t>& terms) {
         stringstream ss;
         t.save_terms(ss, context, terms);
-        ASSERT_TRUE(t.serialized_terms_size(context, terms) == ss.str().size());
+        ASSERT_TRUE(t.serialized_terms_size_upperbound(context, terms) == ss.str().size());
         t = Ciphertext::load_terms_new(ss, context, terms);
     }
 

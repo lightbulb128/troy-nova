@@ -1,5 +1,5 @@
-#include "context_data.cuh"
-#include "he_context.cuh"
+#include "context_data.h"
+#include "he_context.h"
 
 namespace troy {
 

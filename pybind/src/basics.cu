@@ -1,4 +1,4 @@
-#include "header.cuh"
+#include "header.h"
 
 void register_basics(pybind11::module& m) {
 
@@ -14,6 +14,11 @@ void register_basics(pybind11::module& m) {
         .value("Classical128", SecurityLevel::Classical128)
         .value("Classical192", SecurityLevel::Classical192)
         .value("Classical256", SecurityLevel::Classical256)
+    ;
+
+    py::enum_<CompressionMode>(m, "CompressionMode")
+        .value("Nil", CompressionMode::Nil)
+        .value("Zstd", CompressionMode::Zstd)
     ;
 
     py::class_<MemoryPool, std::shared_ptr<MemoryPool>>(m, "MemoryPool")

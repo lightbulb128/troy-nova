@@ -1,4 +1,4 @@
-#include "he_context.cuh"
+#include "he_context.h"
 
 namespace troy {
 
@@ -135,7 +135,6 @@ namespace troy {
         if (this->on_device()) {
             return;
         }
-        size_t poly_modulus_degree = this->key_context_data().value()->parms().poly_modulus_degree();
         // iterate over context datas
         for (auto& [parms_id, context_data_ptr] : this->context_data_map_) {
             // cast as mutable

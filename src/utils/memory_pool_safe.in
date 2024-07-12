@@ -1,0 +1,180 @@
+#include "memory_pool.h"
+
+namespace troy::utils {
+
+    // MemoryPool defined with `TROY_MEMORY_POOL` and no `TROY_MEMORY_POOL_UNSAFE` manages
+    // the device memory allocation and freeing. User should call
+    // `Destroy()` before the program exit to free all the memory, and
+    // all further operations after destruction will fail.
+    
+    int MemoryPool::implementation_type() {return 2;}
+
+    struct MemoryPool::Impl {
+        static const int PRESERVED_MEMORY_BYTES = 1024 * 1024 * 32;
+        std::shared_mutex mutex;
+        std::multimap<size_t, void*> unused;
+        std::multimap<void*, size_t> allocated;
+        std::set<void*> zombie;
+        size_t total_allocated;
+        bool destroyed;
+    };
+
+    
+    // User shouldn't call this but call create() instead
+    MemoryPool::MemoryPool(size_t device_index): device_index(device_index) {
+        this->impl_ = std::make_shared<Impl>();
+        impl_->total_allocated = 0;
+        cudaDeviceProp props;
+        cudaError_t status = cudaGetDeviceProperties(&props, device_index);
+        if (status != cudaSuccess) {
+            runtime_error("[MemoryPool(safe)::MemoryPool] cudaGetDeviceProperties failed.", status);
+        }
+        impl_->destroyed = false;
+        denying = false;
+        is_global_pool = false;
+    }
+
+    MemoryPool::~MemoryPool() {
+        if (impl_->allocated.size() > 0 && !impl_->destroyed) {
+            if (is_global_pool) {
+                // Don't attempt to cuda-free any memory because the cuda context might already be destroyed for static object.
+                std::cerr << "[MemoryPool::~MemoryPool] The global pool was not destroyed before the program exit.\n";
+            } else {
+                // Other pools should be safe to be destroyed.
+                destroy();
+            }
+        }
+        // if (zombie.size() > 0) {
+        //     std::cerr << "[MemoryPool::~MemoryPool] The zombie set is not empty. There may be memory leak.\n";
+        // }
+    }
+    
+    void* MemoryPool::try_allocate(size_t required) {
+        std::unique_lock lock(impl_->mutex);
+        size_t free, total;
+        set_device();
+        cudaError_t status = cudaMemGetInfo(&free, &total);
+        if (status != cudaSuccess) {
+            runtime_error("[MemoryPool(safe)::try_allocate] cudaMemGetInfo failed", status);
+        }
+        if (free < required + Impl::PRESERVED_MEMORY_BYTES) {
+            lock.unlock();
+            release_unused();
+            lock.lock();
+            // try again
+            set_device();
+            status = cudaMemGetInfo(&free, &total);
+            if (status != cudaSuccess) {
+                runtime_error("[MemoryPool(safe)::try_allocate] cudaMemGetInfo failed", status);
+            }
+            if (free < required + Impl::PRESERVED_MEMORY_BYTES) {
+                throw std::runtime_error("[MemoryPool(safe)::try_allocate] Not enough memory.");
+            }
+        }
+        void* ptr = nullptr;
+        set_device();
+        status = cudaMalloc(&ptr, required);
+        if (status != cudaSuccess) {
+            runtime_error("[MemoryPool(safe)::try_allocate] cudaMalloc failed", status);
+        }
+        
+        impl_->total_allocated += required;
+        impl_->allocated.insert(std::make_pair(ptr, required));
+        return ptr;
+    }
+
+    void MemoryPool::release(void* ptr) {
+
+        if (impl_->destroyed) {
+
+            // the ptr given back should be in the zombie set
+            std::unique_lock lock(impl_->mutex);
+            auto iterator = impl_->zombie.find(ptr);
+            if (iterator == impl_->zombie.end()) {
+                throw std::runtime_error("[MemoryPool(safe)::release] The pointer is not in the zombie set.");
+            }
+            impl_->zombie.erase(iterator);
+            return;
+
+        }
+
+        std::unique_lock lock(impl_->mutex);
+        auto iterator = impl_->allocated.find(ptr);
+        if (iterator == impl_->allocated.end()) {
+            throw std::runtime_error("[MemoryPool(safe)::release] The pointer is not in the allocated set.");
+        }
+        size_t size = iterator->second;
+        impl_->unused.insert(std::make_pair(size, ptr));
+    }
+
+    void* MemoryPool::allocate(size_t required) {
+        if (denying) {
+            throw std::runtime_error("[MemoryPool(safe)::get] DEBUG: The pool is denying allocation.");
+        }
+        if (impl_->destroyed) {
+            throw std::runtime_error("[MemoryPool(safe)::get] The singleton has been destroyed.");
+        }
+        std::unique_lock lock(impl_->mutex);
+        auto iterator = impl_->unused.lower_bound(required);
+        if (iterator == impl_->unused.end() || iterator->first >= required * 2) {
+            lock.unlock();
+            return try_allocate(required);
+        } else {
+            void* ptr = iterator->second;
+            impl_->unused.erase(iterator);
+            return ptr;
+        }
+    }
+
+    void MemoryPool::release_unused() {
+        std::unique_lock lock(impl_->mutex);
+        for (auto it = impl_->unused.begin(); it != impl_->unused.end();) {
+            set_device();
+            cudaError_t status = cudaFree(it->second);
+            if (status != cudaSuccess) {
+                runtime_error("[MemoryPool(safe)::release_unused] cudaFree failed.", status);
+            }
+            // remove pointer from allocated
+            auto it2 = impl_->allocated.find(it->second);
+            if (it2 == impl_->allocated.end()) {
+                throw std::runtime_error("[MemoryPool(safe)::release_unused] The pointer is not in the allocated set.");
+            }
+            impl_->allocated.erase(it2);
+            it = impl_->unused.erase(it);
+        }
+    }
+
+    void MemoryPool::destroy() {
+        std::unique_lock lock(impl_->mutex);
+        // first release all unused
+        for (auto it = impl_->unused.begin(); it != impl_->unused.end();) {
+            set_device();
+            cudaError_t status = cudaFree(it->second);
+            if (status != cudaSuccess) {
+                runtime_error("[MemoryPool(safe)::destroy] cudaFree unused failed.", status);
+            }
+            // remove pointer from allocated
+            auto it2 = impl_->allocated.find(it->second);
+            if (it2 == impl_->allocated.end()) {
+                throw std::runtime_error("[MemoryPool(safe)::destroy] The pointer is not in the allocated set.");
+            }
+            impl_->allocated.erase(it2);
+            it = impl_->unused.erase(it);
+        }
+        // for all the remaining in allocated, move them to zombies
+        for (auto it = impl_->allocated.begin(); it != impl_->allocated.end();) {
+            set_device();
+            cudaError_t status = cudaFree(it->first);
+            if (status != cudaSuccess) {
+                runtime_error("[MemoryPool(safe)::destroy] cudaFree allocated failed.", status);
+            }
+            impl_->zombie.insert(it->first);
+            it = impl_->allocated.erase(it);
+        }
+        impl_->allocated.clear();
+        impl_->unused.clear();
+        impl_->total_allocated = 0;
+        impl_->destroyed = true;
+    }
+
+}

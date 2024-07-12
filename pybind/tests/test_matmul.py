@@ -216,12 +216,12 @@ class HeRing2kMatmulTest:
         automorphism_keys = self.automorphism_keys
         
         if self.t_bits > 32:
-            x_encoded = helper.encode_inputs_ring2k64(encoder, x.data, None)
-            w_encoded = helper.encode_weights_ring2k64(encoder, w.data, None)
+            x_encoded = helper.encode_inputs_ring2k64(encoder, x.data, None, True)
+            w_encoded = helper.encode_weights_ring2k64(encoder, w.data, None, False)
             s_encoded = helper.encode_outputs_ring2k64(encoder, s.data, None)
         else:
-            x_encoded = helper.encode_inputs_ring2k32(encoder, x.data, None)
-            w_encoded = helper.encode_weights_ring2k32(encoder, w.data, None)
+            x_encoded = helper.encode_inputs_ring2k32(encoder, x.data, None, True)
+            w_encoded = helper.encode_weights_ring2k32(encoder, w.data, None, False)
             s_encoded = helper.encode_outputs_ring2k32(encoder, s.data, None)
 
         x_encrypted = x_encoded.encrypt_symmetric(encryptor)

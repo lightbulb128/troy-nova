@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include "../test.cuh"
-#include "../../src/utils/random_generator.cuh"
+#include "../test.h"
+#include "../../src/utils/random_generator.h"
 
 using namespace troy;
 using namespace troy::utils;

@@ -1,5 +1,7 @@
-#include "batch_encoder.cuh"
-#include "utils/scaling_variant.cuh"
+#include "batch_encoder.h"
+#include "encryption_parameters.h"
+#include "utils/basics.h"
+#include "utils/scaling_variant.h"
 
 namespace troy {
 
@@ -7,7 +9,7 @@ namespace troy {
     using utils::Slice; 
     using utils::ConstSlice;
 
-    BatchEncoder::BatchEncoder(HeContextPointer context, MemoryPoolHandle pool) {
+    BatchEncoder::BatchEncoder(HeContextPointer context) {
         if (context->on_device()) {
             throw std::invalid_argument("[BatchEncoder::BatchEncoder] Cannot create from device context.");
         }
@@ -89,6 +91,7 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(n, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(input.device_index());
             kernel_reverse_bits<<<block_count, utils::KERNEL_THREAD_COUNT>>>(logn, input);
             cudaStreamSynchronize(0);
         }
@@ -107,7 +110,7 @@ namespace troy {
 
     static void encode_set_values(ConstSlice<uint64_t> values, ConstSlice<size_t> index_map, Slice<uint64_t> destination) {
         size_t device = index_map.on_device();
-        if (!utils::same(device, values.on_device(), destination.on_device())) {
+        if (!utils::device_compatible(values, index_map, destination)) {
             throw std::invalid_argument("[BatchEncoder::encode_set_values] All inputs must reside on same device.");
         }
         if (!device) {
@@ -119,19 +122,41 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(destination.size(), utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(values.device_index());
             kernel_encode_set_values<<<block_count, utils::KERNEL_THREAD_COUNT>>>(values, index_map, destination);
             cudaStreamSynchronize(0);
         }
     }
     
-    void BatchEncoder::encode(const std::vector<uint64_t>& values, Plaintext& destination, MemoryPoolHandle pool) const {
+    void BatchEncoder::encode_slice(utils::ConstSlice<uint64_t> values, Plaintext& destination, MemoryPoolHandle pool) const {
+
+        if (!pool_compatible(pool)) {
+            throw std::invalid_argument("[BatchEncoder::encode_slice] Memory pool is not compatible with device.");
+        }
+
+        // if values and this is not on the same device, convert first
+        if (this->on_device() && (!values.on_device() || values.device_index() != this->device_index())) {
+            Array<uint64_t> values_device = Array<uint64_t>::create_and_copy_from_slice(values, true, pool);
+            encode_slice(values_device.const_reference(), destination, pool);
+            return;
+        } else if (!this->on_device() && values.on_device()) {
+            Array<uint64_t> values_host = Array<uint64_t>::create_and_copy_from_slice(values, false, nullptr);
+            encode_slice(values_host.const_reference(), destination, pool);
+            return;
+        }
+
+        // check compatible
+        if (!utils::device_compatible(values, *this)) {
+            throw std::invalid_argument("[BatchEncoder::encode_slice] Values and destination are not compatible.");
+        }
+
         if (this->matrix_reps_index_map.size() == 0) {
-            throw std::logic_error("[BatchEncoder::encode] The parameters does not support vector batching.");
+            throw std::logic_error("[BatchEncoder::encode_slice] The parameters does not support vector batching.");
         }
         ContextDataPointer context_data = this->context()->first_context_data().value();
         size_t value_size = values.size();
         if (value_size > this->slot_count()) {
-            throw std::invalid_argument("[BatchEncoder::encode] Values has size larger than the number of slots.");
+            throw std::invalid_argument("[BatchEncoder::encode_slice] Values has size larger than the number of slots.");
         }
         // Set destination to full size
         size_t slots = this->slot_count();
@@ -145,28 +170,15 @@ namespace troy {
         destination.is_ntt_form() = false;
         // First write the values to destination coefficients.
         // Read in top row, then bottom row.
-        if (!device) {
-            encode_set_values(
-                ConstSlice(values.data(), values.size(), false, nullptr),
-                this->matrix_reps_index_map.const_reference(), 
-                destination.poly()
-            );
-        } else {
-            Array<uint64_t> values_device(value_size, false, nullptr);
-            for (size_t i = 0; i < value_size; i++) {
-                values_device[i] = values[i];
-            }
-            values_device.to_device_inplace(pool);
-            encode_set_values(
-                values_device.const_reference(),
-                this->matrix_reps_index_map.const_reference(), 
-                destination.poly()
-            );
-        }
+        encode_set_values(
+            values,
+            this->matrix_reps_index_map.const_reference(), 
+            destination.poly()
+        );
         // Transform destination using inverse of negacyclic NTT
         // Note: We already performed bit-reversal when reading in the matrix
         if (device != context_data->on_device()) {
-            throw std::invalid_argument("[BatchEncoder::encode] Context and destination must reside on same device.");
+            throw std::invalid_argument("[BatchEncoder::encode_slice] Context and destination must reside on same device.");
         }
         utils::inverse_ntt_negacyclic_harvey(
             destination.poly(),
@@ -175,16 +187,37 @@ namespace troy {
         );
     }
 
-    void BatchEncoder::encode_polynomial(const std::vector<uint64_t>& values, Plaintext& destination, MemoryPoolHandle pool) const {
+    void BatchEncoder::encode_polynomial_slice(utils::ConstSlice<uint64_t> values, Plaintext& destination, MemoryPoolHandle pool) const {
+        
+        if (!pool_compatible(pool)) {
+            throw std::invalid_argument("[BatchEncoder::encode_slice] Memory pool is not compatible with device.");
+        }
+
+        // if values and this is not on the same device, convert first
+        if (this->on_device() && (!values.on_device() || values.device_index() != this->device_index())) {
+            Array<uint64_t> values_device = Array<uint64_t>::create_and_copy_from_slice(values, true, pool);
+            encode_polynomial_slice(values_device.const_reference(), destination, pool);
+            return;
+        } else if (!this->on_device() && values.on_device()) {
+            Array<uint64_t> values_host = Array<uint64_t>::create_and_copy_from_slice(values, false, nullptr);
+            encode_polynomial_slice(values_host.const_reference(), destination, pool);
+            return;
+        }
+
+        // check compatible
+        if (!utils::device_compatible(values, *this)) {
+            throw std::invalid_argument("[BatchEncoder::encode_polynomial_slice] Values and destination are not compatible.");
+        }
+
         ContextDataPointer context_data = this->context()->first_context_data().value();
         size_t value_size = values.size();
         if (value_size > this->slot_count()) {
-            throw std::invalid_argument("[BatchEncoder::encode] Values has size larger than the number of slots.");
+            throw std::invalid_argument("[BatchEncoder::encode_polynomial_slice] Values has size larger than the number of slots.");
         }
         // Set destination to full size
         bool device = this->on_device();
         if (device != context_data->on_device()) {
-            throw std::invalid_argument("[BatchEncoder::encode] Context and destination must reside on same device.");
+            throw std::invalid_argument("[BatchEncoder::encode_polynomial_slice] Context and destination must reside on same device.");
         }
         size_t slots = this->slot_count();
         if (device) {destination.to_device_inplace(pool);}
@@ -195,20 +228,10 @@ namespace troy {
         destination.coeff_modulus_size() = 1;
         destination.is_ntt_form() = false;
         utils::ConstPointer<Modulus> plain_modulus = context_data->parms().plain_modulus();
-        if (!device) {
-            utils::modulo(
-                ConstSlice(values.data(), values.size(), false, nullptr),
-                plain_modulus, destination.poly().slice(0, value_size)
-            );
-        } else {
-            Array<uint64_t> values_device(value_size, true, pool);
-            values_device.copy_from_slice(ConstSlice(values.data(), values.size(), false, nullptr));
-            values_device.to_device_inplace(pool);
-            utils::modulo(
-                values_device.const_reference(),
-                plain_modulus, destination.poly().slice(0, value_size)
-            );
-        }
+        utils::modulo(
+            values,
+            plain_modulus, destination.poly().slice(0, value_size)
+        );
     }
 
     __global__ static void kernel_decode_set_values(
@@ -222,7 +245,7 @@ namespace troy {
 
     static void decode_set_values(ConstSlice<uint64_t> values, ConstSlice<size_t> index_map, Slice<uint64_t> destination) {
         size_t device = index_map.on_device();
-        if (!utils::same(device, values.on_device(), destination.on_device())) {
+        if (!utils::device_compatible(values, index_map, destination)) {
             throw std::invalid_argument("[BatchEncoder::decode_set_values] All inputs must reside on same device.");
         }
         if (!device) {
@@ -231,12 +254,36 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(destination.size(), utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(values.device_index());
             kernel_decode_set_values<<<block_count, utils::KERNEL_THREAD_COUNT>>>(values, index_map, destination);
             cudaStreamSynchronize(0);
         }
     }
     
-    void BatchEncoder::decode(const Plaintext& plain, std::vector<uint64_t>& destination, MemoryPoolHandle pool) const {
+    void BatchEncoder::decode_slice(const Plaintext& plain, Slice<uint64_t> destination, MemoryPoolHandle pool) const {
+
+        if (!pool_compatible(pool)) {
+            throw std::invalid_argument("[BatchEncoder::encode_slice] Memory pool is not compatible with device.");
+        }
+
+        // if values and this is not on the same device, convert first
+        if (this->on_device() && (!destination.on_device() || destination.device_index() != this->device_index())) {
+            Array<uint64_t> destination_device = Array<uint64_t>(destination.size(), true, pool);
+            decode_slice(plain, destination_device.reference(), pool);
+            destination.copy_from_slice(destination_device.const_reference());
+            return;
+        } else if (!this->on_device() && destination.on_device()) {
+            Array<uint64_t> destination_host = Array<uint64_t>(destination.size(), false, nullptr);
+            decode_slice(plain, destination_host.reference(), pool);
+            destination.copy_from_slice(destination_host.const_reference());
+            return;
+        }
+        
+        // check compatible
+        if (!utils::device_compatible(destination, *this)) {
+            throw std::invalid_argument("[BatchEncoder::decode_slice] Values and destination are not compatible.");
+        }
+
         if (this->matrix_reps_index_map.size() == 0) {
             throw std::logic_error("[BatchEncoder::encode] The parameters does not support vector batching.");
         }
@@ -245,7 +292,9 @@ namespace troy {
         }
         ContextDataPointer context_data = this->context()->first_context_data().value();
         size_t slots = this->slot_count();
-        destination.resize(slots);
+        if (destination.size() != slots) {
+            throw std::invalid_argument("[BatchEncoder::decode] Destination has incorrect size.");
+        }
         size_t plain_coeff_count = std::min(plain.coeff_count(), slots);
         Array<uint64_t> temp_dest(slots, plain.on_device(), pool);
         temp_dest.slice(0, plain_coeff_count).copy_from_slice(plain.poly());
@@ -259,28 +308,22 @@ namespace troy {
             slots,
             context_data->plain_ntt_tables()
         );
-        // Read in top row, then bottom row.
-        if (!device) {
-            decode_set_values(
-                temp_dest.const_reference(),
-                this->matrix_reps_index_map.const_reference(), 
-                Slice<uint64_t>(destination.data(), destination.size(), false, nullptr)
-            );
-        } else {
-            Array<uint64_t> temp_dest_host(slots, true, pool);
-            decode_set_values(
-                temp_dest.const_reference(),
-                this->matrix_reps_index_map.const_reference(), 
-                temp_dest_host.reference()
-            );
-            Slice<uint64_t>(destination.data(), destination.size(), false, nullptr).copy_from_slice(temp_dest_host.const_reference());
-        }
+        decode_set_values(
+            temp_dest.const_reference(),
+            this->matrix_reps_index_map.const_reference(), 
+            destination
+        );
     }
+    
 
-    void BatchEncoder::decode_polynomial(const Plaintext& plaintext, std::vector<uint64_t>& destination) const {
-        destination.resize(plaintext.data().size());
-        Slice<uint64_t>(destination.data(), destination.size(), false, nullptr)
-            .copy_from_slice(plaintext.data().const_reference());
+    void BatchEncoder::decode_polynomial_slice(const Plaintext& plaintext, utils::Slice<uint64_t> destination) const {
+        if (plaintext.is_ntt_form() || plaintext.parms_id() != parms_id_zero) {
+            throw std::invalid_argument("[BatchEncoder::decode_polynomial_slice] Plaintext is not in valid form.");
+        }
+        if (destination.size() != plaintext.data().size()) {
+            throw std::invalid_argument("[BatchEncoder::decode_polynomial_slice] Destination has incorrect size.");
+        }
+        destination.copy_from_slice(plaintext.data().const_reference());
     }
 
     Plaintext BatchEncoder::scale_up_new(const Plaintext& plain, std::optional<ParmsID> parms_id, MemoryPoolHandle pool) const {

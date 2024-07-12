@@ -1,4 +1,4 @@
-#include "header.cuh"
+#include "header.h"
 
 void register_ciphertext(pybind11::module& m) {
     
@@ -32,16 +32,19 @@ void register_ciphertext(pybind11::module& m) {
         .def("contains_seed", &Ciphertext::contains_seed)
         .def("expand_seed", &Ciphertext::expand_seed)
         .def("is_transparent", &Ciphertext::is_transparent)
-        .def("save", [](const Ciphertext& self, HeContextPointer context) {return save_he(self, context); })
+
+        .def("save", [](const Ciphertext& self, HeContextPointer context, CompressionMode mode) {return save_he(self, context, mode); },
+            py::arg("context"), COMPRESSION_MODE_ARGUMENT)
         .def("load", [](Ciphertext& self, const py::bytes& str, HeContextPointer context, MemoryPoolHandleArgument pool) {return load_he<Ciphertext>(self, str, context, nullopt_default_pool(pool)); },
             py::arg("str"), py::arg("context"), MEMORY_POOL_ARGUMENT)
         .def_static("load_new", [](const py::bytes& str, HeContextPointer context, MemoryPoolHandleArgument pool) {return load_new_he<Ciphertext>(str, context, nullopt_default_pool(pool)); },
             py::arg("str"), py::arg("context"), MEMORY_POOL_ARGUMENT)
-        .def("serialized_size", [](const Ciphertext& self, HeContextPointer context) {return serialized_size_he(self, context); })
-        .def("save_terms", [](const Ciphertext& self, HeContextPointer context, const py::array_t<size_t>& terms, MemoryPoolHandleArgument pool) {
-            ostringstream ss; self.save_terms(ss, context, get_vector_from_buffer(terms), nullopt_default_pool(pool)); 
+        .def("serialized_size_upperbound", [](const Ciphertext& self, HeContextPointer context, CompressionMode mode) {return serialized_size_upperbound_he(self, context, mode); },
+            py::arg("context") = nullptr, COMPRESSION_MODE_ARGUMENT)
+        .def("save_terms", [](const Ciphertext& self, HeContextPointer context, const py::array_t<size_t>& terms, MemoryPoolHandleArgument pool, CompressionMode mode) {
+            ostringstream ss; self.save_terms(ss, context, get_vector_from_buffer(terms), nullopt_default_pool(pool), mode); 
             return py::bytes(ss.str());
-        }, py::arg("context"), py::arg("terms"), MEMORY_POOL_ARGUMENT)
+        }, py::arg("context"), py::arg("terms"), MEMORY_POOL_ARGUMENT, COMPRESSION_MODE_ARGUMENT)
         .def("load_terms", [](Ciphertext& self, const py::bytes& str, HeContextPointer context, const py::array_t<size_t>& terms, MemoryPoolHandleArgument pool) {
             istringstream ss(str); self.load_terms(ss, context, get_vector_from_buffer(terms), nullopt_default_pool(pool)); 
         }, py::arg("str"), py::arg("context"), py::arg("terms"), MEMORY_POOL_ARGUMENT)
@@ -49,9 +52,9 @@ void register_ciphertext(pybind11::module& m) {
             istringstream ss(str); Ciphertext c; c.load_terms(ss, context, get_vector_from_buffer(terms), nullopt_default_pool(pool)); 
             return c;
         }, py::arg("str"), py::arg("context"), py::arg("terms"), MEMORY_POOL_ARGUMENT)
-        .def("serialized_terms_size", [](const Ciphertext& self, HeContextPointer context, const py::array_t<size_t>& terms) {
-            return self.serialized_terms_size(context, get_vector_from_buffer(terms));
-        })
+        .def("serialized_terms_size_upperbound", [](const Ciphertext& self, HeContextPointer context, const py::array_t<size_t>& terms, CompressionMode mode) {
+            return self.serialized_terms_size_upperbound(context, get_vector_from_buffer(terms), mode);
+        }, py::arg("context"), py::arg("terms"), COMPRESSION_MODE_ARGUMENT)
     ;
     
 }

@@ -1,4 +1,4 @@
-#include "test_multithread.cuh"
+#include "test_multithread.h"
 
 namespace tool {
 
@@ -24,12 +24,12 @@ namespace tool {
                 }
 
                 // pools count equal to threads count, each's device index is modulo device count
-                for (int i = 0; i < threads; i++) {
+                for (size_t i = 0; i < threads; i++) {
                     pools_.push_back(MemoryPool::create(i % device_count));
                 }
 
                 // contexts count equal to device count
-                for (int i = 0; i < std::min(static_cast<size_t>(device_count), threads); i++) {
+                for (size_t i = 0; i < std::min(static_cast<size_t>(device_count), threads); i++) {
                     GeneralHeContextParameters args_clone = args; args_clone.pool = pools_[i];
                     auto context = std::make_shared<GeneralHeContext>(args_clone);
                     contexts_.push_back(context);
@@ -38,7 +38,7 @@ namespace tool {
                 this->device_count = device_count;
             } else if (multiple_pools) {
                 // pools count equal to threads count, each's device index is 0
-                for (int i = 0; i < threads; i++) {
+                for (size_t i = 0; i < threads; i++) {
                     pools_.push_back(MemoryPool::create(0));
                 }
                 // only one context

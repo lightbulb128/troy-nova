@@ -1,4 +1,4 @@
-#include "galois.cuh"
+#include "galois.h"
 #include <thread>
 
 namespace troy {namespace utils {
@@ -171,6 +171,7 @@ namespace troy {namespace utils {
         if (device) {
             size_t total = this->coeff_count() * moduli.size() * pcount;
             size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(result.device_index());
             kernel_apply_ps<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 this->coeff_count_power(),
                 polys,
@@ -224,6 +225,7 @@ namespace troy {namespace utils {
         if (device) {
             size_t total = this->coeff_count() * coeff_modulus_size * pcount;
             size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(result.device_index());
             kernel_apply_ntt_ps<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 this->coeff_count_power(),
                 polys,

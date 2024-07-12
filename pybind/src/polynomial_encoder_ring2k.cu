@@ -1,4 +1,4 @@
-#include "header.cuh"
+#include "header.h"
 
 template<typename T>
 static void register_class_polynomial_encoder_ring2k(pybind11::module_& m, const char* name) {

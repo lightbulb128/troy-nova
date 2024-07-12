@@ -1,4 +1,4 @@
-#include "poly_small_mod.cuh"
+#include "poly_small_mod.h"
 
 namespace troy {namespace utils {
 
@@ -61,6 +61,7 @@ namespace troy {namespace utils {
             size_t total = pcount * moduli.size() * degree;
             size_t thread_count = min(total, KERNEL_THREAD_COUNT);
             size_t block_count = ceil_div<size_t>(total, thread_count);
+            cudaSetDevice(result.device_index());
             kernel_negate_ps<<<block_count, thread_count>>>(polys, pcount, degree, moduli, result);
             cudaStreamSynchronize(0);
         } else {
@@ -96,6 +97,7 @@ namespace troy {namespace utils {
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
+            cudaSetDevice(result.device_index());
             kernel_add_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys1, polys2, pcount, degree, moduli, result);
             cudaStreamSynchronize(0);
         } else {
@@ -129,6 +131,7 @@ namespace troy {namespace utils {
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
+            cudaSetDevice(result.device_index());
             kernel_sub_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys1, polys2, pcount, degree, moduli, result);
             cudaStreamSynchronize(0);
         } else {
@@ -164,6 +167,7 @@ namespace troy {namespace utils {
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
+            cudaSetDevice(result.device_index());
             kernel_add_scalar_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys, scalar, pcount, degree, moduli, result);
             cudaStreamSynchronize(0);
         } else {
@@ -197,6 +201,7 @@ namespace troy {namespace utils {
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
+            cudaSetDevice(result.device_index());
             kernel_sub_scalar_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys, scalar, pcount, degree, moduli, result);
             cudaStreamSynchronize(0);
         } else {
@@ -230,6 +235,7 @@ namespace troy {namespace utils {
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
+            cudaSetDevice(result.device_index());
             kernel_multiply_scalar_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys, scalar, pcount, degree, moduli, result);
             cudaStreamSynchronize(0);
         } else {
@@ -266,6 +272,7 @@ namespace troy {namespace utils {
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
+            cudaSetDevice(result.device_index());
             kernel_multiply_scalars_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys, scalars, pcount, degree, moduli, result);
             cudaStreamSynchronize(0);
         } else {
@@ -301,6 +308,7 @@ namespace troy {namespace utils {
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
+            cudaSetDevice(result.device_index());
             kernel_multiply_uint64operand_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys, operand, pcount, degree, moduli, result);
             cudaStreamSynchronize(0);
         } else {
@@ -357,6 +365,7 @@ namespace troy {namespace utils {
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
+            cudaSetDevice(result.device_index());
             kernel_dyadic_product_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys1, polys2, pcount, degree, moduli, result);
             cudaStreamSynchronize(0);
         } else {
@@ -415,6 +424,7 @@ namespace troy {namespace utils {
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
+            cudaSetDevice(result.device_index());
             kernel_negacyclic_shift_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys, shift, pcount, degree, moduli, result);
             cudaStreamSynchronize(0);
         } else {

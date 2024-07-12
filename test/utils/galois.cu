@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include "../test.cuh"
-#include "../../src/utils/galois.cuh"
+#include "../test.h"
+#include "../../src/utils/galois.h"
 
 using namespace std;
 using namespace troy;
@@ -10,7 +10,7 @@ namespace galois_tool {
     
     bool same_array_vector(ConstSlice<uint64_t> arr, const vector<uint64_t>& vec) {
         if (arr.size() != vec.size()) return false;
-        for (int i = 0; i < arr.size(); i++) {
+        for (size_t i = 0; i < arr.size(); i++) {
             if (arr[i] != vec[i]) return false;
         }
         return true;

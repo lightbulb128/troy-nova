@@ -1,4 +1,4 @@
-#include "ciphertext.cuh"
+#include "ciphertext.h"
 
 namespace troy {
 
@@ -49,7 +49,7 @@ namespace troy {
         this->seed() = 0;
     }
 
-    void Ciphertext::save(std::ostream& stream, HeContextPointer context) const {
+    size_t Ciphertext::save_raw(std::ostream& stream, HeContextPointer context) const {
         serialize::save_object(stream, this->parms_id());
         serialize::save_object(stream, this->polynomial_count());
         serialize::save_object(stream, this->coeff_modulus_size());
@@ -94,9 +94,10 @@ namespace troy {
                 serialize::save_array(stream, this->data().raw_pointer(), this->data().size());
             }
         }
+        return this->serialized_raw_size(context);
     }
 
-    void Ciphertext::load(std::istream& stream, HeContextPointer context, MemoryPoolHandle pool) {
+    void Ciphertext::load_raw(std::istream& stream, HeContextPointer context, MemoryPoolHandle pool) {
         serialize::load_object(stream, this->parms_id());
         serialize::load_object(stream, this->polynomial_count_);
         serialize::load_object(stream, this->coeff_modulus_size_);
@@ -145,7 +146,7 @@ namespace troy {
 
     }
     
-    size_t Ciphertext::serialized_size(HeContextPointer context) const {
+    size_t Ciphertext::serialized_raw_size(HeContextPointer context) const {
         size_t size = 0;
         size += sizeof(ParmsID); // parms_id
         size += sizeof(size_t); // polynomial_count
@@ -168,7 +169,7 @@ namespace troy {
         return size;
     }
 
-    void Ciphertext::save_terms(std::ostream& stream, HeContextPointer context, const std::vector<size_t>& terms, MemoryPoolHandle pool) const {
+    size_t Ciphertext::save_terms_raw(std::ostream& stream, HeContextPointer context, const std::vector<size_t>& terms, MemoryPoolHandle pool) const {
         serialize::save_object(stream, this->parms_id());
         serialize::save_object(stream, this->polynomial_count());
         serialize::save_object(stream, this->coeff_modulus_size());
@@ -232,10 +233,12 @@ namespace troy {
             utils::ConstSlice<uint64_t> data = this->polys(start_polynomial, this->polynomial_count_);
             serialize::save_array(stream, data.raw_pointer(), data.size());
         }
+
+        return this->serialized_terms_raw_size(context, terms);
     }
 
     
-    void Ciphertext::load_terms(std::istream& stream, HeContextPointer context, const std::vector<size_t>& terms, MemoryPoolHandle pool) {
+    void Ciphertext::load_terms_raw(std::istream& stream, HeContextPointer context, const std::vector<size_t>& terms, MemoryPoolHandle pool) {
         serialize::load_object(stream, this->parms_id());
         serialize::load_object(stream, this->polynomial_count_);
         serialize::load_object(stream, this->coeff_modulus_size_);
@@ -294,7 +297,7 @@ namespace troy {
         if (contains_seed) this->expand_seed(context);
     }
 
-    size_t Ciphertext::serialized_terms_size(HeContextPointer context, const std::vector<size_t>& terms) const {
+    size_t Ciphertext::serialized_terms_raw_size(HeContextPointer context, const std::vector<size_t>& terms) const {
         size_t size = 0;
         size += sizeof(ParmsID); // parms_id
         size += sizeof(size_t); // polynomial_count

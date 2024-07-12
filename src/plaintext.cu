@@ -1,8 +1,8 @@
-#include "plaintext.cuh"
+#include "plaintext.h"
 
 namespace troy {
 
-    void Plaintext::save(std::ostream& stream) const {
+    size_t Plaintext::save_raw(std::ostream& stream) const {
         serialize::save_object(stream, this->parms_id());
         serialize::save_object(stream, this->scale());
         serialize::save_object(stream, this->coeff_count_);
@@ -17,9 +17,10 @@ namespace troy {
         serialize::save_bool(stream, this->is_ntt_form());
         serialize::save_object(stream, this->poly_modulus_degree());
         serialize::save_object(stream, this->coeff_modulus_size());
+        return this->serialized_raw_size();
     }
 
-    void Plaintext::load(std::istream& stream, MemoryPoolHandle pool) {
+    void Plaintext::load_raw(std::istream& stream, MemoryPoolHandle pool) {
         serialize::load_object(stream, this->parms_id());
         serialize::load_object(stream, this->scale());
         serialize::load_object(stream, this->coeff_count_);
@@ -38,7 +39,7 @@ namespace troy {
         serialize::load_object(stream, this->coeff_modulus_size());
     }
     
-    size_t Plaintext::serialized_size() const {
+    size_t Plaintext::serialized_raw_size() const {
         size_t size = 0;
         size += sizeof(ParmsID); // parms_id
         size += sizeof(double); // scale

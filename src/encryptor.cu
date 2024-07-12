@@ -1,5 +1,5 @@
-#include "encryptor.cuh"
-#include "utils/scaling_variant.cuh"
+#include "encryptor.h"
+#include "utils/scaling_variant.h"
 
 namespace troy {
 
@@ -186,9 +186,6 @@ namespace troy {
                 ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
                 size_t coeff_modulus_size = coeff_modulus.size();
                 size_t coeff_count = parms.poly_modulus_degree();
-                size_t plain_coeff_count = plain.coeff_count();
-                uint64_t plain_upper_half_threshold = context_data->plain_upper_half_threshold();
-                ConstSlice<uint64_t> plain_upper_half_increment = context_data->plain_upper_half_increment();
                 ConstSlice<utils::NTTTables> ntt_tables = context_data->small_ntt_tables();
                 
                 // c_{0} = pk_{0}*u + p*e_{0} + M

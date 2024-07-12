@@ -1,4 +1,4 @@
-#include "header.cuh"
+#include "header.h"
 
 void register_encryptor(pybind11::module& m) {
 
@@ -11,8 +11,13 @@ void register_encryptor(pybind11::module& m) {
             self.to_device_inplace(nullopt_default_pool(pool));
         }, MEMORY_POOL_ARGUMENT)
 
-        .def("set_public_key", &Encryptor::set_public_key)
-        .def("set_secret_key", &Encryptor::set_secret_key)
+        .def("set_public_key", [](Encryptor& self, const PublicKey& public_key, MemoryPoolHandleArgument pool) {
+            self.set_public_key(public_key, nullopt_default_pool(pool));
+        }, py::arg("public_key"), MEMORY_POOL_ARGUMENT)
+        .def("set_secret_key", [](Encryptor& self, const SecretKey& secret_key, MemoryPoolHandleArgument pool) {
+            self.set_secret_key(secret_key, nullopt_default_pool(pool));
+        }, py::arg("secret_key"), MEMORY_POOL_ARGUMENT)
+        
         .def("public_key", &Encryptor::public_key, py::return_value_policy::reference)
         .def("secret_key", &Encryptor::secret_key, py::return_value_policy::reference)
 

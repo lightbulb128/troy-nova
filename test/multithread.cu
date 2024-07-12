@@ -1,4 +1,4 @@
-#include "test_adv.cuh"
+#include "test_adv.h"
 #include "gtest/gtest.h"
 #include <gtest/gtest.h>
 #include <thread>
@@ -120,18 +120,13 @@ namespace multithread {
         auto context_pool = context.context()->pool();
 
         SchemeType scheme = context.scheme();
-        uint64_t t = context.t();
         double scale = context.scale();
         double tolerance = context.tolerance();
         bool device = context.context()->on_device();
         if (!device) {
             IF_FALSE_PRINT_RETURN(context_pool == nullptr, "context_pool");
         }
-
-        if (device) {
-            context_pool->deny();
-            utils::MemoryPool::GlobalPool()->deny();
-        }
+        
 
         auto good_pool = [device, context_pool](MemoryPoolHandle pool, MemoryPoolHandle expect) {
             if (device) {
@@ -144,10 +139,13 @@ namespace multithread {
             }
         };
 
+
+
         auto create_new_memory_pool = [device, device_index]() {
             return device ? MemoryPool::create(device_index) : nullptr;
         };
-        
+
+
         // test batch encoder
         if (scheme == SchemeType::BFV || scheme == SchemeType::BGV) { 
             const BatchEncoder& encoder = context.encoder().batch();
@@ -175,6 +173,7 @@ namespace multithread {
 
             } // if simd_encoding_supported
 
+
             { // encode_polynomial
                 MemoryPoolHandle pool = create_new_memory_pool();
                 GeneralVector message = context.random_polynomial_full();
@@ -193,6 +192,7 @@ namespace multithread {
                 GeneralVector decoded = context.encoder().decode_polynomial(encoded, pool);
                 IF_FALSE_PRINT_RETURN(message.near_equal(decoded, tolerance), "encode_polynomial_new/correct");
             }
+
 
             if (scheme == SchemeType::BFV) {
 
@@ -452,6 +452,7 @@ namespace multithread {
             }
 
         }
+            
 
         { // negate
             MemoryPoolHandle pool = create_new_memory_pool();
@@ -469,7 +470,7 @@ namespace multithread {
             }
             { // negate_inplace
                 Ciphertext encrypted = context.encryptor().encrypt_asymmetric_new(encoded, nullptr, pool);
-                context.evaluator().negate_inplace(encrypted, pool);
+                context.evaluator().negate_inplace(encrypted);
                 IF_FALSE_PRINT_RETURN(good_pool(encrypted.pool(), pool), "negate_inplace/pool");
                 Plaintext decrypted = context.decryptor().decrypt_new(encrypted, pool);
                 GeneralVector decoded = context.encoder().decode_simd(decrypted, pool);
@@ -484,6 +485,7 @@ namespace multithread {
                 IF_FALSE_PRINT_RETURN(context.near_equal(truth, decoded), "negate_new/correct");
             }
         }
+
 
         { // add
             GeneralVector message0 = context.random_simd_full();
@@ -596,6 +598,7 @@ namespace multithread {
                 IF_FALSE_PRINT_RETURN(context.near_equal(truth, decoded), "add_plain_scaled/correct");
             }
         }
+
 
         { // sub
             GeneralVector message0 = context.random_simd_full();
@@ -722,12 +725,6 @@ namespace multithread {
                 Ciphertext result;
                 context.evaluator().multiply(encrypted0, encrypted1, result, pool);
                 IF_FALSE_PRINT_RETURN(good_pool(result.pool(), pool), "multiply/pool");
-                if (device) {
-                    context_pool->deny(false);
-                    // decryptor will resize its secret_key_array, so context_pool will be used once.
-                    context.decryptor().decrypt_new(result, pool);
-                    context_pool->deny(true);
-                }
                 Plaintext decrypted = context.decryptor().decrypt_new(result, pool);
                 IF_FALSE_PRINT_RETURN(good_pool(decrypted.pool(), pool), "multiply/decrypt-pool");
                 GeneralVector decoded = context.encoder().decode_simd(decrypted, pool);
@@ -858,9 +855,9 @@ namespace multithread {
         { // keyswitching
             MemoryPoolHandle context_pool_other = create_new_memory_pool();
             KeyGenerator keygen_other = KeyGenerator(context.context(), context_pool_other);
-            SecretKey secret_key_other = keygen_other.secret_key();
+            SecretKey secret_key_other = keygen_other.secret_key().clone(context_pool_other);
             Encryptor encryptor_other = Encryptor(context.context());
-            encryptor_other.set_secret_key(secret_key_other);
+            encryptor_other.set_secret_key(secret_key_other, context_pool_other);
             KSwitchKeys kswitch_key = context.key_generator().create_keyswitching_key(secret_key_other, false, context_pool_other);
             if (device) context_pool_other->deny();
 
@@ -896,12 +893,6 @@ namespace multithread {
 
         { // relinearize
             MemoryPoolHandle pool = create_new_memory_pool();
-            if (device) {
-                context_pool->deny(false);
-                // keygen will resize its secret_key_array, so context_pool will be used once.
-                context.key_generator().create_relin_keys(false, 2, pool);
-                context_pool->deny(true);
-            }
             auto relin_keys = context.key_generator().create_relin_keys(false, 2, pool);
             IF_FALSE_PRINT_RETURN(good_pool(relin_keys.pool(), pool), "relinearize/keys-pool");
             GeneralVector message = context.random_simd_full();
@@ -977,7 +968,7 @@ namespace multithread {
             }
             { // mod_switch_plain_to_next_inplace
                 Plaintext mod_switched = encoded.clone(pool);
-                context.evaluator().mod_switch_plain_to_next_inplace(mod_switched, pool);
+                context.evaluator().mod_switch_plain_to_next_inplace(mod_switched);
                 IF_FALSE_PRINT_RETURN(good_pool(mod_switched.pool(), pool), "mod_switch_plain_to_next_inplace/pool");
                 GeneralVector decoded = context.encoder().decode_simd(mod_switched, pool);
                 IF_FALSE_PRINT_RETURN(context.near_equal(message, decoded), "mod_switch_plain_to_next_inplace/correct");
@@ -1136,6 +1127,7 @@ namespace multithread {
             }
         }
 
+
         { // lwe related
             MemoryPoolHandle pool = create_new_memory_pool();
             GeneralVector message = context.random_polynomial_full();
@@ -1181,10 +1173,7 @@ namespace multithread {
 
         }
 
-        if (device) {
-            context_pool->deny(false);
-            utils::MemoryPool::GlobalPool()->deny(false);
-        }
+
 
         return true;
 
@@ -1202,6 +1191,18 @@ namespace multithread {
             to_device_after_keygeneration, use_special_prime_for_encryption, 
             context_pool
         );
+        
+        // create relin keys so that skarray is expanded
+        context.key_generator().create_relin_keys(false, 2, context_pool);
+        // decrypt a 3-sized ciphertext so that skarray is expanded
+        auto c = context.encryptor().encrypt_zero_asymmetric_new(std::nullopt, nullptr, context_pool);
+        context.evaluator().square_inplace(c, context_pool);
+        context.decryptor().decrypt_new(c, context_pool);
+
+        if (device) {
+            context_pool->deny();
+            utils::MemoryPool::GlobalPool()->deny(false);
+        }
 
         auto test_thread = [
             context_pool, scheme, &context
@@ -1268,21 +1269,39 @@ namespace multithread {
             bool to_device_after_keygeneration = false, bool use_special_prime_for_encryption = false
     ) {
 
-        auto test_thread = [=](int thread) {
-            size_t device_index = thread % device_count;
-            MemoryPoolHandle context_pool = device ? MemoryPool::create(device_index) : nullptr;
-            GeneralHeContext context(
+        std::vector<std::shared_ptr<GeneralHeContext>> contexts;
+
+        for (size_t i = 0; i < device_count; i++) {
+            MemoryPoolHandle context_pool = device ? MemoryPool::create(i) : nullptr;
+            auto context = std::make_shared<GeneralHeContext>(
                 device, scheme, n, log_t, log_qi, 
                 expand_mod_chain, seed, input_max, scale, tolerance, 
                 to_device_after_keygeneration, use_special_prime_for_encryption, 
                 context_pool
             );
-            return test_multiple_pools(context, device_index, thread);
+            contexts.push_back(context);
+            
+            // create relin keys so that skarray is expanded
+            context->key_generator().create_relin_keys(false, 2, context_pool);
+            // decrypt a 3-sized ciphertext so that skarray is expanded
+            auto c = context->encryptor().encrypt_zero_asymmetric_new(std::nullopt, nullptr, context_pool);
+            context->evaluator().square_inplace(c, context_pool);
+            context->decryptor().decrypt_new(c, context_pool);
+
+            if (device) {
+                context_pool->deny();
+                utils::MemoryPool::GlobalPool()->deny();
+            }
+        }
+
+        auto test_thread = [=](int thread, std::shared_ptr<GeneralHeContext> context) {
+            size_t device_index = thread % device_count;
+            return test_multiple_pools(*context, device_index, thread);
         };
 
         vector<std::future<bool>> thread_instances;
         for (size_t i = 0; i < threads; i++) {
-            thread_instances.push_back(std::async(test_thread, i));
+            thread_instances.push_back(std::async(test_thread, i, contexts[i % device_count]));
         }
 
         for (size_t i = 0; i < threads; i++) {
@@ -1303,7 +1322,7 @@ namespace multithread {
         if (success != cudaSuccess || device_count <= 1) {
             GTEST_SKIP_("No multiple devices available");
         }
-        test_multi_devices(device_count * 2, device_count, true, 
+        test_multi_devices(device_count * 2 + 1, device_count, true, 
             SchemeType::BFV, 32, 35, 
             { 60, 40, 40, 60 }, true, 0x123, 0
         );
@@ -1320,7 +1339,7 @@ namespace multithread {
         if (success != cudaSuccess || device_count <= 1) {
             GTEST_SKIP_("No multiple devices available");
         }
-        test_multi_devices(device_count * 2, device_count, true, 
+        test_multi_devices(device_count * 2 + 1, device_count, true, 
             SchemeType::BGV, 32, 35, 
             { 60, 40, 40, 60 }, true, 0x123, 0
         );
@@ -1338,7 +1357,7 @@ namespace multithread {
         if (success != cudaSuccess || device_count <= 1) {
             GTEST_SKIP_("No multiple devices available");
         }
-        test_multi_devices(device_count * 2, device_count, true,
+        test_multi_devices(device_count * 2 + 1, device_count, true,
             SchemeType::CKKS, 32, 0, 
             { 60, 40, 40, 60 }, true, 0x123, 
             10, 1ull<<20, 1e-2

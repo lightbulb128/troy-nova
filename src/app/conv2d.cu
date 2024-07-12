@@ -1,11 +1,11 @@
-#include "conv2d.cuh"
+#include "conv2d.h"
 
 namespace troy { namespace linear {
 
     void Conv2dHelper::determine_block() {
         size_t best = 2147483647;
         // find b, h, w, ci, co, such that minimizes (ceil(B/b)*ceil((H-kh+1)/(h-kh+1))*ceil((W-kh+1)/(h-kh+1))*(ceil(Ci/ci)+ceil(Co/co)))
-        size_t bestB, bestH, bestW, bestCi, bestCo;
+        size_t bestB = 0, bestH = 0, bestW = 0, bestCi = 0, bestCo = 0;
         for (size_t b = batch_size; b >= 1; b--) {
             size_t upper = slot_count / b;
             for (size_t h = std::min(image_height, upper); h >= kernel_height; h--) {

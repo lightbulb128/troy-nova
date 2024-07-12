@@ -1,5 +1,5 @@
-#include "number_theory.cuh"
-#include "uint_small_mod.cuh"
+#include "number_theory.h"
+#include "uint_small_mod.h"
 
 namespace troy {namespace utils {
 

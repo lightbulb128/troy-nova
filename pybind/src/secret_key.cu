@@ -1,4 +1,4 @@
-#include "header.cuh"
+#include "header.h"
 
 void register_secret_key(pybind11::module& m) {
     
@@ -21,14 +21,16 @@ void register_secret_key(pybind11::module& m) {
         .def("on_device", &SecretKey::on_device)
         .def("parms_id", py::overload_cast<>(&SecretKey::parms_id, py::const_), py::return_value_policy::reference)
         .def("set_parms_id", [](SecretKey& self, const ParmsID& parms_id){ self.parms_id() = parms_id; })
-        .def("save", [](const SecretKey& self) {return save(self); })
+        .def("save", [](const SecretKey& self, CompressionMode mode) {return save(self, mode); }
+            , COMPRESSION_MODE_ARGUMENT)
         .def("load", [](SecretKey& self, const py::bytes& str, MemoryPoolHandleArgument pool) {
             return load<SecretKey>(self, str, nullopt_default_pool(pool)); 
         }, py::arg("str"), MEMORY_POOL_ARGUMENT)
         .def_static("load_new", [](const py::bytes& str, MemoryPoolHandleArgument pool) {
             return load_new<SecretKey>(str, nullopt_default_pool(pool)); 
         }, py::arg("str"), MEMORY_POOL_ARGUMENT)
-        .def("serialized_size", [](const SecretKey& self) {return serialized_size(self); })
+        .def("serialized_size_upperbound", [](const SecretKey& self, CompressionMode mode) {return serialized_size_upperbound(self, mode); }
+            , COMPRESSION_MODE_ARGUMENT)
         .def("as_plaintext", [](const SecretKey& self) {return self.as_plaintext(); }, py::return_value_policy::reference)
         .def("get_plaintext", [](const SecretKey& self, MemoryPoolHandleArgument pool) {return self.as_plaintext().clone(nullopt_default_pool(pool)); },
             MEMORY_POOL_ARGUMENT)

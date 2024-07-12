@@ -1,5 +1,5 @@
-#include "rns_tool.cuh"
-#include "uint_small_mod.cuh"
+#include "rns_tool.h"
+#include "uint_small_mod.h"
 
 namespace troy {namespace utils {
 
@@ -370,7 +370,6 @@ namespace troy {namespace utils {
     static void host_divide_and_round_q_last_inplace(const RNSTool& self, Slice<uint64_t> input) {
         
         size_t base_q_size = self.base_q().size();
-        ConstPointer<Modulus> last_modulus = self.base_q().base().at(base_q_size - 1);
         size_t coeff_count = self.coeff_count();
         size_t last_input_offset = (base_q_size - 1) * coeff_count;
         size_t half = self.q_last_half();
@@ -404,7 +403,6 @@ namespace troy {namespace utils {
         size_t i = global_index / coeff_count;
         size_t j = global_index % coeff_count;
 
-        const Modulus& last_modulus = *base_q.at(base_q_size - 1);
         size_t last_input_offset = (base_q.size() - 1) * coeff_count;
         Slice<uint64_t> input_last = input.slice(last_input_offset, last_input_offset + coeff_count);
         Slice<uint64_t> input_i = input.slice(i * coeff_count, (i + 1) * coeff_count);
@@ -433,6 +431,7 @@ namespace troy {namespace utils {
         utils::add_scalar_inplace(input_last, this->q_last_half(), this->base_q().base().at(base_q_size - 1));
         if (device) {
             size_t block_count = utils::ceil_div(this->coeff_count() * (base_q_size - 1), utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(input.device_index());
             kernel_divide_and_round_q_last_inplace<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 this->base_q().base(),
                 this->coeff_count(),
@@ -447,7 +446,6 @@ namespace troy {namespace utils {
     }
 
     static void host_divide_and_round_q_last_ntt_inplace_step1(const RNSTool& self, Slice<uint64_t> input, Slice<uint64_t> temp) {
-        
         size_t base_q_size = self.base_q().size();
         size_t coeff_count = self.coeff_count();
         Slice<uint64_t> input_last = input.slice((base_q_size - 1) * coeff_count, base_q_size * coeff_count);
@@ -455,7 +453,6 @@ namespace troy {namespace utils {
 
         for (size_t i = 0; i < base_q_size - 1; i++) {
             ConstPointer<Modulus> modulus = self.base_q().base().at(i);
-            Slice<uint64_t> input_i = input.slice(i * coeff_count, (i + 1) * coeff_count);
             Slice<uint64_t> temp_i = temp.slice(i * coeff_count, (i + 1) * coeff_count);
             if (modulus->value() < last_modulus->value()) {
                 utils::modulo(input_last.as_const(), modulus, temp_i);
@@ -480,7 +477,6 @@ namespace troy {namespace utils {
         const Modulus& last_modulus = *base_q.at(base_q_size - 1);
         size_t last_input_offset = (base_q.size() - 1) * coeff_count;
         Slice<uint64_t> input_last = input.slice(last_input_offset, last_input_offset + coeff_count);
-        Slice<uint64_t> input_i = input.slice(i * coeff_count, (i + 1) * coeff_count);
         Slice<uint64_t> temp_i = temp.slice(i * coeff_count, (i + 1) * coeff_count);
         uint64_t temp_value;
         const Modulus& modulus = *base_q.at(i);
@@ -497,10 +493,9 @@ namespace troy {namespace utils {
     static void divide_and_round_q_last_ntt_inplace_step1(const RNSTool& self, Slice<uint64_t> input, Slice<uint64_t> temp) {
         bool device = self.on_device();
         size_t base_q_size = self.base_q().size();
-        size_t coeff_count = self.coeff_count();
-        Slice<uint64_t> input_last = input.slice((base_q_size - 1) * coeff_count, base_q_size * coeff_count);
         if (device) {
             size_t block_count = utils::ceil_div(self.coeff_count() * (base_q_size - 1), utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(input.device_index());
             kernel_divide_and_round_q_last_ntt_inplace_step1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 self.base_q().base(),
                 self.coeff_count(),
@@ -518,8 +513,6 @@ namespace troy {namespace utils {
         
         size_t base_q_size = self.base_q().size();
         size_t coeff_count = self.coeff_count();
-        Slice<uint64_t> input_last = input.slice((base_q_size - 1) * coeff_count, base_q_size * coeff_count);
-        ConstPointer<Modulus> last_modulus = self.base_q().base().at(base_q_size - 1);
 
         for (size_t i = 0; i < base_q_size - 1; i++) {
             ConstPointer<Modulus> modulus = self.base_q().base().at(i);
@@ -543,9 +536,6 @@ namespace troy {namespace utils {
         size_t i = global_index / coeff_count;
         size_t j = global_index % coeff_count;
 
-        const Modulus& last_modulus = *base_q.at(base_q_size - 1);
-        size_t last_input_offset = (base_q.size() - 1) * coeff_count;
-        Slice<uint64_t> input_last = input.slice(last_input_offset, last_input_offset + coeff_count);
         Slice<uint64_t> input_i = input.slice(i * coeff_count, (i + 1) * coeff_count);
         ConstSlice<uint64_t> temp_i = temp.const_slice(i * coeff_count, (i + 1) * coeff_count);
         uint64_t temp_value;
@@ -560,10 +550,9 @@ namespace troy {namespace utils {
     static void divide_and_round_q_last_ntt_inplace_step2(const RNSTool& self, Slice<uint64_t> input, ConstSlice<uint64_t> temp) {
         bool device = self.on_device();
         size_t base_q_size = self.base_q().size();
-        size_t coeff_count = self.coeff_count();
-        Slice<uint64_t> input_last = input.slice((base_q_size - 1) * coeff_count, base_q_size * coeff_count);
         if (device) {
             size_t block_count = utils::ceil_div(self.coeff_count() * (base_q_size - 1), utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(input.device_index());
             kernel_divide_and_round_q_last_ntt_inplace_step2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 self.base_q().base(),
                 self.coeff_count(),
@@ -689,6 +678,7 @@ namespace troy {namespace utils {
         if (device) {
             size_t base_q_size = this->base_q().size();
             size_t block_count = utils::ceil_div(coeff_count * base_q_size, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(input.device_index());
             kernel_fast_b_conv_sk_step1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 base_B.base(),
                 this->base_q().base(),
@@ -794,6 +784,7 @@ namespace troy {namespace utils {
 
         if (device) {
             size_t block_count = utils::ceil_div(coeff_count * base_Bsk_size, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(input.device_index());
             kernel_sm_mrq<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 base_Bsk.base(),
                 this->m_tilde(),
@@ -859,6 +850,7 @@ namespace troy {namespace utils {
 
         if (this->on_device()) {
             size_t block_count = utils::ceil_div(coeff_count * base_Bsk_size, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(input.device_index());
             kernel_fast_floor<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 this->base_Bsk().base(),
                 this->inv_prod_q_mod_Bsk(),
@@ -943,6 +935,7 @@ namespace troy {namespace utils {
         size_t coeff_count = self.coeff_count();
         if (device) {
             size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(destination.device_index());
             kernel_host_decrypt_scale_and_round_step1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 self.gamma(),
                 self.t(),
@@ -1032,7 +1025,6 @@ namespace troy {namespace utils {
 
     __global__ static void kernel_mod_t_and_divide_q_last_inplace_step1(
         ConstSlice<Modulus> base_q,
-        ConstPointer<Modulus> t,
         size_t coeff_count,
         ConstSlice<uint64_t> neg_c_last_mod_t,
         ConstSlice<MultiplyUint64Operand> inv_q_last_mod_q,
@@ -1064,9 +1056,9 @@ namespace troy {namespace utils {
         size_t coeff_count = self.coeff_count();
         if (device) {
             size_t block_count = utils::ceil_div(coeff_count * (base_q_size - 1), utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(input.device_index());
             kernel_mod_t_and_divide_q_last_inplace_step1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 self.base_q().base(),
-                self.t(),
                 coeff_count,
                 neg_c_last_mod_t,
                 self.inv_q_last_mod_q(),
@@ -1198,6 +1190,7 @@ namespace troy {namespace utils {
         if (device) {
             size_t block_count = utils::ceil_div(coeff_count * (base_q_size - 1), utils::KERNEL_THREAD_COUNT);
             Array<uint64_t> delta_mod_q_i(coeff_count * (base_q_size - 1), device, pool);
+            cudaSetDevice(input.device_index());
             kernel_mod_t_and_divide_q_last_ntt_inplace_step1_inner1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 self.base_q().base(),
                 coeff_count,
@@ -1207,6 +1200,7 @@ namespace troy {namespace utils {
             );
             cudaStreamSynchronize(0);
             utils::ntt_negacyclic_harvey_p(delta_mod_q_i.reference(), coeff_count, rns_ntt_tables.const_slice(0, base_q_size - 1));
+            cudaSetDevice(input.device_index());
             kernel_mod_t_and_divide_q_last_ntt_inplace_step1_inner2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 self.base_q().base(),
                 coeff_count,

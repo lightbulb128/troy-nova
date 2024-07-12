@@ -1,4 +1,4 @@
-#include "poly_to_string.cuh"
+#include "poly_to_string.h"
 #include <algorithm>
 
 namespace troy::utils {

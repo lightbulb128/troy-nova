@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 #include <sstream>
-#include "../test_adv.cuh"
-#include "../../src/app/matmul.cuh"
+#include "../test_adv.h"
+#include "../../src/app/matmul.h"
 
 namespace matmul_ring2k {
 
@@ -77,13 +77,9 @@ namespace matmul_ring2k {
             automorphism_key = keygen.create_automorphism_keys(false);
         }
         
-        Plain2d x_encoded = helper.encode_inputs_ring2k(encoder, x.data(), std::nullopt);
-        Plain2d w_encoded = helper.encode_weights_ring2k(encoder, w.data(), std::nullopt);
+        Plain2d x_encoded = helper.encode_inputs_ring2k(encoder, x.data(), std::nullopt, true);
+        Plain2d w_encoded = helper.encode_weights_ring2k(encoder, w.data(), std::nullopt, false);
         Plain2d s_encoded = helper.encode_outputs_ring2k(encoder, s.data(), std::nullopt);
-
-        std::cout << "x_encoded: " << x_encoded[0][0].data() << std::endl;
-        std::cout << "w_encoded: " << w_encoded[0][0].data() << std::endl;
-        std::cout << "s_encoded: " << s_encoded[0][0].data() << std::endl;
 
         Cipher2d x_encrypted = x_encoded.encrypt_asymmetric(encryptor);
 

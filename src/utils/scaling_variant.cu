@@ -1,4 +1,4 @@
-#include "scaling_variant.cuh"
+#include "scaling_variant.h"
 
 namespace troy {namespace scaling_variant {
 
@@ -55,6 +55,7 @@ namespace troy {namespace scaling_variant {
         } else {
             size_t total = coeff_modulus_size * plain_coeff_count;
             size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(plain_data.device_index());
             kernel_translate_plain<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 plain_coeff_count,
                 coeff_count,
@@ -170,6 +171,7 @@ namespace troy {namespace scaling_variant {
         } else {
             size_t total = plain_coeff_count * coeff_modulus_size;
             size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(destination.device_index());
             kernel_multiply_translate_plain<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 plain_coeff_count,
                 coeff_count,
@@ -231,6 +233,7 @@ namespace troy {namespace scaling_variant {
             } 
         } else {
             size_t block_count = utils::ceil_div(plain_coeff_count, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(temp.device_index());
             kernel_multiply_plain_normal_no_fast_plain_lift<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 plain_coeff_count, coeff_modulus_size,
                 plain, temp, plain_upper_half_threshold, plain_upper_half_increment
@@ -274,6 +277,7 @@ namespace troy {namespace scaling_variant {
         } else {
             size_t total = plain_coeff_count * coeff_modulus_size;
             size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(temp.device_index());
             kernel_multiply_plain_normal_fast_plain_lift<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 plain_coeff_count, coeff_count, coeff_modulus_size,
                 plain, temp, plain_upper_half_threshold, plain_upper_half_increment
@@ -283,7 +287,6 @@ namespace troy {namespace scaling_variant {
     }
 
     void centralize(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, MemoryPoolHandle pool) {
-        bool device = plain.on_device();
         if (!utils::device_compatible(*context_data, plain, destination)) {
             throw std::invalid_argument("[scaling_variant::centralize] Arguments are not on the same device.");
         }
@@ -295,8 +298,6 @@ namespace troy {namespace scaling_variant {
             throw std::invalid_argument("[scaling_variant::centralize] Plain coeff count too large.");
         }
         size_t coeff_modulus_size = coeff_modulus.size();
-        ConstSlice<uint64_t> plain_data = plain.data().const_reference();
-        ConstSlice<MultiplyUint64Operand> coeff_div_plain_modulus = context_data->coeff_div_plain_modulus();
         uint64_t plain_upper_half_threshold = context_data->plain_upper_half_threshold();
         ConstSlice<uint64_t> plain_upper_half_increment = context_data->plain_upper_half_increment();
         if (destination.size() != coeff_modulus_size * coeff_count) {

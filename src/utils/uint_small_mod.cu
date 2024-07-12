@@ -1,4 +1,4 @@
-#include "uint_small_mod.cuh"
+#include "uint_small_mod.h"
 
 namespace troy {namespace utils {
     

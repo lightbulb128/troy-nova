@@ -1,6 +1,8 @@
-#include "encryption_parameters.cuh"
-#include "evaluator.cuh"
-#include "utils/polynomial_buffer.cuh"
+#include "encryption_parameters.h"
+#include "evaluator.h"
+#include "utils/dynamic_array.h"
+#include "utils/polynomial_buffer.h"
+#include <thread>
 
 namespace troy {
 
@@ -62,11 +64,14 @@ namespace troy {
     ) {
         uint64_t t = plain_modulus.value();
         uint64_t half_t = t >> 1;
+        // dunno why GCC complains about an unused typedef here
+        #pragma GCC diagnostic ignored "-Wunused-local-typedefs"
         auto sum_abs = [half_t, t](uint64_t x, uint64_t y) -> uint64_t {
             int64_t x_bal = x > half_t ? static_cast<int64_t>(x - t) : static_cast<int64_t>(x);
             int64_t y_bal = y > half_t ? static_cast<int64_t>(y - t) : static_cast<int64_t>(y);
             return static_cast<uint64_t>(std::abs(x_bal) + std::abs(y_bal));
         };
+        #pragma GCC diagnostic pop
         uint64_t ratio = 1;
         if (!utils::try_invert_uint64_mod(factor1, plain_modulus, ratio)) {
             throw std::logic_error("[balance_correction_factors] Failed to invert factor1.");
@@ -131,7 +136,7 @@ namespace troy {
         return context_data_ptr.value();
     }
 
-    void Evaluator::negate_inplace(Ciphertext& encrypted, MemoryPoolHandle pool) const {
+    void Evaluator::negate_inplace(Ciphertext& encrypted) const {
         check_ciphertext("[Evaluator::negate_inplace]", encrypted);
         ContextDataPointer context_data = this->get_context_data("[Evaluator::negate_inplace]", encrypted.parms_id());
         const EncryptionParameters& parms = context_data->parms();
@@ -609,7 +614,6 @@ namespace troy {
         const EncryptionParameters& parms = context_data->parms();
         size_t coeff_count = parms.poly_modulus_degree();
         ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
-        size_t coeff_modulus_size = coeff_modulus.size();
         size_t encrypted_size = encrypted.polynomial_count();
 
         if (encrypted_size != 2) {
@@ -754,6 +758,7 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(coeff_count * key_component_count, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(t_poly_lazy.device_index());
             kernel_ski_util1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_poly_lazy, coeff_count, key_component_count, 
                 key_vector_j, key_poly_coeff_size, t_operand, key_index, key_modulus
@@ -769,8 +774,7 @@ namespace troy {
         ConstSlice<uint64_t> key_vector_j,
         size_t key_poly_coeff_size,
         ConstSlice<uint64_t> t_operand,
-        size_t key_index,
-        ConstPointer<Modulus> key_modulus
+        size_t key_index
     ) {
         size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
         if (global_index >= coeff_count * key_component_count) return;
@@ -792,8 +796,7 @@ namespace troy {
         ConstSlice<uint64_t> key_vector_j,
         size_t key_poly_coeff_size,
         ConstSlice<uint64_t> t_operand,
-        size_t key_index,
-        ConstPointer<Modulus> key_modulus
+        size_t key_index
     ) {
         bool device = t_poly_lazy.on_device();
         if (!device) {
@@ -810,9 +813,10 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(coeff_count * key_component_count, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(t_poly_lazy.device_index());
             kernel_ski_util2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_poly_lazy, coeff_count, key_component_count, 
-                key_vector_j, key_poly_coeff_size, t_operand, key_index, key_modulus
+                key_vector_j, key_poly_coeff_size, t_operand, key_index
             );
             cudaStreamSynchronize(0);
         }
@@ -850,6 +854,7 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(coeff_count * key_component_count, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(t_poly_lazy.device_index());
             kernel_ski_util3<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_poly_lazy, coeff_count, key_component_count, rns_modulus_size, t_poly_prod_iter
             );
@@ -896,6 +901,7 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(coeff_count * key_component_count, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(t_poly_lazy.device_index());
             kernel_ski_util4<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_poly_lazy, coeff_count, key_component_count, 
                 rns_modulus_size, t_poly_prod_iter, key_modulus
@@ -960,7 +966,6 @@ namespace troy {
         ConstSlice<Modulus> key_modulus,
         ConstSlice<NTTTables> key_ntt_tables,
         size_t decomp_modulus_size,
-        size_t rns_modulus_size,
         uint64_t qk_inv_qp,
         uint64_t qk,
         ConstSlice<MultiplyUint64Operand> modswitch_factors,
@@ -1001,6 +1006,7 @@ namespace troy {
         } else {
             Array<uint64_t> delta(coeff_count * decomp_modulus_size, true, pool);
             size_t block_count = utils::ceil_div(coeff_count * decomp_modulus_size, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(t_last.device_index());
             kernel_ski_util5_step1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_last, coeff_count, plain_modulus, key_modulus, 
                 decomp_modulus_size, qk_inv_qp, qk,
@@ -1008,6 +1014,7 @@ namespace troy {
             );
             cudaStreamSynchronize(0);
             utils::ntt_negacyclic_harvey_p(delta.reference(), coeff_count, key_ntt_tables.const_slice(0, decomp_modulus_size));
+            cudaSetDevice(t_poly_prod_i.device_index());
             kernel_ski_util5_step2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_poly_prod_i, coeff_count, key_modulus, 
                 decomp_modulus_size, modswitch_factors, encrypted_i, delta.const_reference()
@@ -1067,6 +1074,7 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(t_last.device_index());
             kernel_ski_util6<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_last, coeff_count, qk, key_modulus, decomp_modulus_size, t_ntt
             );
@@ -1122,6 +1130,7 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(coeff_count * decomp_modulus_size, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(t_poly_prod_i.device_index());
             kernel_ski_util7<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_poly_prod_i, t_ntt, coeff_count, encrypted_i, is_ckks, 
                 decomp_modulus_size, key_modulus, modswitch_factors
@@ -1225,7 +1234,7 @@ namespace troy {
                         poly_lazy.reference(), coeff_count, key_component_count,
                         key_vector[j].as_ciphertext().const_reference(),
                         key_vector_poly_coeff_size,
-                        temp_operand, key_index, key_modulus.at(key_index)
+                        temp_operand, key_index
                     );
                 }
 
@@ -1269,7 +1278,7 @@ namespace troy {
                 ski_util5(
                     t_last.as_const(), poly_prod.slice(i * coeff_count * rns_modulus_size, poly_prod.size()),
                     coeff_count, plain_modulus, key_modulus, key_ntt_tables,
-                    decomp_modulus_size, rns_modulus_size, qk_inv_qp, qk,
+                    decomp_modulus_size, qk_inv_qp, qk,
                     modswitch_factors, encrypted.poly(i),
                     pool
                 );
@@ -1461,7 +1470,7 @@ namespace troy {
         destination.correction_factor() = encrypted.correction_factor();
     }
 
-    void Evaluator::mod_switch_drop_to_next_plain_inplace_internal(Plaintext& plain, MemoryPoolHandle pool) const {
+    void Evaluator::mod_switch_drop_to_next_plain_inplace_internal(Plaintext& plain) const {
         if (!plain.is_ntt_form()) {
             throw std::invalid_argument("[Evaluator::mod_switch_drop_to_next_plain_inplace_internal] Plaintext is not in NTT form.");
         }
@@ -1518,7 +1527,7 @@ namespace troy {
         }
     }
 
-    void Evaluator::mod_switch_plain_to_inplace(Plaintext& plain, const ParmsID& parms_id, MemoryPoolHandle pool) const {
+    void Evaluator::mod_switch_plain_to_inplace(Plaintext& plain, const ParmsID& parms_id) const {
         if (!plain.is_ntt_form()) {
             throw std::invalid_argument("[Evaluator::mod_switch_plain_to_inplace] Plaintext is not in NTT form.");
         }
@@ -1528,7 +1537,7 @@ namespace troy {
             throw std::invalid_argument("[Evaluator::mod_switch_plain_to_inplace] Cannot switch to a higher level.");
         }
         while (plain.parms_id() != parms_id) {
-            this->mod_switch_plain_to_next_inplace(plain, pool);
+            this->mod_switch_plain_to_next_inplace(plain);
         }
     }
 
@@ -1651,8 +1660,6 @@ namespace troy {
         size_t coeff_count = parms.poly_modulus_degree();
         size_t coeff_modulus_size = coeff_modulus.size();
 
-        size_t plain_upper_half_threshold = context_data->plain_upper_half_threshold();
-        ConstSlice<uint64_t> plain_upper_half_increment = context_data->plain_upper_half_increment();
         ConstSlice<NTTTables> ntt_tables = context_data->small_ntt_tables();
 
         size_t encrypted_size = encrypted.polynomial_count();
@@ -1796,6 +1803,7 @@ namespace troy {
         } else {
             size_t total = plain_coeff_count * coeff_modulus_size;
             size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+            cudaSetDevice(plain.device_index());
             kernel_transform_plain_to_ntt_fast_plain_lift<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 plain_coeff_count, coeff_count, coeff_modulus_size,
                 plain, plain_upper_half_threshold, plain_upper_half_increment
@@ -1985,8 +1993,6 @@ namespace troy {
             throw std::invalid_argument("[Evaluator::rotate_inplace_internal] Galois keys has incorrect parms id.");
         }
         if (steps == 0) return;
-        const EncryptionParameters& parms = context_data->parms();
-        size_t coeff_count = parms.poly_modulus_degree();
         const GaloisTool& galois_tool = context_data->galois_tool();
         if (galois_keys.has_key(galois_tool.get_element_from_step(steps))) {
             size_t element = galois_tool.get_element_from_step(steps);
@@ -2018,7 +2024,6 @@ namespace troy {
         const EncryptionParameters& parms = context_data->parms();
         size_t coeff_count = parms.poly_modulus_degree();
         ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
-        size_t coeff_modulus_size = coeff_modulus.size();
 
         destination = encrypted.clone(pool);
         utils::negacyclic_shift_ps(
@@ -2049,10 +2054,12 @@ namespace troy {
         } else {
             if (coeff_modulus_size >= utils::KERNEL_THREAD_COUNT) {
                 size_t block_count = utils::ceil_div(coeff_modulus_size, utils::KERNEL_THREAD_COUNT);
+                cudaSetDevice(c0.device_index());
                 kernel_extract_lwe_gather_c0<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                     coeff_modulus_size, coeff_count, term, rlwe_c0, c0
                 );
             } else {
+                cudaSetDevice(c0.device_index());
                 kernel_extract_lwe_gather_c0<<<1, coeff_modulus_size>>>(
                     coeff_modulus_size, coeff_count, term, rlwe_c0, c0
                 );
@@ -2109,7 +2116,7 @@ namespace troy {
     void Evaluator::field_trace_inplace(Ciphertext& encrypted, const GaloisKeys& automorphism_keys, size_t logn, MemoryPoolHandle pool) const {
         size_t poly_degree = encrypted.poly_modulus_degree();
         Ciphertext temp;
-        while (poly_degree > (1 << logn)) {
+        while (poly_degree > (static_cast<size_t>(1) << logn)) {
             size_t galois_element = poly_degree + 1;
             this->apply_galois(encrypted, galois_element, automorphism_keys, temp, pool);
             this->add_inplace(encrypted, temp, pool);
@@ -2169,16 +2176,15 @@ namespace troy {
         }
         size_t poly_modulus_degree = context_data->parms().poly_modulus_degree();
         ConstSlice<Modulus> coeff_modulus = context_data->parms().coeff_modulus();
-        size_t coeff_modulus_size = coeff_modulus.size();
         if (lwes_count > poly_modulus_degree) {
             throw std::invalid_argument("[Evaluator::pack_lwe_ciphertexts_new] LWE ciphertexts count must be less than poly_modulus_degree.");
         }
         size_t l = 0;
-        while ((1 << l) < lwes_count) l += 1;
+        while ((static_cast<size_t>(1) << l) < lwes_count) l += 1;
         std::vector<Ciphertext> rlwes(1 << l);
         Ciphertext zero_rlwe = this->assemble_lwe_new(lwes[0], pool);
         zero_rlwe.data().reference().set_zero();
-        for (size_t i = 0; i < (1<<l); i++) {
+        for (size_t i = 0; i < (static_cast<size_t>(1)<<l); i++) {
             size_t index = static_cast<size_t>(utils::reverse_bits_uint64(static_cast<uint64_t>(i), l));
             if (index < lwes_count) {
                 rlwes[i] = this->assemble_lwe_new(lwes[index], pool);
@@ -2192,7 +2198,7 @@ namespace troy {
             size_t gap = 1 << layer;
             size_t offset = 0;
             size_t shift = poly_modulus_degree >> (layer + 1);
-            while (offset < (1 << l)) {
+            while (offset < (static_cast<size_t>(1) << l)) {
                 Ciphertext& even = rlwes[offset];
                 Ciphertext& odd = rlwes[offset + gap];
                 utils::negacyclic_shift_ps(

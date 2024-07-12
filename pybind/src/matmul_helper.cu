@@ -1,30 +1,31 @@
-#include "header.cuh"
+#include "header.h"
 
+#pragma GCC diagnostic ignored "-Wunused-local-typedefs"
 
 template<typename T>
 static void register_methods_matmul_polynomial_encoder_ring2k(pybind11::class_<MatmulHelper>& c, const char* bitwidth_name) {
     using Encoder = PolynomialEncoderRing2k<T>;
     auto encode_weights_ring2k = [](
-        const MatmulHelper& self, const Encoder& encoder, const py::array_t<T>& weights, std::optional<ParmsID> parms_id
+        const MatmulHelper& self, const Encoder& encoder, const py::array_t<T>& weights, std::optional<ParmsID> parms_id, bool for_cipher
     ) {
         if (weights.ndim() != 1) 
             throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be flattened.");
         if (weights.strides(0) != sizeof(T))
             throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be contiguous.");
-        if (weights.size() != self.input_dims * self.output_dims) 
+        if (static_cast<size_t>(weights.size()) != self.input_dims * self.output_dims) 
             throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be of size input_dims * output_dims.");
-        return self.encode_weights_ring2k<T>(encoder, get_pointer_from_buffer(weights), parms_id);
+        return self.encode_weights_ring2k<T>(encoder, get_pointer_from_buffer(weights), parms_id, for_cipher);
     };
     auto encode_inputs_ring2k = [](
-        const MatmulHelper& self, const Encoder& encoder, const py::array_t<T>& inputs, std::optional<ParmsID> parms_id
+        const MatmulHelper& self, const Encoder& encoder, const py::array_t<T>& inputs, std::optional<ParmsID> parms_id, bool for_cipher
     ) {
         if (inputs.ndim() != 1) 
             throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be flattened.");
         if (inputs.strides(0) != sizeof(T))
             throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be contiguous.");
-        if (inputs.size() != self.batch_size * self.input_dims)
+        if (static_cast<size_t>(inputs.size()) != self.batch_size * self.input_dims)
             throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be of size batch_size * input_dims.");
-        return self.encode_inputs_ring2k<T>(encoder, get_pointer_from_buffer(inputs), parms_id);
+        return self.encode_inputs_ring2k<T>(encoder, get_pointer_from_buffer(inputs), parms_id, for_cipher);
     };
     auto encode_outputs_ring2k = [](
         const MatmulHelper& self, const Encoder& encoder, const py::array_t<T>& outputs, std::optional<ParmsID> parms_id
@@ -33,7 +34,7 @@ static void register_methods_matmul_polynomial_encoder_ring2k(pybind11::class_<M
             throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be flattened.");
         if (outputs.strides(0) != sizeof(T))
             throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be contiguous.");
-        if (outputs.size() != self.batch_size * self.output_dims)
+        if (static_cast<size_t>(outputs.size()) != self.batch_size * self.output_dims)
             throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be of size batch_size * output_dims.");
         return self.encode_outputs_ring2k<T>(encoder, get_pointer_from_buffer(outputs), parms_id);
     };
@@ -68,6 +69,9 @@ void register_matmul_helper(pybind11::module& m) {
         .def("encrypt_symmetric", [](const Plain2d& self, const Encryptor& encryptor, MemoryPoolHandleArgument pool) {
             return self.encrypt_symmetric(encryptor, nullopt_default_pool(pool));
         }, py::arg("encryptor"), MEMORY_POOL_ARGUMENT)
+        .def("get", [](const Plain2d& self, size_t i, size_t j) {
+            return self[i][j];
+        }, py::arg("i"), py::arg("j"), py::return_value_policy::reference)
     ;
 
     py::class_<Cipher2d>(m, "Cipher2d")
@@ -79,15 +83,16 @@ void register_matmul_helper(pybind11::module& m) {
             return self.clone(nullopt_default_pool(pool));
         }, MEMORY_POOL_ARGUMENT)
         .def("expand_seed", &Cipher2d::expand_seed)
-        .def("save", [](const Cipher2d& self, HeContextPointer context) {return save_he(self, context); })
-        .def("load", [](Cipher2d& self, const py::bytes& str, HeContextPointer context, MemoryPoolHandleArgument pool) {
-            return load_he<Cipher2d>(self, str, context, nullopt_default_pool(pool)); 
-        }, py::arg("str"), py::arg("context"), MEMORY_POOL_ARGUMENT)
-        .def_static("load_new", [](const py::bytes& str, HeContextPointer context, MemoryPoolHandleArgument pool) {
-            return load_new_he<Cipher2d>(str, context, nullopt_default_pool(pool)); 
-        }, py::arg("str"), py::arg("context"), MEMORY_POOL_ARGUMENT)
-        .def("serialized_size", [](const Cipher2d& self, HeContextPointer context) {return serialized_size_he(self, context); })
 
+        .def("save", [](const Cipher2d& self, HeContextPointer context, CompressionMode mode) {return save_he(self, context, mode); },
+            py::arg("context"), COMPRESSION_MODE_ARGUMENT)
+        .def("load", [](Cipher2d& self, const py::bytes& str, HeContextPointer context, MemoryPoolHandleArgument pool) {return load_he<Cipher2d>(self, str, context, nullopt_default_pool(pool)); },
+            py::arg("str"), py::arg("context"), MEMORY_POOL_ARGUMENT)
+        .def_static("load_new", [](const py::bytes& str, HeContextPointer context, MemoryPoolHandleArgument pool) {return load_new_he<Cipher2d>(str, context, nullopt_default_pool(pool)); },
+            py::arg("str"), py::arg("context"), MEMORY_POOL_ARGUMENT)
+        .def("serialized_size_upperbound", [](const Cipher2d& self, HeContextPointer context, CompressionMode mode) {return serialized_size_upperbound_he(self, context, mode); },
+            py::arg("context") = nullptr, COMPRESSION_MODE_ARGUMENT)
+            
         .def("mod_switch_to_next_inplace", [](Cipher2d& self, const Evaluator& evaluator, MemoryPoolHandleArgument pool) {
             self.mod_switch_to_next_inplace(evaluator, nullopt_default_pool(pool));
         }, py::arg("evaluator"), MEMORY_POOL_ARGUMENT)
@@ -129,6 +134,13 @@ void register_matmul_helper(pybind11::module& m) {
         .def("sub_plain_inplace", [](Cipher2d& self, const Evaluator& evaluator, const Plain2d& plain, MemoryPoolHandleArgument pool) {
             self.sub_plain_inplace(evaluator, plain, nullopt_default_pool(pool));
         }, py::arg("evaluator"), py::arg("plain"), MEMORY_POOL_ARGUMENT)
+        .def("decrypt", [](const Cipher2d& self, const Decryptor& decryptor, MemoryPoolHandleArgument pool) {
+            return self.decrypt(decryptor, nullopt_default_pool(pool));
+        }, py::arg("decryptor"), MEMORY_POOL_ARGUMENT)
+
+        .def("get", [](const Cipher2d& self, size_t i, size_t j) {
+            return self[i][j];
+        }, py::arg("i"), py::arg("j"), py::return_value_policy::reference)
 
     ;
 
@@ -144,7 +156,7 @@ void register_matmul_helper(pybind11::module& m) {
             throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be flattened.");
         if (weights.strides(0) != sizeof(uint64_t))
             throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be contiguous.");
-        if (weights.size() != self.input_dims * self.output_dims) 
+        if (static_cast<size_t>(weights.size()) != self.input_dims * self.output_dims) 
             throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be of size input_dims * output_dims.");
         return self.encode_weights_uint64s(encoder, get_pointer_from_buffer(weights));
     };
@@ -153,7 +165,7 @@ void register_matmul_helper(pybind11::module& m) {
             throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be flattened.");
         if (inputs.strides(0) != sizeof(uint64_t))
             throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be contiguous.");
-        if (inputs.size() != self.batch_size * self.input_dims)
+        if (static_cast<size_t>(inputs.size()) != self.batch_size * self.input_dims)
             throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be of size batch_size * input_dims.");
         return self.encode_inputs_uint64s(encoder, get_pointer_from_buffer(inputs));
     };
@@ -162,7 +174,7 @@ void register_matmul_helper(pybind11::module& m) {
             throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be flattened.");
         if (outputs.strides(0) != sizeof(uint64_t))
             throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be contiguous.");
-        if (outputs.size() != self.batch_size * self.output_dims)
+        if (static_cast<size_t>(outputs.size()) != self.batch_size * self.output_dims)
             throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be of size batch_size * output_dims.");
         return self.encode_outputs_uint64s(encoder, get_pointer_from_buffer(outputs));
     };
@@ -176,7 +188,7 @@ void register_matmul_helper(pybind11::module& m) {
             throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be flattened.");
         if (weights.strides(0) != sizeof(uint64_t))
             throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be contiguous.");
-        if (weights.size() != self.input_dims * self.output_dims) 
+        if (static_cast<size_t>(weights.size()) != self.input_dims * self.output_dims) 
             throw std::invalid_argument("[MatmulHelper::encode_weights] Binder - Weights must be of size input_dims * output_dims.");
         return self.encode_weights_doubles(encoder, get_pointer_from_buffer(weights), parms_id, scale);
     };
@@ -185,7 +197,7 @@ void register_matmul_helper(pybind11::module& m) {
             throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be flattened.");
         if (inputs.strides(0) != sizeof(uint64_t))
             throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be contiguous.");
-        if (inputs.size() != self.batch_size * self.input_dims)
+        if (static_cast<size_t>(inputs.size()) != self.batch_size * self.input_dims)
             throw std::invalid_argument("[MatmulHelper::encode_inputs] Binder - Inputs must be of size batch_size * input_dims.");
         return self.encode_inputs_doubles(encoder, get_pointer_from_buffer(inputs), parms_id, scale);
     };
@@ -194,7 +206,7 @@ void register_matmul_helper(pybind11::module& m) {
             throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be flattened.");
         if (outputs.strides(0) != sizeof(uint64_t))
             throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be contiguous.");
-        if (outputs.size() != self.batch_size * self.output_dims)
+        if (static_cast<size_t>(outputs.size()) != self.batch_size * self.output_dims)
             throw std::invalid_argument("[MatmulHelper::encode_outputs] Binder - Outputs must be of size batch_size * output_dims.");
         return self.encode_outputs_doubles(encoder, get_pointer_from_buffer(outputs), parms_id, scale);
     };
@@ -232,9 +244,10 @@ void register_matmul_helper(pybind11::module& m) {
         .def("matmul_reverse", &MatmulHelper::matmul_reverse)
         .def("matmul_cipher", &MatmulHelper::matmul_cipher)
         .def("pack_outputs", &MatmulHelper::pack_outputs)
-        .def("serialize_outputs", [](const MatmulHelper& self, const Evaluator &evaluator, const Cipher2d& x) {
-            ostringstream ss; self.serialize_outputs(evaluator, x, ss); return py::bytes(ss.str());
-        })
+
+        .def("serialize_outputs", [](const MatmulHelper& self, const Evaluator &evaluator, const Cipher2d& x, CompressionMode mode) {
+            ostringstream ss; self.serialize_outputs(evaluator, x, ss, mode); return py::bytes(ss.str());
+        }, py::arg("evaluator"), py::arg("x"), COMPRESSION_MODE_ARGUMENT)
         .def("deserialize_outputs", [](const MatmulHelper& self, const Evaluator &evaluator, const py::bytes& str) {
             istringstream ss(str); return self.deserialize_outputs(evaluator, ss);
         })
@@ -257,3 +270,5 @@ void register_matmul_helper(pybind11::module& m) {
     register_methods_matmul_polynomial_encoder_ring2k<uint64_t>(pythonMatmulHelperClass, "64");
 
 }
+
+#pragma GCC diagnostic pop

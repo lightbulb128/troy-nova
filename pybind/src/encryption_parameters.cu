@@ -1,4 +1,4 @@
-#include "header.cuh"
+#include "header.h"
 
 void register_encryption_parameters(pybind11::module& m) {
 
@@ -8,7 +8,7 @@ void register_encryption_parameters(pybind11::module& m) {
         })
         .def("to_vector", [](const ParmsID& p){
             vector<uint64_t> ret; ret.reserve(utils::HashFunction::hash_block_uint64_count);
-            for (int i = 0; i < utils::HashFunction::hash_block_uint64_count; i++) {
+            for (size_t i = 0; i < utils::HashFunction::hash_block_uint64_count; i++) {
                 ret.push_back(p[i]);
             }
             return get_buffer_from_vector(ret);
@@ -40,6 +40,17 @@ void register_encryption_parameters(pybind11::module& m) {
         })
         .def("__str__", [](const EncryptionParameters& self){ return to_string(self); })
         .def("__repr__", [](const EncryptionParameters& self){ return to_string(self); })
+    
+        .def("save", [](const EncryptionParameters& self) {
+            std::ostringstream ss; self.save(ss); return py::bytes(ss.str());
+        })
+        .def("load", [](EncryptionParameters& self, const py::bytes& str) {
+            std::istringstream ss(str); self.load(ss);
+        })
+        .def_static("load_new", [](const py::bytes& str) {
+            std::istringstream ss(str); EncryptionParameters ret; ret.load(ss); return ret;
+        })
+        .def("serialized_size_upperbound", &EncryptionParameters::serialized_size_upperbound)
     ;
     
 }

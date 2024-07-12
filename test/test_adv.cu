@@ -1,4 +1,4 @@
-#include "test_adv.cuh"
+#include "test_adv.h"
 
 namespace tool {
 
@@ -46,8 +46,8 @@ namespace tool {
         auto key_generator = new KeyGenerator(context, args.pool);
         auto public_key = key_generator->create_public_key(false, args.pool);
         auto encryptor = new Encryptor(context);
-        encryptor->set_public_key(public_key);
-        encryptor->set_secret_key(key_generator->secret_key());
+        encryptor->set_public_key(public_key, args.pool);
+        encryptor->set_secret_key(key_generator->secret_key(), args.pool);
         auto decryptor = new Decryptor(context, key_generator->secret_key(), args.pool);
         auto evaluator = new Evaluator(context);
         uint64_t t = ckks ? 0 : parms.plain_modulus()->value();

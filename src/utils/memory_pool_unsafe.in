@@ -1,0 +1,111 @@
+#include "memory_pool.h"
+
+namespace troy::utils {
+
+    struct MemoryPool::Impl {
+        static const int PRESERVED_MEMORY_BYTES = 1024 * 1024 * 32;
+        std::shared_mutex mutex;
+        std::multimap<size_t, void*> unused;
+        std::multimap<void*, size_t> allocated;
+        size_t total_allocated;
+    };
+    
+    int MemoryPool::implementation_type() {return 1;}
+
+    // User shouldn't call this but call create() instead
+    MemoryPool::MemoryPool(size_t device_index): device_index(device_index) {
+        this->impl_ = std::make_shared<Impl>();
+        impl_->total_allocated = 0;
+        cudaDeviceProp props;
+        cudaError_t status = cudaGetDeviceProperties(&props, device_index);
+        if (status != cudaSuccess) {
+            runtime_error("[MemoryPool::MemoryPool] cudaGetDeviceProperties failed.", status);
+        }
+    }
+
+    MemoryPool::~MemoryPool() {
+        // Do nothing when `unsafe`
+    }
+
+    void* MemoryPool::try_allocate(size_t required) {
+        std::unique_lock lock(impl_->mutex);
+        size_t free, total;
+        set_device();
+        cudaError_t status = cudaMemGetInfo(&free, &total);
+        if (status != cudaSuccess) {
+            runtime_error("[MemoryPool(unsafe)::try_allocate] cudaMemGetInfo failed", status);
+        }
+        if (free < required + Impl::PRESERVED_MEMORY_BYTES) {
+            lock.unlock();
+            release_unused();
+            lock.lock();
+            // try again
+            set_device();
+            status = cudaMemGetInfo(&free, &total);
+            if (status != cudaSuccess) {
+                runtime_error("[MemoryPool(unsafe)::try_allocate] cudaMemGetInfo failed", status);
+            }
+            if (free < required + Impl::PRESERVED_MEMORY_BYTES) {
+                throw std::runtime_error("[MemoryPool(unsafe)::try_allocate] Not enough memory.");
+            }
+        }
+        void* ptr = nullptr;
+        set_device();
+        status = cudaMalloc(&ptr, required);
+        if (status != cudaSuccess) {
+            runtime_error("[MemoryPool(unsafe)::try_allocate] cudaMalloc failed", status);
+        }
+        impl_->total_allocated += required;
+        impl_->allocated.insert(std::make_pair(ptr, required));
+        return ptr;
+    }
+
+    void MemoryPool::release(void* ptr) {
+        std::unique_lock lock(impl_->mutex);
+        auto iterator = impl_->allocated.find(ptr);
+        if (iterator == impl_->allocated.end()) {
+            throw std::runtime_error("[MemoryPool(unsafe)::release] The pointer is not in the allocated set.");
+        }
+        size_t size = iterator->second;
+        impl_->unused.insert(std::make_pair(size, ptr));
+    }
+
+    void* MemoryPool::allocate(size_t required) {
+        if (denying) {
+            throw std::runtime_error("[MemoryPool(unsafe)::get] DEBUG: The pool is denying allocation.");
+        }
+        std::unique_lock lock(impl_->mutex);
+        auto iterator = impl_->unused.lower_bound(required);
+        if (iterator == impl_->unused.end() || iterator->first >= required * 2) {
+            lock.unlock();
+            return try_allocate(required);
+        } else {
+            void* ptr = iterator->second;
+            impl_->unused.erase(iterator);
+            return ptr;
+        }
+    }
+
+    void MemoryPool::release_unused() {
+        std::unique_lock lock(impl_->mutex);
+        for (auto it = impl_->unused.begin(); it != impl_->unused.end();) {
+            set_device();
+            cudaError_t status = cudaFree(it->second);
+            if (status != cudaSuccess) {
+                runtime_error("[MemoryPool(unsafe)::release_unused] cudaFree failed.", status);
+            }
+            // remove pointer from allocated
+            auto it2 = impl_->allocated.find(it->second);
+            if (it2 == impl_->allocated.end()) {
+                throw std::runtime_error("[MemoryPool(unsafe)::release_unused] The pointer is not in the allocated set.");
+            }
+            impl_->allocated.erase(it2);
+            it = impl_->unused.erase(it);
+        }
+    }
+
+    void MemoryPool::destroy() {
+        // do nothing in unsafe memory pool.
+    }
+
+}

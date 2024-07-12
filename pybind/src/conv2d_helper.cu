@@ -1,4 +1,4 @@
-#include "header.cuh"
+#include "header.h"
 
 void register_conv2d_helper(pybind11::module& m) {
     
@@ -40,7 +40,7 @@ void register_conv2d_helper(pybind11::module& m) {
                 throw std::invalid_argument("[Conv2dHelper::encode_weights] Binder - Weights must be flattened.");
             if (weights.strides(0) != sizeof(uint64_t))
                 throw std::invalid_argument("[Conv2dHelper::encode_weights] Binder - Weights must be contiguous.");
-            if (weights.size() != self.output_channels * self.input_channels * self.kernel_height * self.kernel_width) 
+            if (static_cast<size_t>(weights.size()) != self.output_channels * self.input_channels * self.kernel_height * self.kernel_width) 
                 throw std::invalid_argument("[Conv2dHelper::encode_weights] Binder - Weights must be of size oc * ic * kh * kw.");
             return self.encode_weights(encoder, get_pointer_from_buffer(weights));
         })
@@ -49,7 +49,7 @@ void register_conv2d_helper(pybind11::module& m) {
                 throw std::invalid_argument("[Conv2dHelper::encode_inputs] Binder - Inputs must be flattened.");
             if (inputs.strides(0) != sizeof(uint64_t))
                 throw std::invalid_argument("[Conv2dHelper::encode_inputs] Binder - Inputs must be contiguous.");
-            if (inputs.size() != self.batch_size * self.input_channels * self.image_height * self.image_width)
+            if (static_cast<size_t>(inputs.size()) != self.batch_size * self.input_channels * self.image_height * self.image_width)
                 throw std::invalid_argument("[Conv2dHelper::encode_inputs] Binder - Inputs must be of size bs * ic * ih * iw.");
             return self.encode_inputs(encoder, get_pointer_from_buffer(inputs));
         })
@@ -60,7 +60,7 @@ void register_conv2d_helper(pybind11::module& m) {
                 throw std::invalid_argument("[Conv2dHelper::encode_outputs] Binder - Outputs must be contiguous.");
             size_t output_height = self.image_height - self.kernel_height + 1;
             size_t output_width = self.image_width - self.kernel_width + 1;
-            if (outputs.size() != self.batch_size * self.output_channels * output_height * output_width)
+            if (static_cast<size_t>(outputs.size()) != self.batch_size * self.output_channels * output_height * output_width)
                 throw std::invalid_argument("[Conv2dHelper::encode_outputs] Binder - Outputs must be of size bs * oc * oh * ow.");
             return self.encode_outputs(encoder, get_pointer_from_buffer(outputs));
         })

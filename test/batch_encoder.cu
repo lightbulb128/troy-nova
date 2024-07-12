@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include "test.cuh"
-#include "../src/batch_encoder.cuh"
+#include "test.h"
+#include "../src/batch_encoder.h"
 
 using namespace troy;
 

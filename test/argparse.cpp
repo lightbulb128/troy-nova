@@ -21,7 +21,7 @@ static std::string strip_quotes(const std::string& str) {
 }
 
 std::optional<std::string> ArgumentParser::get_string(const std::string& name) const {
-    for (int i = 0; i < this->raw.size(); i++) {
+    for (size_t i = 0; i < this->raw.size(); i++) {
         // if it starts with the name followed by a "=", obtain the following string
         if (this->raw[i].find(name + "=") == 0) {
             return strip_quotes(this->raw[i].substr(name.size() + 1));
@@ -90,7 +90,7 @@ template std::optional<float> ArgumentParser::get_float(const std::string& name)
 template std::optional<double> ArgumentParser::get_float(const std::string& name) const;
 
 std::optional<bool> ArgumentParser::get_bool_store_true(const std::string& name) const {
-    for (int i = 0; i < this->raw.size(); i++) {
+    for (size_t i = 0; i < this->raw.size(); i++) {
         if (this->raw[i] == name) {
             return true;
         }
