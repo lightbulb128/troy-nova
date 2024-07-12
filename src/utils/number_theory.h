@@ -10,6 +10,7 @@ namespace troy { namespace utils {
 
     std::vector<int> naf(int value);
 
+    __host__ __device__
     uint64_t gcd(uint64_t x, uint64_t y);
 
 
@@ -17,12 +18,14 @@ namespace troy { namespace utils {
     Returns (gcd, x, y) where gcd is the greatest common divisor of a and b.
     The numbers x, y are such that gcd = ax + by.
     */
+    __host__ __device__
     void xgcd(uint64_t a, uint64_t b, uint64_t &gcd, int64_t &x, int64_t &y);
 
     inline bool are_coprime(uint64_t a, uint64_t b) {
         return gcd(a, b) == 1;
     }
 
+    __host__ __device__
     inline bool try_invert_uint64_mod_uint64(uint64_t value, uint64_t modulus, uint64_t& result) {
         if (value == 0) {
             return false;
@@ -38,6 +41,11 @@ namespace troy { namespace utils {
             result = static_cast<uint64_t>(a);
             return true;
         }
+    }
+    
+    __host__ __device__
+    inline bool try_invert_uint64_mod(const uint64_t& value, ConstPointer<Modulus> modulus, uint64_t& result) {
+        return try_invert_uint64_mod_uint64(value, modulus->value(), result);
     }
 
     inline bool try_invert_uint64_mod(const uint64_t& value, const Modulus& modulus, uint64_t& result) {

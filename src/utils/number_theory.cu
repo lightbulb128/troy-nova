@@ -19,6 +19,7 @@ namespace troy {namespace utils {
         return res;
     }
 
+    __host__ __device__
     uint64_t gcd(uint64_t x, uint64_t y) {
         while (y != 0) {
             uint64_t r = x % y;
@@ -28,6 +29,7 @@ namespace troy {namespace utils {
         return x;
     }
     
+    __host__ __device__
     void xgcd(uint64_t a, uint64_t b, uint64_t &gcd, int64_t &x, int64_t &y) {
         int64_t x0 = 1, y0 = 0, x1 = 0, y1 = 1;
         while (b != 0) {
