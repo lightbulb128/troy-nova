@@ -50,14 +50,14 @@ namespace troy {namespace utils {
             return clone;
         }
         
-        Buffer<T> to_device() const {
-            Buffer<T> cloned = this->clone();
+        Buffer<T> to_device(MemoryPoolHandle pool) const {
+            Buffer<T> cloned = this->clone(pool);
             cloned.to_device_inplace();
             return cloned;
         }
         Buffer<T> to_host() const {
-            Buffer<T> cloned = this->clone();
-            cloned.to_host_inplace();
+            Buffer<T> cloned(this->poly_count_, this->coeff_modulus_size_, this->coeff_count_, false, nullptr);
+            cloned.data_.copy_from_slice(data_.const_reference());
             return cloned;
         }
 
