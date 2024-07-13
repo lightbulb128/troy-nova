@@ -4,6 +4,13 @@ namespace troy { namespace linear {
 
     using uint128_t = __uint128_t;
 
+    #define D_IMPL_ALL                                               \
+        D_IMPL(BatchEncoderAdapter, uint64_t)                        \
+        D_IMPL(CKKSEncoderAdapter, double)                           \
+        D_IMPL(PolynomialEncoderRing2kAdapter<uint32_t>, uint32_t)   \
+        D_IMPL(PolynomialEncoderRing2kAdapter<uint64_t>, uint64_t)   \
+        D_IMPL(PolynomialEncoderRing2kAdapter<uint128_t>, uint128_t)
+
     void MatmulHelper::determine_block() {
         size_t b_best = 0, i_best = 0, o_best = 0;
         size_t c_best = 2147483647;
@@ -82,201 +89,157 @@ namespace troy { namespace linear {
                 vec[r] = weights[i * output_dims + j];
             }
         }
-        if (for_cipher) {
-            return encoder.encode_for_cipher(vec, pool);
-        } else {
-            return encoder.encode_for_plain(vec, pool);
-        }
+        Plaintext p = for_cipher ? encoder.encode_for_cipher(vec, pool) : encoder.encode_for_plain(vec, pool);
+        if (store_in_host) p.to_host_inplace();
+        return p;
     }
 
-    template Plaintext MatmulHelper::encode_weights_small<BatchEncoderAdapter, uint64_t>(
-        const BatchEncoderAdapter& encoder, const uint64_t* weights, 
-        size_t li, size_t ui, size_t lj, size_t uj, bool for_cipher
-    ) const;
-    template Plaintext MatmulHelper::encode_weights_small<CKKSEncoderAdapter, double>(
-        const CKKSEncoderAdapter& encoder, const double* weights, 
-        size_t li, size_t ui, size_t lj, size_t uj, bool for_cipher
-    ) const;
-    template Plaintext MatmulHelper::encode_weights_small<PolynomialEncoderRing2kAdapter<uint32_t>, uint32_t>(
-        const PolynomialEncoderRing2kAdapter<uint32_t>& encoder, const uint32_t* weights, 
-        size_t li, size_t ui, size_t lj, size_t uj, bool for_cipher
-    ) const;
-    template Plaintext MatmulHelper::encode_weights_small<PolynomialEncoderRing2kAdapter<uint64_t>, uint64_t>(
-        const PolynomialEncoderRing2kAdapter<uint64_t>& encoder, const uint64_t* weights, 
-        size_t li, size_t ui, size_t lj, size_t uj, bool for_cipher
-    ) const;
-    template Plaintext MatmulHelper::encode_weights_small<PolynomialEncoderRing2kAdapter<uint128_t>, uint128_t>(
-        const PolynomialEncoderRing2kAdapter<uint128_t>& encoder, const uint128_t* weights, 
-        size_t li, size_t ui, size_t lj, size_t uj, bool for_cipher
-    ) const;
+    #define D_IMPL(adapter, dtype)                                               \
+        template Plaintext MatmulHelper::encode_weights_small<adapter, dtype>(   \
+            const adapter& encoder, const dtype* weights,                        \
+            size_t li, size_t ui, size_t lj, size_t uj, bool for_cipher          \
+        ) const;       
+    D_IMPL_ALL
+    #undef D_IMPL
 
     template <typename E, typename T>
-    Plain2d MatmulHelper::encode_weights(const E& encoder, const T* weights, bool for_cipher) const {
+    void MatmulHelper::encode_weights(const E& encoder, const Encryptor* encryptor, const T* weights, bool for_cipher, Plain2d* out_plain, Cipher2d* out_cipher) const {
         size_t height = input_dims, width = output_dims;
         size_t h = input_block, w = output_block;
-        Plain2d encoded_weights;
-        encoded_weights.data().clear();
-        encoded_weights.data().reserve(ceil_div(height, h));
+        if (out_plain) {
+            *out_plain = Plain2d();
+            out_plain->data().clear();
+            out_plain->data().reserve(ceil_div(height, h));
+        } else {
+            if (!out_cipher || !encryptor) throw std::invalid_argument("[MatmulHelper::encode_weights] Both out_plain and out_cipher are null.");
+            *out_cipher = Cipher2d();
+            out_cipher->data().clear();
+            out_cipher->data().reserve(ceil_div(height, h));
+        }
         for (size_t li = 0; li < height; li += h) {
             size_t ui = (li + h > height) ? height : (li + h);
-            std::vector<Plaintext> encoded_row; encoded_row.reserve(ceil_div(width, w));
+            std::vector<Plaintext> encoded_row_plain; encoded_row_plain.reserve(ceil_div(width, w));
+            std::vector<Ciphertext> encoded_row_cipher; encoded_row_cipher.reserve(ceil_div(width, w));
             for (size_t lj = 0; lj < width; lj += w) {
                 size_t uj = (lj + w > width) ? width : (lj + w);
-                encoded_row.push_back(
-                    this->encode_weights_small(encoder, weights, li, ui, lj, uj, for_cipher)
-                );
+                if (out_plain) {
+                    encoded_row_plain.push_back(this->encode_weights_small(encoder, weights, li, ui, lj, uj, for_cipher));
+                    if (store_in_host) encoded_row_plain.back().to_host_inplace();
+                } else {
+                    Plaintext p = this->encode_weights_small(encoder, weights, li, ui, lj, uj, for_cipher);
+                    encoded_row_cipher.push_back(encryptor->encrypt_symmetric_new(p, true, nullptr, pool));
+                    if (store_in_host) encoded_row_cipher.back().to_host_inplace();
+                }
             }
-            encoded_weights.data().push_back(std::move(encoded_row));
+            if (out_plain) out_plain->data().push_back(std::move(encoded_row_plain));
+            else out_cipher->data().push_back(std::move(encoded_row_cipher));
         }
-        return encoded_weights;
     }
 
-    template Plain2d MatmulHelper::encode_weights<BatchEncoderAdapter, uint64_t>(
-        const BatchEncoderAdapter& encoder, const uint64_t* weights, bool for_cipher
-    ) const;
-    template Plain2d MatmulHelper::encode_weights<CKKSEncoderAdapter, double>(
-        const CKKSEncoderAdapter& encoder, const double* weights, bool for_cipher
-    ) const;
-    template Plain2d MatmulHelper::encode_weights<PolynomialEncoderRing2kAdapter<uint32_t>, uint32_t>(
-        const PolynomialEncoderRing2kAdapter<uint32_t>& encoder, const uint32_t* weights, bool for_cipher
-    ) const;
-    template Plain2d MatmulHelper::encode_weights<PolynomialEncoderRing2kAdapter<uint64_t>, uint64_t>(
-        const PolynomialEncoderRing2kAdapter<uint64_t>& encoder, const uint64_t* weights, bool for_cipher
-    ) const;
-    template Plain2d MatmulHelper::encode_weights<PolynomialEncoderRing2kAdapter<uint128_t>, uint128_t>(
-        const PolynomialEncoderRing2kAdapter<uint128_t>& encoder, const uint128_t* weights, bool for_cipher
-    ) const;
-    
-    Plain2d MatmulHelper::encode_weights_uint64s(const BatchEncoder& encoder, const uint64_t* weights) const {
-        BatchEncoderAdapter adapter(encoder);
-        return encode_weights(adapter, weights, false);
-    }
-    Plain2d MatmulHelper::encode_weights_doubles(const CKKSEncoder& encoder, const double* weights, std::optional<ParmsID> parms_id, double scale) const {
-        CKKSEncoderAdapter adapter(encoder, parms_id, scale);
-        return encode_weights(adapter, weights, false);
-    }
-    template <typename T>
-    Plain2d MatmulHelper::encode_weights_ring2k(const PolynomialEncoderRing2k<T>& encoder, const T* weights, std::optional<ParmsID> parms_id, bool for_cipher) const {
-        PolynomialEncoderRing2kAdapter<T> adapter(encoder, parms_id);
-        return encode_weights(adapter, weights, for_cipher);
-    }
-    template Plain2d MatmulHelper::encode_weights_ring2k<uint32_t>(
-        const PolynomialEncoderRing2k<uint32_t>& encoder, const uint32_t* weights, std::optional<ParmsID> parms_id, bool for_cipher
-    ) const;
-    template Plain2d MatmulHelper::encode_weights_ring2k<uint64_t>(
-        const PolynomialEncoderRing2k<uint64_t>& encoder, const uint64_t* weights, std::optional<ParmsID> parms_id, bool for_cipher
-    ) const;
-    template Plain2d MatmulHelper::encode_weights_ring2k<uint128_t>(
-        const PolynomialEncoderRing2k<uint128_t>& encoder, const uint128_t* weights, std::optional<ParmsID> parms_id, bool for_cipher
-    ) const;
+    #define D_IMPL(adapter, dtype) \
+        template void MatmulHelper::encode_weights<adapter, dtype>( \
+            const adapter& encoder, const Encryptor* encryptor, const dtype* weights, bool for_cipher, Plain2d* out_plain, Cipher2d* out_cipher \
+        ) const;
+    D_IMPL_ALL
+    #undef D_IMPL
 
     template <typename E, typename T>
-    Plain2d MatmulHelper::encode_inputs(const E& encoder, const T* inputs, bool for_cipher) const {
+    Plaintext MatmulHelper::encode_inputs_small(
+        const E& encoder, const T* inputs,
+        size_t li, size_t ui, size_t lj, size_t uj, bool for_cipher
+    ) const {
+        std::vector<T> vec(slot_count, 0);
+        for (size_t j = lj; j < uj; j++) {
+            for (size_t i = li; i < ui; i++) {
+                size_t r = (i - li) * input_block * output_block + (j - lj);
+                assert(r < slot_count);
+                vec[r] = inputs[i * input_dims + j];
+            }
+        }
+        Plaintext p = for_cipher ? encoder.encode_for_cipher(vec, pool) : encoder.encode_for_plain(vec, pool);
+        if (store_in_host) p.to_host_inplace();
+        return p;
+    }
+
+    #define D_IMPL(adapter, dtype)                                               \
+        template Plaintext MatmulHelper::encode_inputs_small<adapter, dtype>(    \
+            const adapter& encoder, const dtype* inputs,                         \
+            size_t li, size_t ui, size_t lj, size_t uj, bool for_cipher          \
+        ) const;
+    D_IMPL_ALL
+    #undef D_IMPL
+
+
+    template <typename E, typename T>
+    void MatmulHelper::encode_inputs(const E& encoder, const Encryptor* encryptor, const T* inputs, bool for_cipher, Plain2d* out_plain, Cipher2d* out_cipher) const {
         size_t vecsize = input_block;
-        Plain2d ret;
-        ret.data().reserve(batch_size);
+        if (out_plain) {
+            *out_plain = Plain2d();
+            out_plain->data().clear();
+            out_plain->data().reserve(batch_size);
+        } else {
+            if (!out_cipher || !encryptor) throw std::invalid_argument("[MatmulHelper::encode_inputs] Both out_plain and out_cipher are null.");
+            *out_cipher = Cipher2d();
+            out_cipher->data().clear();
+            out_cipher->data().reserve(batch_size);
+        }
         for (size_t li = 0; li < batch_size; li += batch_block) {
             size_t ui = (li + batch_block > batch_size) ? batch_size : li + batch_block;
-            std::vector<Plaintext> encoded_row;
-            encoded_row.reserve(ceil_div(input_dims, vecsize));
+            std::vector<Plaintext> encoded_row_plain;
+            std::vector<Ciphertext> encoded_row_cipher;
+            encoded_row_plain.reserve(ceil_div(input_dims, vecsize));
+            encoded_row_cipher.reserve(ceil_div(input_dims, vecsize));
             for (size_t lj = 0; lj < input_dims; lj += vecsize) {
                 size_t uj = (lj + vecsize > input_dims) ? input_dims : lj + vecsize;
-                std::vector<T> vec(slot_count, 0);
-                for (size_t i = li; i < ui; i++)
-                    for (size_t j = lj; j < uj; j++)
-                        vec[(i - li) * input_block * output_block + (j - lj)] = inputs[i * input_dims + j];
-                Plaintext encoded = for_cipher ? encoder.encode_for_cipher(vec, pool) : encoder.encode_for_plain(vec, pool);
-                encoded_row.push_back(std::move(encoded));
+                if (out_plain) {
+                    encoded_row_plain.push_back(this->encode_inputs_small(encoder, inputs, li, ui, lj, uj, for_cipher));
+                    if (store_in_host) encoded_row_plain.back().to_host_inplace();
+                } else {
+                    Plaintext p = this->encode_inputs_small(encoder, inputs, li, ui, lj, uj, for_cipher);
+                    encoded_row_cipher.push_back(encryptor->encrypt_symmetric_new(p, true, nullptr, pool));
+                    if (store_in_host) encoded_row_cipher.back().to_host_inplace();
+                }
             }
-            ret.data().push_back(std::move(encoded_row));
+            if (out_plain) out_plain->data().push_back(std::move(encoded_row_plain));
+            else out_cipher->data().push_back(std::move(encoded_row_cipher));
         }
-        return ret;
     }
 
-    template Plain2d MatmulHelper::encode_inputs<BatchEncoderAdapter, uint64_t>(
-        const BatchEncoderAdapter& encoder, const uint64_t* inputs, bool for_cipher
-    ) const;
-    template Plain2d MatmulHelper::encode_inputs<CKKSEncoderAdapter, double>(
-        const CKKSEncoderAdapter& encoder, const double* inputs, bool for_cipher
-    ) const;
-    template Plain2d MatmulHelper::encode_inputs<PolynomialEncoderRing2kAdapter<uint32_t>, uint32_t>(
-        const PolynomialEncoderRing2kAdapter<uint32_t>& encoder, const uint32_t* inputs, bool for_cipher
-    ) const;
-    template Plain2d MatmulHelper::encode_inputs<PolynomialEncoderRing2kAdapter<uint64_t>, uint64_t>(
-        const PolynomialEncoderRing2kAdapter<uint64_t>& encoder, const uint64_t* inputs, bool for_cipher
-    ) const;
-    template Plain2d MatmulHelper::encode_inputs<PolynomialEncoderRing2kAdapter<uint128_t>, uint128_t>(
-        const PolynomialEncoderRing2kAdapter<uint128_t>& encoder, const uint128_t* inputs, bool for_cipher
-    ) const;
+    #define D_IMPL(adapter, dtype) \
+        template void MatmulHelper::encode_inputs<adapter, dtype>( \
+            const adapter& encoder, const Encryptor* encryptor, const dtype* inputs, bool for_cipher, Plain2d* out_plain, Cipher2d* out_cipher \
+        ) const;
+    D_IMPL_ALL
+    #undef D_IMPL
 
-    Plain2d MatmulHelper::encode_inputs_uint64s(const BatchEncoder& encoder, const uint64_t* inputs) const {
-        BatchEncoderAdapter adapter(encoder);
-        return encode_inputs(adapter, inputs, true);
-    }
-    Plain2d MatmulHelper::encode_inputs_doubles(const CKKSEncoder& encoder, const double* inputs, std::optional<ParmsID> parms_id, double scale) const {
-        CKKSEncoderAdapter adapter(encoder, parms_id, scale);
-        return encode_inputs(adapter, inputs, true);
-    }
-    template <typename T>
-    Plain2d MatmulHelper::encode_inputs_ring2k(const PolynomialEncoderRing2k<T>& encoder, const T* inputs, std::optional<ParmsID> parms_id, bool for_cipher) const {
-        PolynomialEncoderRing2kAdapter<T> adapter(encoder, parms_id);
-        return encode_inputs(adapter, inputs, for_cipher);
-    }
-    template Plain2d MatmulHelper::encode_inputs_ring2k<uint32_t>(
-        const PolynomialEncoderRing2k<uint32_t>& encoder, const uint32_t* inputs, std::optional<ParmsID> parms_id, bool for_cipher
-    ) const;
-    template Plain2d MatmulHelper::encode_inputs_ring2k<uint64_t>(
-        const PolynomialEncoderRing2k<uint64_t>& encoder, const uint64_t* inputs, std::optional<ParmsID> parms_id, bool for_cipher
-    ) const;
-    template Plain2d MatmulHelper::encode_inputs_ring2k<uint128_t>(
-        const PolynomialEncoderRing2k<uint128_t>& encoder, const uint128_t* inputs, std::optional<ParmsID> parms_id, bool for_cipher
-    ) const;
-
-    Cipher2d MatmulHelper::encrypt_inputs_uint64s(const Encryptor& encryptor, const BatchEncoder& encoder, const uint64_t* inputs) const {
-        Plain2d plain = encode_inputs_uint64s(encoder, inputs);
-        return plain.encrypt_symmetric(encryptor, pool);
-    }
-    Cipher2d MatmulHelper::encrypt_inputs_doubles(const Encryptor& encryptor, const CKKSEncoder& encoder, const double* inputs, std::optional<ParmsID> parms_id, double scale) const {
-        Plain2d plain = encode_inputs_doubles(encoder, inputs, parms_id, scale);
-        return plain.encrypt_symmetric(encryptor, pool);
-    }
-    template <typename T>
-    Cipher2d MatmulHelper::encrypt_inputs_ring2k(const Encryptor& encryptor, const PolynomialEncoderRing2k<T>& encoder, const T* inputs, std::optional<ParmsID> parms_id) const {
-        Plain2d plain = encode_inputs_ring2k(encoder, inputs, parms_id, true);
-        return plain.encrypt_symmetric(encryptor, pool);
-    }
-    template Cipher2d MatmulHelper::encrypt_inputs_ring2k<uint32_t>(
-        const Encryptor& encryptor, const PolynomialEncoderRing2k<uint32_t>& encoder, const uint32_t* inputs, std::optional<ParmsID> parms_id
-    ) const;
-    template Cipher2d MatmulHelper::encrypt_inputs_ring2k<uint64_t>(
-        const Encryptor& encryptor, const PolynomialEncoderRing2k<uint64_t>& encoder, const uint64_t* inputs, std::optional<ParmsID> parms_id
-    ) const;
-    template Cipher2d MatmulHelper::encrypt_inputs_ring2k<uint128_t>(
-        const Encryptor& encryptor, const PolynomialEncoderRing2k<uint128_t>& encoder, const uint128_t* inputs, std::optional<ParmsID> parms_id
-    ) const;
 
     Cipher2d MatmulHelper::matmul(const Evaluator& evaluator, const Cipher2d& a, const Plain2d& w) const {
-        Cipher2d ret; ret.data().reserve(ceil_div(batch_size, batch_block));
-        size_t outputVectorCount = ceil_div(output_dims, output_block);
+        Cipher2d ret; ret.data().resize(ceil_div(batch_size, batch_block));
+        size_t output_vector_count = ceil_div(output_dims, output_block);
+        for (size_t i = 0; i < ret.data().size(); i++) ret[i].resize(output_vector_count);
         if (a.data().size() != ceil_div(batch_size, batch_block)) {
             throw std::invalid_argument("[MatmulHelper::matmul] Input batch_size incorrect.");
         }
         if (w.data().size() != ceil_div(input_dims, input_block)) {
             throw std::invalid_argument("[MatmulHelper::matmul] Weight input dimension incorrect.");
         }
-        for (size_t b = 0; b < ceil_div(batch_size, batch_block); b++) {
-            std::vector<Ciphertext> outVecs(outputVectorCount);
-            for (size_t i = 0; i < w.data().size(); i++) {
-                for (size_t j = 0; j < w[i].size(); j++) {
+        for (size_t i = 0; i < w.data().size(); i++) {
+            for (size_t j = 0; j < w[i].size(); j++) {
+                const Plaintext* w_ptr = &w[i][j];
+                Plaintext w_cloned;
+                if (evaluator.on_device() && !w_ptr->on_device()) {
+                    w_cloned = w_ptr->clone(pool);
+                    w_ptr = &w_cloned;
+                }
+                for (size_t b = 0; b < ceil_div(batch_size, batch_block); b++) {
                     Ciphertext prod;
-                    evaluator.multiply_plain(a[b][i], w[i][j], prod, pool);
-                    if (i==0) outVecs[j] = std::move(prod);
+                    evaluator.multiply_plain(a[b][i], *w_ptr, prod, pool);
+                    if (i==0) ret[b][j] = std::move(prod);
                     else {
-                        evaluator.add_inplace(outVecs[j], prod, pool);
+                        evaluator.add_inplace(ret[b][j], prod, pool);
                     }
                 }
             }
-            ret.data().push_back(std::move(outVecs));
         }
         return ret;
     }
@@ -319,9 +282,15 @@ namespace troy { namespace linear {
         for (size_t b = 0; b < ceil_div(batch_size, batch_block); b++) {
             std::vector<Ciphertext> outVecs(outputVectorCount);
             for (size_t i = 0; i < w.data().size(); i++) {
+                const Plaintext* a_ptr = &a[b][i];
+                Plaintext a_cloned;
+                if (!a_ptr->on_device() && evaluator.on_device()) {
+                    a_cloned = a_ptr->clone(pool);
+                    a_ptr = &a_cloned;
+                }
                 for (size_t j = 0; j < w[i].size(); j++) {
                     Ciphertext prod;
-                    evaluator.multiply_plain(w[i][j], a[b][i], prod, pool);
+                    evaluator.multiply_plain(w[i][j], *a_ptr, prod, pool);
                     if (i==0) outVecs[j] = std::move(prod);
                     else {
                         evaluator.add_inplace(outVecs[j], prod, pool);
@@ -349,6 +318,7 @@ namespace troy { namespace linear {
                         for (size_t j = lj; j < uj; j++) 
                             buffer[(i - li) * input_block * output_block + (j - lj) * input_block + input_block - 1] = outputs[i * output_dims + j];
                     Plaintext pt = encoder.encode_for_cipher(buffer, pool);
+                    if (store_in_host) pt.to_host_inplace();
                     encoded_row.push_back(std::move(pt));
                 }
                 ret.data().push_back(std::move(encoded_row));
@@ -357,9 +327,9 @@ namespace troy { namespace linear {
         } else {
             Plain2d plain2d; plain2d.data().reserve(batch_size);
             plain2d.data().push_back(std::vector<Plaintext>());
-            size_t batch_blockCount = ceil_div(this->batch_size, this->batch_block);
-            size_t output_blockCount = ceil_div(this->output_dims, this->output_block);
-            auto ret = std::vector<std::vector<T>>(ceil_div(batch_blockCount * output_blockCount, this->input_block), std::vector<T>(this->slot_count, 0)); 
+            size_t batch_block_count = ceil_div(this->batch_size, this->batch_block);
+            size_t output_block_count = ceil_div(this->output_dims, this->output_block);
+            auto ret = std::vector<std::vector<T>>(ceil_div(batch_block_count * output_block_count, this->input_block), std::vector<T>(this->slot_count, 0)); 
             size_t li = 0; size_t di = 0; while (li < this->batch_size) {
                 size_t ui = std::min(this->batch_size, li + this->batch_block);
                 size_t lj = 0; size_t dj = 0; while (lj < this->output_dims) {
@@ -382,50 +352,19 @@ namespace troy { namespace linear {
             plain2d.data()[0].reserve(ret.size());
             for (size_t i = 0; i < ret.size(); i++) {
                 Plaintext pt = encoder.encode_for_cipher(ret[i], pool);
+                if (store_in_host) pt.to_host_inplace();
                 plain2d.data()[0].push_back(std::move(pt));
             }
             return plain2d;
         }
     }
 
-    template Plain2d MatmulHelper::encode_outputs<BatchEncoderAdapter, uint64_t>(
-        const BatchEncoderAdapter& encoder, const uint64_t* outputs
-    ) const;
-    template Plain2d MatmulHelper::encode_outputs<CKKSEncoderAdapter, double>(
-        const CKKSEncoderAdapter& encoder, const double* outputs
-    ) const;
-    template Plain2d MatmulHelper::encode_outputs<PolynomialEncoderRing2kAdapter<uint32_t>, uint32_t>(
-        const PolynomialEncoderRing2kAdapter<uint32_t>& encoder, const uint32_t* outputs
-    ) const;
-    template Plain2d MatmulHelper::encode_outputs<PolynomialEncoderRing2kAdapter<uint64_t>, uint64_t>(
-        const PolynomialEncoderRing2kAdapter<uint64_t>& encoder, const uint64_t* outputs
-    ) const;
-    template Plain2d MatmulHelper::encode_outputs<PolynomialEncoderRing2kAdapter<uint128_t>, uint128_t>(
-        const PolynomialEncoderRing2kAdapter<uint128_t>& encoder, const uint128_t* outputs
-    ) const;
-
-    Plain2d MatmulHelper::encode_outputs_uint64s(const BatchEncoder& encoder, const uint64_t* outputs) const {
-        BatchEncoderAdapter adapter(encoder);
-        return encode_outputs(adapter, outputs);
-    }
-    Plain2d MatmulHelper::encode_outputs_doubles(const CKKSEncoder& encoder, const double* outputs, std::optional<ParmsID> parms_id, double scale) const {
-        CKKSEncoderAdapter adapter(encoder, parms_id, scale);
-        return encode_outputs(adapter, outputs);
-    }
-    template <typename T>
-    Plain2d MatmulHelper::encode_outputs_ring2k(const PolynomialEncoderRing2k<T>& encoder, const T* outputs, std::optional<ParmsID> parms_id) const {
-        PolynomialEncoderRing2kAdapter<T> adapter(encoder, parms_id);
-        return encode_outputs(adapter, outputs);
-    }
-    template Plain2d MatmulHelper::encode_outputs_ring2k<uint32_t>(
-        const PolynomialEncoderRing2k<uint32_t>& encoder, const uint32_t* outputs, std::optional<ParmsID> parms_id
-    ) const;
-    template Plain2d MatmulHelper::encode_outputs_ring2k<uint64_t>(
-        const PolynomialEncoderRing2k<uint64_t>& encoder, const uint64_t* outputs, std::optional<ParmsID> parms_id
-    ) const;
-    template Plain2d MatmulHelper::encode_outputs_ring2k<uint128_t>(
-        const PolynomialEncoderRing2k<uint128_t>& encoder, const uint128_t* outputs, std::optional<ParmsID> parms_id
-    ) const;
+    #define D_IMPL(adapter, dtype)                                               \
+        template Plain2d MatmulHelper::encode_outputs<adapter, dtype>(           \
+            const adapter& encoder, const dtype* outputs                         \
+        ) const;
+    D_IMPL_ALL
+    #undef D_IMPL
 
     template <typename E, typename T>
     std::vector<T> MatmulHelper::decrypt_outputs(const E& encoder, const Decryptor& decryptor, const Cipher2d& outputs) const {
@@ -439,7 +378,13 @@ namespace troy { namespace linear {
                 size_t dj = 0;
                 for (size_t lj = 0; lj < output_dims; lj += vecsize) {
                     size_t uj = (lj + vecsize > output_dims) ? output_dims : (lj + vecsize);
-                    std::vector<T> buffer = encoder.decrypt_outputs(decryptor, outputs[di][dj], pool);
+                    const Ciphertext* c = &outputs[di][dj];
+                    Ciphertext c_cloned;
+                    if (decryptor.on_device() && !c->on_device()) {
+                        c_cloned = c->clone(pool);
+                        c = &c_cloned;
+                    }
+                    std::vector<T> buffer = encoder.decrypt_outputs(decryptor, *c, pool);
                     for (size_t i = li; i < ui; i++)
                         for (size_t j = lj; j < uj; j++) 
                             dec[i * output_dims + j] = buffer[(i - li) * input_block * output_block + (j - lj) * input_block + input_block - 1];
@@ -450,7 +395,13 @@ namespace troy { namespace linear {
         } else {
             std::vector<std::vector<T>> buffer;
             for (size_t i = 0; i < outputs.data()[0].size(); i++) {
-                buffer.push_back(encoder.decrypt_outputs(decryptor, outputs[0][i], pool));
+                const Ciphertext* c = &outputs[0][i];
+                Ciphertext c_cloned;
+                if (decryptor.on_device() && !c->on_device()) {
+                    c_cloned = c->clone(pool);
+                    c = &c_cloned;
+                }
+                buffer.push_back(encoder.decrypt_outputs(decryptor, *c, pool));
             }
             size_t li = 0; size_t di = 0; while (li < this->batch_size) {
                 size_t ui = std::min(this->batch_size, li + this->batch_block);
@@ -474,44 +425,12 @@ namespace troy { namespace linear {
         return dec;
     }
 
-    template std::vector<uint64_t> MatmulHelper::decrypt_outputs<BatchEncoderAdapter, uint64_t>(
-        const BatchEncoderAdapter& encoder, const Decryptor& decryptor, const Cipher2d& outputs
-    ) const;
-    template std::vector<double> MatmulHelper::decrypt_outputs<CKKSEncoderAdapter, double>(
-        const CKKSEncoderAdapter& encoder, const Decryptor& decryptor, const Cipher2d& outputs
-    ) const;
-    template std::vector<uint32_t> MatmulHelper::decrypt_outputs<PolynomialEncoderRing2kAdapter<uint32_t>, uint32_t>(
-        const PolynomialEncoderRing2kAdapter<uint32_t>& encoder, const Decryptor& decryptor, const Cipher2d& outputs
-    ) const;
-    template std::vector<uint64_t> MatmulHelper::decrypt_outputs<PolynomialEncoderRing2kAdapter<uint64_t>, uint64_t>(
-        const PolynomialEncoderRing2kAdapter<uint64_t>& encoder, const Decryptor& decryptor, const Cipher2d& outputs
-    ) const;
-    template std::vector<uint128_t> MatmulHelper::decrypt_outputs<PolynomialEncoderRing2kAdapter<uint128_t>, uint128_t>(
-        const PolynomialEncoderRing2kAdapter<uint128_t>& encoder, const Decryptor& decryptor, const Cipher2d& outputs
-    ) const;
-
-    std::vector<uint64_t> MatmulHelper::decrypt_outputs_uint64s(const BatchEncoder& encoder, const Decryptor& decryptor, const Cipher2d& outputs) const {
-        BatchEncoderAdapter adapter(encoder);
-        return decrypt_outputs<BatchEncoderAdapter, uint64_t>(adapter, decryptor, outputs);
-    }
-    std::vector<double> MatmulHelper::decrypt_outputs_doubles(const CKKSEncoder& encoder, const Decryptor& decryptor, const Cipher2d& outputs) const {
-        CKKSEncoderAdapter adapter(encoder, std::nullopt, 0);
-        return decrypt_outputs<CKKSEncoderAdapter, double>(adapter, decryptor, outputs);
-    }
-    template <typename T>
-    std::vector<T> MatmulHelper::decrypt_outputs_ring2k(const PolynomialEncoderRing2k<T>& encoder, const Decryptor& decryptor, const Cipher2d& outputs) const {
-        PolynomialEncoderRing2kAdapter<T> adapter(encoder, std::nullopt);
-        return decrypt_outputs<PolynomialEncoderRing2kAdapter<T>, T>(adapter, decryptor, outputs);
-    }
-    template std::vector<uint32_t> MatmulHelper::decrypt_outputs_ring2k<uint32_t>(
-        const PolynomialEncoderRing2k<uint32_t>& encoder, const Decryptor& decryptor, const Cipher2d& outputs
-    ) const;
-    template std::vector<uint64_t> MatmulHelper::decrypt_outputs_ring2k<uint64_t>(
-        const PolynomialEncoderRing2k<uint64_t>& encoder, const Decryptor& decryptor, const Cipher2d& outputs
-    ) const;
-    template std::vector<uint128_t> MatmulHelper::decrypt_outputs_ring2k<uint128_t>(
-        const PolynomialEncoderRing2k<uint128_t>& encoder, const Decryptor& decryptor, const Cipher2d& outputs
-    ) const;
+    #define D_IMPL(adapter, dtype)                                                      \
+        template std::vector<dtype> MatmulHelper::decrypt_outputs<adapter, dtype>(      \
+            const adapter& encoder, const Decryptor& decryptor, const Cipher2d& outputs \
+        ) const;
+    D_IMPL_ALL
+    #undef D_IMPL
 
     Cipher2d MatmulHelper::pack_outputs(const Evaluator& evaluator, const GaloisKeys& autoKey, const Cipher2d& cipher) const {
         if (!this->pack_lwe) {
@@ -686,5 +605,164 @@ namespace troy { namespace linear {
             return ret;
         }
     }
+
+    #undef D_IMPL_ALL
+
+
+
+
+    // ------------------ adapters -----------------------
+    
+    Plain2d MatmulHelper::encode_weights_uint64s(const BatchEncoder& encoder, const uint64_t* weights) const {
+        BatchEncoderAdapter adapter(encoder); Plain2d ret;
+        encode_weights(adapter, nullptr, weights, false, &ret, nullptr);
+        return ret;
+    }
+    Plain2d MatmulHelper::encode_weights_doubles(const CKKSEncoder& encoder, const double* weights, std::optional<ParmsID> parms_id, double scale) const {
+        CKKSEncoderAdapter adapter(encoder, parms_id, scale); Plain2d ret;
+        encode_weights(adapter, nullptr, weights, false, &ret, nullptr);
+        return ret;
+    }
+    template <typename T>
+    Plain2d MatmulHelper::encode_weights_ring2k(const PolynomialEncoderRing2k<T>& encoder, const T* weights, std::optional<ParmsID> parms_id, bool for_cipher) const {
+        PolynomialEncoderRing2kAdapter<T> adapter(encoder, parms_id); Plain2d ret;
+        encode_weights(adapter, nullptr, weights, for_cipher, &ret, nullptr);
+        return ret;
+    }
+    template Plain2d MatmulHelper::encode_weights_ring2k<uint32_t>(
+        const PolynomialEncoderRing2k<uint32_t>& encoder, const uint32_t* weights, std::optional<ParmsID> parms_id, bool for_cipher
+    ) const;
+    template Plain2d MatmulHelper::encode_weights_ring2k<uint64_t>(
+        const PolynomialEncoderRing2k<uint64_t>& encoder, const uint64_t* weights, std::optional<ParmsID> parms_id, bool for_cipher
+    ) const;
+    template Plain2d MatmulHelper::encode_weights_ring2k<uint128_t>(
+        const PolynomialEncoderRing2k<uint128_t>& encoder, const uint128_t* weights, std::optional<ParmsID> parms_id, bool for_cipher
+    ) const;
+
+    Plain2d MatmulHelper::encode_inputs_uint64s(const BatchEncoder& encoder, const uint64_t* inputs) const {
+        BatchEncoderAdapter adapter(encoder); Plain2d ret;
+        encode_inputs(adapter, nullptr, inputs, true, &ret, nullptr);
+        return ret;
+    }
+    Plain2d MatmulHelper::encode_inputs_doubles(const CKKSEncoder& encoder, const double* inputs, std::optional<ParmsID> parms_id, double scale) const {
+        CKKSEncoderAdapter adapter(encoder, parms_id, scale); Plain2d ret;
+        encode_inputs(adapter, nullptr, inputs, true, &ret, nullptr);
+        return ret;
+    }
+    template <typename T>
+    Plain2d MatmulHelper::encode_inputs_ring2k(const PolynomialEncoderRing2k<T>& encoder, const T* inputs, std::optional<ParmsID> parms_id, bool for_cipher) const {
+        PolynomialEncoderRing2kAdapter<T> adapter(encoder, parms_id); Plain2d ret;
+        encode_inputs(adapter, nullptr, inputs, for_cipher, &ret, nullptr);
+        return ret;
+    }
+    template Plain2d MatmulHelper::encode_inputs_ring2k<uint32_t>(
+        const PolynomialEncoderRing2k<uint32_t>& encoder, const uint32_t* inputs, std::optional<ParmsID> parms_id, bool for_cipher
+    ) const;
+    template Plain2d MatmulHelper::encode_inputs_ring2k<uint64_t>(
+        const PolynomialEncoderRing2k<uint64_t>& encoder, const uint64_t* inputs, std::optional<ParmsID> parms_id, bool for_cipher
+    ) const;
+    template Plain2d MatmulHelper::encode_inputs_ring2k<uint128_t>(
+        const PolynomialEncoderRing2k<uint128_t>& encoder, const uint128_t* inputs, std::optional<ParmsID> parms_id, bool for_cipher
+    ) const;
+
+    Cipher2d MatmulHelper::encrypt_inputs_uint64s(const Encryptor& encryptor, const BatchEncoder& encoder, const uint64_t* inputs) const {
+        BatchEncoderAdapter adapter(encoder); Cipher2d ret;
+        encode_inputs(adapter, &encryptor, inputs, true, nullptr, &ret);
+        return ret;
+    }
+    Cipher2d MatmulHelper::encrypt_inputs_doubles(const Encryptor& encryptor, const CKKSEncoder& encoder, const double* inputs, std::optional<ParmsID> parms_id, double scale) const {
+        CKKSEncoderAdapter adapter(encoder, parms_id, scale); Cipher2d ret;
+        encode_inputs(adapter, &encryptor, inputs, true, nullptr, &ret);
+        return ret;
+    }
+    template <typename T>
+    Cipher2d MatmulHelper::encrypt_inputs_ring2k(const Encryptor& encryptor, const PolynomialEncoderRing2k<T>& encoder, const T* inputs, std::optional<ParmsID> parms_id) const {
+        PolynomialEncoderRing2kAdapter<T> adapter(encoder, parms_id); Cipher2d ret;
+        encode_inputs(adapter, &encryptor, inputs, true, nullptr, &ret);
+        return ret;
+    }
+    template Cipher2d MatmulHelper::encrypt_inputs_ring2k<uint32_t>(
+        const Encryptor& encryptor, const PolynomialEncoderRing2k<uint32_t>& encoder, const uint32_t* inputs, std::optional<ParmsID> parms_id
+    ) const;
+    template Cipher2d MatmulHelper::encrypt_inputs_ring2k<uint64_t>(
+        const Encryptor& encryptor, const PolynomialEncoderRing2k<uint64_t>& encoder, const uint64_t* inputs, std::optional<ParmsID> parms_id
+    ) const;
+    template Cipher2d MatmulHelper::encrypt_inputs_ring2k<uint128_t>(
+        const Encryptor& encryptor, const PolynomialEncoderRing2k<uint128_t>& encoder, const uint128_t* inputs, std::optional<ParmsID> parms_id
+    ) const;
+
+
+    Cipher2d MatmulHelper::encrypt_weights_uint64s(const Encryptor& encryptor, const BatchEncoder& encoder, const uint64_t* weights) const {
+        BatchEncoderAdapter adapter(encoder); Cipher2d ret;
+        encode_weights(adapter, &encryptor, weights, true, nullptr, &ret);
+        return ret;
+    }
+    Cipher2d MatmulHelper::encrypt_weights_doubles(const Encryptor& encryptor, const CKKSEncoder& encoder, const double* weights, std::optional<ParmsID> parms_id, double scale) const {
+        CKKSEncoderAdapter adapter(encoder, parms_id, scale); Cipher2d ret;
+        encode_weights(adapter, &encryptor, weights, true, nullptr, &ret);
+        return ret;
+    }
+    template <typename T>
+    Cipher2d MatmulHelper::encrypt_weights_ring2k(const Encryptor& encryptor, const PolynomialEncoderRing2k<T>& encoder, const T* inputs, std::optional<ParmsID> parms_id) const {
+        PolynomialEncoderRing2kAdapter<T> adapter(encoder, parms_id); Cipher2d ret;
+        encode_weights(adapter, &encryptor, inputs, true, nullptr, &ret);
+        return ret;
+    }
+    template Cipher2d MatmulHelper::encrypt_weights_ring2k<uint32_t>(
+        const Encryptor& encryptor, const PolynomialEncoderRing2k<uint32_t>& encoder, const uint32_t* weights, std::optional<ParmsID> parms_id
+    ) const;
+    template Cipher2d MatmulHelper::encrypt_weights_ring2k<uint64_t>(
+        const Encryptor& encryptor, const PolynomialEncoderRing2k<uint64_t>& encoder, const uint64_t* weights, std::optional<ParmsID> parms_id
+    ) const;
+    template Cipher2d MatmulHelper::encrypt_weights_ring2k<uint128_t>(
+        const Encryptor& encryptor, const PolynomialEncoderRing2k<uint128_t>& encoder, const uint128_t* weights, std::optional<ParmsID> parms_id
+    ) const;
+
+    Plain2d MatmulHelper::encode_outputs_uint64s(const BatchEncoder& encoder, const uint64_t* outputs) const {
+        BatchEncoderAdapter adapter(encoder);
+        return encode_outputs(adapter, outputs);
+    }
+    Plain2d MatmulHelper::encode_outputs_doubles(const CKKSEncoder& encoder, const double* outputs, std::optional<ParmsID> parms_id, double scale) const {
+        CKKSEncoderAdapter adapter(encoder, parms_id, scale);
+        return encode_outputs(adapter, outputs);
+    }
+    template <typename T>
+    Plain2d MatmulHelper::encode_outputs_ring2k(const PolynomialEncoderRing2k<T>& encoder, const T* outputs, std::optional<ParmsID> parms_id) const {
+        PolynomialEncoderRing2kAdapter<T> adapter(encoder, parms_id);
+        return encode_outputs(adapter, outputs);
+    }
+    template Plain2d MatmulHelper::encode_outputs_ring2k<uint32_t>(
+        const PolynomialEncoderRing2k<uint32_t>& encoder, const uint32_t* outputs, std::optional<ParmsID> parms_id
+    ) const;
+    template Plain2d MatmulHelper::encode_outputs_ring2k<uint64_t>(
+        const PolynomialEncoderRing2k<uint64_t>& encoder, const uint64_t* outputs, std::optional<ParmsID> parms_id
+    ) const;
+    template Plain2d MatmulHelper::encode_outputs_ring2k<uint128_t>(
+        const PolynomialEncoderRing2k<uint128_t>& encoder, const uint128_t* outputs, std::optional<ParmsID> parms_id
+    ) const;
+
+    std::vector<uint64_t> MatmulHelper::decrypt_outputs_uint64s(const BatchEncoder& encoder, const Decryptor& decryptor, const Cipher2d& outputs) const {
+        BatchEncoderAdapter adapter(encoder);
+        return decrypt_outputs<BatchEncoderAdapter, uint64_t>(adapter, decryptor, outputs);
+    }
+    std::vector<double> MatmulHelper::decrypt_outputs_doubles(const CKKSEncoder& encoder, const Decryptor& decryptor, const Cipher2d& outputs) const {
+        CKKSEncoderAdapter adapter(encoder, std::nullopt, 0);
+        return decrypt_outputs<CKKSEncoderAdapter, double>(adapter, decryptor, outputs);
+    }
+    template <typename T>
+    std::vector<T> MatmulHelper::decrypt_outputs_ring2k(const PolynomialEncoderRing2k<T>& encoder, const Decryptor& decryptor, const Cipher2d& outputs) const {
+        PolynomialEncoderRing2kAdapter<T> adapter(encoder, std::nullopt);
+        return decrypt_outputs<PolynomialEncoderRing2kAdapter<T>, T>(adapter, decryptor, outputs);
+    }
+    template std::vector<uint32_t> MatmulHelper::decrypt_outputs_ring2k<uint32_t>(
+        const PolynomialEncoderRing2k<uint32_t>& encoder, const Decryptor& decryptor, const Cipher2d& outputs
+    ) const;
+    template std::vector<uint64_t> MatmulHelper::decrypt_outputs_ring2k<uint64_t>(
+        const PolynomialEncoderRing2k<uint64_t>& encoder, const Decryptor& decryptor, const Cipher2d& outputs
+    ) const;
+    template std::vector<uint128_t> MatmulHelper::decrypt_outputs_ring2k<uint128_t>(
+        const PolynomialEncoderRing2k<uint128_t>& encoder, const Decryptor& decryptor, const Cipher2d& outputs
+    ) const;
+
 
 }}
