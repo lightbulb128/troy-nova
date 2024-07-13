@@ -171,7 +171,7 @@ namespace troy {namespace utils {
         if (device) {
             size_t total = this->coeff_count() * moduli.size() * pcount;
             size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(result.device_index());
+            utils::set_device(result.device_index());
             kernel_apply_ps<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 this->coeff_count_power(),
                 polys,
@@ -180,7 +180,6 @@ namespace troy {namespace utils {
                 moduli,
                 result
             );
-            cudaStreamSynchronize(0);
         } else {
             host_apply_ps(*this, polys, pcount, galois_element, moduli, result);
         }
@@ -225,7 +224,7 @@ namespace troy {namespace utils {
         if (device) {
             size_t total = this->coeff_count() * coeff_modulus_size * pcount;
             size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(result.device_index());
+            utils::set_device(result.device_index());
             kernel_apply_ntt_ps<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 this->coeff_count_power(),
                 polys,
@@ -234,8 +233,7 @@ namespace troy {namespace utils {
                 this->coeff_count(),
                 result,
                 permutation_table
-            );
-            cudaStreamSynchronize(0);
+            );;
         } else {
             host_apply_ntt_ps(
                 polys, pcount, coeff_modulus_size, 

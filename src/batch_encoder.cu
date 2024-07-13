@@ -91,9 +91,8 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(n, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(input.device_index());
+            utils::set_device(input.device_index());
             kernel_reverse_bits<<<block_count, utils::KERNEL_THREAD_COUNT>>>(logn, input);
-            cudaStreamSynchronize(0);
         }
     }
 
@@ -122,9 +121,8 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(destination.size(), utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(values.device_index());
+            utils::set_device(values.device_index());
             kernel_encode_set_values<<<block_count, utils::KERNEL_THREAD_COUNT>>>(values, index_map, destination);
-            cudaStreamSynchronize(0);
         }
     }
     
@@ -254,9 +252,8 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(destination.size(), utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(values.device_index());
+            utils::set_device(values.device_index());
             kernel_decode_set_values<<<block_count, utils::KERNEL_THREAD_COUNT>>>(values, index_map, destination);
-            cudaStreamSynchronize(0);
         }
     }
     

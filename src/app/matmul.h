@@ -110,4 +110,20 @@ namespace troy { namespace linear {
 
     };
 
+    inline std::ostream& operator<<(std::ostream& os, const MatmulObjective& obj) {
+        switch (obj) {
+            case MatmulObjective::EncryptLeft: os << "EncryptLeft"; break;
+            case MatmulObjective::EncryptRight: os << "EncryptRight"; break;
+            case MatmulObjective::Crossed: os << "Crossed"; break;
+        }
+        return os;
+    }
+
+    inline std::ostream& operator<<(std::ostream& os, const MatmulHelper& helper) {
+        os << "MatmulHelper(batch_size=" << helper.batch_size << ", input_dims=" << helper.input_dims << ", output_dims=" << helper.output_dims
+           << ", slot_count=" << helper.slot_count << ", objective=" << helper.objective << ", pack_lwe=" << helper.pack_lwe << ", store_in_host=" << helper.store_in_host << ")";
+        return os;
+    }
+
+
 }}

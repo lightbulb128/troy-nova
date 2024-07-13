@@ -1,4 +1,5 @@
 #pragma once
+#include <cuda_runtime.h>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -92,6 +93,15 @@ namespace troy {namespace utils {
             return std::make_shared<MemoryPool>(device);
         }
     };
+
+    inline void set_device(size_t device) {
+        cudaError_t status = cudaSetDevice(device);
+        if (status != cudaSuccess) {
+            std::string msg = "[set_device] cudaSetDevice failed: ";
+            msg += cudaGetErrorString(status);
+            throw std::runtime_error(msg);
+        }
+    }
 
 }
 

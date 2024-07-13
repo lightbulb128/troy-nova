@@ -1,4 +1,5 @@
 #include "matmul.h"
+#include "../utils/timer.h"
 
 namespace troy { namespace linear {
 
@@ -625,6 +626,7 @@ namespace troy { namespace linear {
     }
     template <typename T>
     Plain2d MatmulHelper::encode_weights_ring2k(const PolynomialEncoderRing2k<T>& encoder, const T* weights, std::optional<ParmsID> parms_id, bool for_cipher) const {
+        std::cout << "encode_weights_ring2k called by " << *this << std::endl;
         PolynomialEncoderRing2kAdapter<T> adapter(encoder, parms_id); Plain2d ret;
         encode_weights(adapter, nullptr, weights, for_cipher, &ret, nullptr);
         return ret;

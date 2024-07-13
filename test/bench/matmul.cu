@@ -470,7 +470,7 @@ namespace bench::matmul {
             std::vector<std::string> x_serialized;
             if (threads == 1) {
                 auto [x_serialized_single, timer_single] = lambda_encrypt_inputs(0, thread_helpers[0]);
-                x_serialized.push_back(x_serialized_single);
+                x_serialized.push_back(std::move(x_serialized_single));
                 timers.push_back(timer_single);
             } else {
                 std::vector<std::future<std::pair<std::string, Timer>>> futures;

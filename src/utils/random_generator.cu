@@ -34,9 +34,8 @@ namespace troy {namespace utils {
             }
         } else {
             size_t block_count = utils::ceil_div(n, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(bytes.device_index());
+            utils::set_device(bytes.device_index());
             kernel_fill_uint128s<<<block_count, utils::KERNEL_THREAD_COUNT>>>(bytes, seed, counter);
-            cudaStreamSynchronize(0);
             counter = counter.add(n);
         }
     }
@@ -123,12 +122,11 @@ namespace troy {namespace utils {
             }
         } else {
             size_t block_count = utils::ceil_div(degree, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(destination.device_index());
+            utils::set_device(destination.device_index());
             kernel_sample_poly_ternary<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 destination, degree, moduli,
                 this->seed, this->counter
             );
-            cudaStreamSynchronize(0);
             this->counter = this->counter.add(degree);
         }
     }
@@ -186,11 +184,10 @@ namespace troy {namespace utils {
             }
         } else {
             size_t block_count = utils::ceil_div(degree, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(destination.device_index());
+            utils::set_device(destination.device_index());
             kernel_sample_poly_centered_binomial<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 destination, degree, moduli, this->seed, this->counter
             );
-            cudaStreamSynchronize(0);
             this->counter = this->counter.add(degree);
         }
     }
