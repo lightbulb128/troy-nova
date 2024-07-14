@@ -6,12 +6,14 @@ namespace troy::utils {
     std::mutex MemoryPool::global_pool_mutex = std::mutex();
 
     void stream_sync() {
-        cudaError_t status = cudaStreamSynchronize(0);
-        if (status != cudaSuccess) {
-            std::string msg = "[stream_sync] cudaStreamSynchronize failed: ";
-            msg += cudaGetErrorString(status);
-            throw std::runtime_error(msg);
-        }
+        #ifdef TROY_STREAM_SYNC_AFTER_KERNEL_CALLS
+            cudaError_t status = cudaStreamSynchronize(0);
+            if (status != cudaSuccess) {
+                std::string msg = "[stream_sync] cudaStreamSynchronize failed: ";
+                msg += cudaGetErrorString(status);
+                throw std::runtime_error(msg);
+            }
+        #endif
     }
 
 }
