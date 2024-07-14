@@ -42,6 +42,11 @@ option(TROY_MEMORY_POOL_UNSAFE "Use unsafe memory pool" OFF)
 option(TROY_PYBIND "Build python encapsulation with Pybind11" ON)
 option(TROY_EXAMPLES "Build examples" OFF)
 option(TROY_ZSTD "Use Zstandard for compression" ON)
+option(TROY_STREAM_SYNC_AFTER_KERNEL_CALLS "Synchronize stream after each kernel call" OFF)
+
+if(TROY_STREAM_SYNC_AFTER_KERNEL_CALLS)
+  add_compile_definitions(TROY_STREAM_SYNC_AFTER_KERNEL_CALLS)
+endif()
 
 if (TROY_MEMORY_POOL_UNSAFE)
   # if TROY_MEMORY_POOL_UNSAFE is enabled, TROY_MEMORY_POOL must be enabled

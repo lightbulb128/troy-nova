@@ -5,6 +5,15 @@ namespace troy::utils {
     std::shared_ptr<MemoryPool> MemoryPool::global_pool = nullptr;
     std::mutex MemoryPool::global_pool_mutex = std::mutex();
 
+    void stream_sync() {
+        cudaError_t status = cudaStreamSynchronize(0);
+        if (status != cudaSuccess) {
+            std::string msg = "[stream_sync] cudaStreamSynchronize failed: ";
+            msg += cudaGetErrorString(status);
+            throw std::runtime_error(msg);
+        }
+    }
+
 }
 
 #ifdef TROY_MEMORY_POOL 

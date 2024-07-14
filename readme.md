@@ -125,9 +125,14 @@ Troy uses memory pools to manage device memory, and some APIs take a memory pool
 
 Note that if you use the default memory pool, it is recommented that you call `MemoryPool::Destroy` before the program exits to safely release the static memory pool. But not doing it may just still go smoothly.
 
-Multithreaded programs *may* benefit from using one memory pool for each thread. Furthermore, if you wish to use **multiple GPUs, you must** create multiple memory pools to handle the memory for each device. You can create new instances of memory pools by calling `MemoryPool::Create`, which takes the device index as an argument. See [`memory_pool.h`](src/utils/memory_pool.h). For the usage multiple memory pools, see the example at `examples/20_memory_pools.cu`.
-
 You can disable the management of device memory by memory pools by applying `TROY_MEMORY_POOL=OFF` to cmake. If so, although memory pools can still be created, they do not manage the memory but simply call cudaMalloc and cudaFree whenever their methods are called. When memory pool is enabled, some users report unexpected exceptions complaining `"[MemoryPool::get] The singleton has been destroyed."` when using the library. One could check if `MemoryPool::Destroy()` has been called prematurely in your program to locate the problem, or one could simply provide a `TROY_MEMORY_POOL_UNSAFE=OFF` to try to avoid it. This `TROY_MEMORY_POOL_UNSAFE` is an experimental hacking solution (because I have not reproduced the error on my machine yet 😢), so if you still get the errors please file an issue.
+
+## Multithreading with Memory Pools
+
+Multithreaded programs **should** use different memory pools for each thread, since I have observed some issues when all threads use the same memory pool. You can create the context in the main thread with a single memory pool, but when you conduct HE computations on multiple threads, you should provide unique memory pools for each thread. Alternatively, you could turn on `TROY_STREAM_SYNC_AFTER_KERNEL_CALLS` in cmake, this guarantees any memory pool shared by multiple threads won't lead to racing conditions, but it could result in some performance drop.
+
+Furthermore, if you wish to use **multiple GPUs, you must** create multiple memory pools to handle the memory for each device. You can create new instances of memory pools by calling `MemoryPool::Create`, which takes the device index as an argument. See [`memory_pool.h`](src/utils/memory_pool.h). For the usage multiple memory pools, see the example at `examples/20_memory_pools.cu`.
+
 
 # Contribute
 Feel free to fork / pull request.
