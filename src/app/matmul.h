@@ -39,6 +39,12 @@ namespace troy { namespace linear {
         template <typename E, typename T>
         std::vector<T> decrypt_outputs(const E& encoder, const Decryptor& decryptor, const Cipher2d& outputs) const;
 
+        template <typename E, typename T>
+        Cipher2d matmul_fly(const E& encoder, const Evaluator& evaluator, const Cipher2d& inputs, const T* weights) const;
+
+        template <typename E, typename T>
+        void add_bias_inplace_fly(const E& encoder, const Evaluator& evaluator, Cipher2d& multiplied, const T* bias) const;
+
     public:
     
         size_t batch_size, input_dims, output_dims;
@@ -46,23 +52,15 @@ namespace troy { namespace linear {
         size_t batch_block, input_block, output_block;
         MatmulObjective objective; 
         bool pack_lwe;
-        bool store_in_host;
         MemoryPoolHandle pool;
 
         inline void set_pool(MemoryPoolHandle pool) {
             this->pool = pool;
         }
 
-        inline void set_store_in_host(bool store_in_host) {
-            if (store_in_host && !pack_lwe) {
-                throw std::runtime_error("[MatmulHelper::set_store_in_host] Cannot store in host if pack_lwe is false");
-            }
-            this->store_in_host = store_in_host;
-        }
-
         inline MatmulHelper(size_t batch_size, size_t input_dims, size_t output_dims, size_t slot_count, MatmulObjective objective = MatmulObjective::EncryptLeft, bool pack_lwe = true, MemoryPoolHandle pool = MemoryPool::GlobalPool()):
             batch_size(batch_size), input_dims(input_dims), output_dims(output_dims),
-            slot_count(slot_count), objective(objective), pack_lwe(pack_lwe), store_in_host(false), pool(pool)
+            slot_count(slot_count), objective(objective), pack_lwe(pack_lwe), pool(pool)
         {
             determine_block();
         }
@@ -108,6 +106,16 @@ namespace troy { namespace linear {
         void serialize_outputs(const Evaluator &evaluator, const Cipher2d& x, std::ostream& stream, CompressionMode mode = CompressionMode::Nil) const;
         Cipher2d deserialize_outputs(const Evaluator &evaluator, std::istream& stream) const;
 
+        Cipher2d matmul_fly_uint64s(const BatchEncoder& encoder, const Evaluator& evaluator, const Cipher2d& inputs, const uint64_t* weights) const;
+        Cipher2d matmul_fly_doubles(const CKKSEncoder& encoder, const Evaluator& evaluator, const Cipher2d& inputs, const double* weights, std::optional<ParmsID> parms_id, double scale) const;
+        template <typename T>
+        Cipher2d matmul_fly_ring2k(const PolynomialEncoderRing2k<T>& encoder, const Evaluator& evaluator, const Cipher2d& inputs, const T* weights, std::optional<ParmsID> parms_id) const;
+
+        void add_bias_inplace_fly_uint64s(const BatchEncoder& encoder, const Evaluator& evaluator, Cipher2d& multiplied, const uint64_t* bias) const;
+        void add_bias_inplace_fly_doubles(const CKKSEncoder& encoder, const Evaluator& evaluator, Cipher2d& multiplied, const double* bias, std::optional<ParmsID> parms_id, double scale) const;
+        template <typename T>
+        void add_bias_inplace_fly_ring2k(const PolynomialEncoderRing2k<T>& encoder, const Evaluator& evaluator, Cipher2d& multiplied, const T* bias, std::optional<ParmsID> parms_id) const;
+
     };
 
     inline std::ostream& operator<<(std::ostream& os, const MatmulObjective& obj) {
@@ -121,7 +129,7 @@ namespace troy { namespace linear {
 
     inline std::ostream& operator<<(std::ostream& os, const MatmulHelper& helper) {
         os << "MatmulHelper(batch_size=" << helper.batch_size << ", input_dims=" << helper.input_dims << ", output_dims=" << helper.output_dims
-           << ", slot_count=" << helper.slot_count << ", objective=" << helper.objective << ", pack_lwe=" << helper.pack_lwe << ", store_in_host=" << helper.store_in_host << ")";
+           << ", slot_count=" << helper.slot_count << ", objective=" << helper.objective << ", pack_lwe=" << helper.pack_lwe << ")";
         return os;
     }
 

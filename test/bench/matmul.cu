@@ -29,6 +29,8 @@ namespace bench::matmul {
         bool scheme_ckks = false;
         bool scheme_bgv = false;
 
+        size_t repeat;
+
         size_t m;
         size_t n;
         size_t r;
@@ -74,6 +76,8 @@ namespace bench::matmul {
             } else if (scheme_ckks) {
                 scheme_bgv = false;
             } // only one scheme can be true
+
+            repeat = parser.get_uint<size_t>("-R").value_or(parser.get_uint<size_t>("--repeat").value_or(1));
 
             m = parser.get_uint<size_t>("-m").value_or(parser.get_uint<size_t>("--m").value_or(10));
             n = parser.get_uint<size_t>("-n").value_or(parser.get_uint<size_t>("--n").value_or(10));
@@ -157,6 +161,7 @@ namespace bench::matmul {
             std::cout << "  --bgv                       Run BGV scheme" << std::endl;
             std::cout << "      Exactly one of --bfv, --ckks, or --bgv should be set." << std::endl;
             std::cout << std::endl;
+            std::cout << "  -R, --repeat                Repeat count (default: 1)" << std::endl;
             std::cout << "  -N, --poly-modulus-degree   Poly modulus degree (default: 8192)" << std::endl;
             std::cout << "  -st, --simd-log-t           SIMD log t (default: 40)" << std::endl;
             std::cout << "  -rt, --ring2k-log-t         Ring2k log t (default: 0)" << std::endl;
@@ -185,6 +190,7 @@ namespace bench::matmul {
                 std::cout << "  run-on              = device" << std::endl;
             }
             std::cout << "  threads             = " << threads << std::endl;
+            std::cout << "  dimensions          = " << m << " x " << r << " x " << n << std::endl;
             
             if (device) {
                 std::cout << "  multiple-pools      = " << bool_to_string(multiple_pools) << std::endl;
@@ -207,6 +213,7 @@ namespace bench::matmul {
                 std::cout << "  scheme              = BGV" << std::endl;
             }
 
+            std::cout << "  repeat              = " << repeat << std::endl;
             std::cout << "  poly-modulus-degree = " << poly_modulus_degree << std::endl;
             if (simd_log_t != 0) {
                 std::cout << "  simd-log-t          = " << simd_log_t << std::endl;
@@ -415,276 +422,305 @@ namespace bench::matmul {
                 s_parms_id = pointer->parms_id();
             }
 
+            bool success = false;
+
             Timer total_timer;
-            size_t total_timer_handle = total_timer.register_timer("Total");
-            total_timer.tick(total_timer_handle);
+            size_t total_timer_handle = total_timer.register_timer("Time cost");
 
-            TimerOnce thread_timer;
-            std::vector<Timer> timers;
-            timers.clear();
-
-            // encode and encrypt inputs
-            auto lambda_encrypt_inputs = [this, &x, m_divided, r](size_t thread_id, const MatmulHelper& helper) {
-                const GeneralHeContext& context = environment.get_context(thread_id);
-                HeContextPointer he = context.context();
-                const GeneralEncoder& encoder = context.encoder();
-                const Encryptor& encryptor = context.encryptor();
-                size_t m_lower = thread_id * m_divided;
-
-                Timer timer; timer.tab(1);
-
-                size_t timer_single_handle = timer.register_timer("Ecd x");
-                timer.tick(timer_single_handle);
-                size_t offset = m_lower * r;
-                Plain2d x_encoded;
-                if (encoder.is_batch()) {
-                    x_encoded = helper.encode_inputs_uint64s(encoder.batch(), x.integers().data() + offset);
-                } else if (encoder.is_ckks()) {
-                    x_encoded = helper.encode_inputs_doubles(encoder.ckks(), x.doubles().data() + offset, std::nullopt, context.scale());
-                } else if (encoder.is_ring32()) {
-                    x_encoded = helper.encode_inputs_ring2k<uint32_t>(encoder.poly32(), x.uint32s().data() + offset, std::nullopt, true);
-                } else if (encoder.is_ring64()) {
-                    x_encoded = helper.encode_inputs_ring2k<uint64_t>(encoder.poly64(), x.uint64s().data() + offset, std::nullopt, true);
-                } else if (encoder.is_ring128()) {
-                    x_encoded = helper.encode_inputs_ring2k<uint128_t>(encoder.poly128(), x.uint128s().data() + offset, std::nullopt, true);
-                } else {
-                    throw std::runtime_error("Unsupported encoder");
+            for (size_t rep = 0; rep < args.repeat; rep++) {
+                bool last_rep = rep == args.repeat - 1;
+                if (last_rep) {
+                    std::cout << "Printing step timings for the last repetition" << std::endl;
                 }
-                timer.tock(timer_single_handle);
+                total_timer.tick(total_timer_handle);
 
-                timer_single_handle = timer.register_timer("Enc [x]");
-                timer.tick(timer_single_handle);
-                Cipher2d x_encrypted = x_encoded.encrypt_symmetric(encryptor, environment.get_pool(thread_id));
-                timer.tock(timer_single_handle);
-
-                stringstream x_serialized;
-                timer_single_handle = timer.register_timer("Ser [x]");
-                timer.tick(timer_single_handle);
-                x_encrypted.save(x_serialized, he, this->args.use_zstd ? CompressionMode::Zstd : CompressionMode::Nil);
-                timer.tock(timer_single_handle);
-                
-                return std::make_pair(x_serialized.str(), std::move(timer));
-            };
-
-            // run threads
-            std::vector<std::string> x_serialized;
-            if (threads == 1) {
-                auto [x_serialized_single, timer_single] = lambda_encrypt_inputs(0, thread_helpers[0]);
-                x_serialized.push_back(std::move(x_serialized_single));
-                timers.push_back(timer_single);
-            } else {
-                std::vector<std::future<std::pair<std::string, Timer>>> futures;
-                for (size_t i = 0; i < threads; i++) {
-                    futures.push_back(std::async(std::launch::async, lambda_encrypt_inputs, i, thread_helpers[i]));
+                TimerOnce thread_timer;
+                Timer total_timer_once; 
+                size_t total_timer_once_handle = 0;
+                if (args.repeat > 1) {
+                    total_timer_once_handle = total_timer_once.register_timer(std::string("Time cost #") + std::to_string(rep + 1));
+                    total_timer_once.tick(total_timer_once_handle);
                 }
-                for (size_t i = 0; i < threads; i++) {
-                    auto [x_serialized_single, timer_single] = futures[i].get();
-                    x_serialized.push_back(x_serialized_single);
-                    timers.push_back(timer_single);
-                }
-            }
-            thread_timer.finish("Client-Enc[x]");
-            if (timers.size() == 1) timers[0].print();
-            else TimerThreaded::Print(timers);
-            timers.clear();
+                std::vector<Timer> timers;
+                timers.clear();
 
-            size_t x_serialized_size = 0;
-            for (size_t i = 0; i < threads; i++) {
-                x_serialized_size += x_serialized[i].size();
-            }
+                // encode and encrypt inputs
+                auto lambda_encrypt_inputs = [this, &x, m_divided, r](size_t thread_id, const MatmulHelper& helper) {
+                    const GeneralHeContext& context = environment.get_context(thread_id);
+                    HeContextPointer he = context.context();
+                    const GeneralEncoder& encoder = context.encoder();
+                    const Encryptor& encryptor = context.encryptor();
+                    size_t m_lower = thread_id * m_divided;
 
-            thread_timer.restart();
+                    Timer timer; timer.tab(1);
 
-            // calculate matmul and serialize ys
-            auto lambda_matmul = [this, m_divided, n, &s, pack_lwes, mod_switch_down_levels, &s_parms_id](
-                size_t thread_id, std::string x_serialized, const MatmulHelper& helper, const GaloisKeys& automorphism_key, const Plain2d& w_encoded
-            ) {
-                const GeneralHeContext& context = environment.get_context(thread_id);
-                HeContextPointer he = context.context();
-                const GeneralEncoder& encoder = context.encoder();
-                const Evaluator& evaluator = context.evaluator();
-                MemoryPoolHandle pool = environment.get_pool(thread_id);
-
-                Timer timer; timer.tab(1);
-                
-                size_t timer_single_handle = timer.register_timer("Ecd s");
-                timer.tick(timer_single_handle);
-                Plain2d s_encoded;
-                size_t offset = thread_id * m_divided * n;
-                if (encoder.is_batch()) {
-                    s_encoded = helper.encode_outputs_uint64s(encoder.batch(), s.integers().data() + offset);
-                } else if (encoder.is_ckks()) {
-                    s_encoded = helper.encode_outputs_doubles(encoder.ckks(), s.doubles().data() + offset, std::nullopt, context.scale() * context.scale());
-                } else if (encoder.is_ring32()) {
-                    s_encoded = helper.encode_outputs_ring2k<uint32_t>(encoder.poly32(), s.uint32s().data() + offset, s_parms_id);
-                } else if (encoder.is_ring64()) {
-                    s_encoded = helper.encode_outputs_ring2k<uint64_t>(encoder.poly64(), s.uint64s().data() + offset, s_parms_id);
-                } else if (encoder.is_ring128()) {
-                    s_encoded = helper.encode_outputs_ring2k<uint128_t>(encoder.poly128(), s.uint128s().data() + offset, s_parms_id);
-                } else {
-                    throw std::runtime_error("Unsupported encoder");
-                }
-                timer.tock(timer_single_handle);
-
-                timer_single_handle = timer.register_timer("Deser [x]");
-                timer.tick(timer_single_handle);
-                stringstream x_serialized_stream(x_serialized);
-                Cipher2d x_encrypted = Cipher2d::load_new(x_serialized_stream, he, pool);
-                timer.tock(timer_single_handle);
-                
-                timer_single_handle = timer.register_timer("Matmul");
-                timer.tick(timer_single_handle);
-                Cipher2d y_encrypted = helper.matmul(evaluator, x_encrypted, w_encoded);
-                timer.tock(timer_single_handle);
-                
-                if (mod_switch_down_levels > 0) {
-                    timer_single_handle = timer.register_timer("Mod switch");
+                    size_t timer_single_handle = timer.register_timer("Ecd x");
                     timer.tick(timer_single_handle);
-                    for (size_t i = 0; i < mod_switch_down_levels; i++) {
-                        y_encrypted.mod_switch_to_next_inplace(evaluator, pool);
+                    size_t offset = m_lower * r;
+                    Plain2d x_encoded;
+                    if (encoder.is_batch()) {
+                        x_encoded = helper.encode_inputs_uint64s(encoder.batch(), x.integers().data() + offset);
+                    } else if (encoder.is_ckks()) {
+                        x_encoded = helper.encode_inputs_doubles(encoder.ckks(), x.doubles().data() + offset, std::nullopt, context.scale());
+                    } else if (encoder.is_ring32()) {
+                        x_encoded = helper.encode_inputs_ring2k<uint32_t>(encoder.poly32(), x.uint32s().data() + offset, std::nullopt, true);
+                    } else if (encoder.is_ring64()) {
+                        x_encoded = helper.encode_inputs_ring2k<uint64_t>(encoder.poly64(), x.uint64s().data() + offset, std::nullopt, true);
+                    } else if (encoder.is_ring128()) {
+                        x_encoded = helper.encode_inputs_ring2k<uint128_t>(encoder.poly128(), x.uint128s().data() + offset, std::nullopt, true);
+                    } else {
+                        throw std::runtime_error("Unsupported encoder");
                     }
                     timer.tock(timer_single_handle);
-                }
 
-                if (pack_lwes) {
-                    timer_single_handle = timer.register_timer("Pack LWEs");
+                    timer_single_handle = timer.register_timer("Enc [x]");
                     timer.tick(timer_single_handle);
-                    y_encrypted = helper.pack_outputs(evaluator, automorphism_key, y_encrypted);
+                    Cipher2d x_encrypted = x_encoded.encrypt_symmetric(encryptor, environment.get_pool(thread_id));
                     timer.tock(timer_single_handle);
+
+                    stringstream x_serialized;
+                    timer_single_handle = timer.register_timer("Ser [x]");
+                    timer.tick(timer_single_handle);
+                    x_encrypted.save(x_serialized, he, this->args.use_zstd ? CompressionMode::Zstd : CompressionMode::Nil);
+                    timer.tock(timer_single_handle);
+                    
+                    return std::make_pair(x_serialized.str(), std::move(timer));
+                };
+
+                // run threads
+                std::vector<std::string> x_serialized;
+                if (threads == 1) {
+                    auto [x_serialized_single, timer_single] = lambda_encrypt_inputs(0, thread_helpers[0]);
+                    x_serialized.push_back(std::move(x_serialized_single));
+                    timers.push_back(timer_single);
+                } else {
+                    std::vector<std::future<std::pair<std::string, Timer>>> futures;
+                    for (size_t i = 0; i < threads; i++) {
+                        futures.push_back(std::async(std::launch::async, lambda_encrypt_inputs, i, thread_helpers[i]));
+                    }
+                    for (size_t i = 0; i < threads; i++) {
+                        auto [x_serialized_single, timer_single] = futures[i].get();
+                        x_serialized.push_back(x_serialized_single);
+                        timers.push_back(timer_single);
+                    }
+                }
+                if (last_rep) {
+                    thread_timer.finish("Client-Enc[x]");
+                    if (timers.size() == 1) timers[0].print();
+                    else TimerThreaded::Print(timers);
+                }
+                timers.clear();
+
+                size_t x_serialized_size = 0;
+                for (size_t i = 0; i < threads; i++) {
+                    x_serialized_size += x_serialized[i].size();
                 }
 
-                timer_single_handle = timer.register_timer("Add s");
-                timer.tick(timer_single_handle);
-                y_encrypted.add_plain_inplace(evaluator, s_encoded, pool);
-                timer.tock(timer_single_handle);
+                thread_timer.restart();
 
-                stringstream y_serialized;
-                timer_single_handle = timer.register_timer("Ser [y]");
-                timer.tick(timer_single_handle);
-                helper.serialize_outputs(evaluator, y_encrypted, y_serialized, this->args.use_zstd ? CompressionMode::Zstd : CompressionMode::Nil);
-                timer.tock(timer_single_handle);;
+                // calculate matmul and serialize ys
+                auto lambda_matmul = [this, m_divided, n, &s, pack_lwes, mod_switch_down_levels, &s_parms_id](
+                    size_t thread_id, std::string x_serialized, const MatmulHelper& helper, const GaloisKeys& automorphism_key, const Plain2d& w_encoded
+                ) {
+                    const GeneralHeContext& context = environment.get_context(thread_id);
+                    HeContextPointer he = context.context();
+                    const GeneralEncoder& encoder = context.encoder();
+                    const Evaluator& evaluator = context.evaluator();
+                    MemoryPoolHandle pool = environment.get_pool(thread_id);
 
-                return std::make_pair(y_serialized.str(), std::move(timer));
+                    Timer timer; timer.tab(1);
+                    
+                    size_t timer_single_handle = timer.register_timer("Ecd s");
+                    timer.tick(timer_single_handle);
+                    Plain2d s_encoded;
+                    size_t offset = thread_id * m_divided * n;
+                    if (encoder.is_batch()) {
+                        s_encoded = helper.encode_outputs_uint64s(encoder.batch(), s.integers().data() + offset);
+                    } else if (encoder.is_ckks()) {
+                        s_encoded = helper.encode_outputs_doubles(encoder.ckks(), s.doubles().data() + offset, std::nullopt, context.scale() * context.scale());
+                    } else if (encoder.is_ring32()) {
+                        s_encoded = helper.encode_outputs_ring2k<uint32_t>(encoder.poly32(), s.uint32s().data() + offset, s_parms_id);
+                    } else if (encoder.is_ring64()) {
+                        s_encoded = helper.encode_outputs_ring2k<uint64_t>(encoder.poly64(), s.uint64s().data() + offset, s_parms_id);
+                    } else if (encoder.is_ring128()) {
+                        s_encoded = helper.encode_outputs_ring2k<uint128_t>(encoder.poly128(), s.uint128s().data() + offset, s_parms_id);
+                    } else {
+                        throw std::runtime_error("Unsupported encoder");
+                    }
+                    timer.tock(timer_single_handle);
 
-            };
+                    timer_single_handle = timer.register_timer("Deser [x]");
+                    timer.tick(timer_single_handle);
+                    stringstream x_serialized_stream(x_serialized);
+                    Cipher2d x_encrypted = Cipher2d::load_new(x_serialized_stream, he, pool);
+                    timer.tock(timer_single_handle);
+                    
+                    timer_single_handle = timer.register_timer("Matmul");
+                    timer.tick(timer_single_handle);
+                    Cipher2d y_encrypted = helper.matmul(evaluator, x_encrypted, w_encoded);
+                    timer.tock(timer_single_handle);
+                    
+                    if (mod_switch_down_levels > 0) {
+                        timer_single_handle = timer.register_timer("Mod switch");
+                        timer.tick(timer_single_handle);
+                        for (size_t i = 0; i < mod_switch_down_levels; i++) {
+                            y_encrypted.mod_switch_to_next_inplace(evaluator, pool);
+                        }
+                        timer.tock(timer_single_handle);
+                    }
 
-            // run threads
-            std::vector<std::string> y_serialized;
-            if (threads == 1) {
-                auto [y_serialized_single, timer_single] = lambda_matmul(0, x_serialized[0], thread_helpers[0], context_automorphism_keys[0], context_w_encoded[0]);
-                y_serialized.push_back(y_serialized_single);
-                timers.push_back(timer_single);
-            } else {
-                std::vector<std::future<std::pair<std::string, Timer>>> futures;
-                for (size_t i = 0; i < threads; i++) {
-                    size_t context_id = environment.get_context_index(i);
-                    futures.push_back(std::async(std::launch::async, lambda_matmul, i, 
-                        x_serialized[i], thread_helpers[i], context_automorphism_keys[context_id], 
-                        context_w_encoded[context_id]
-                    ));
-                }
-                for (size_t i = 0; i < threads; i++) {
-                    auto [y_serialized_single, timer_single] = futures[i].get();
+                    if (pack_lwes) {
+                        timer_single_handle = timer.register_timer("Pack LWEs");
+                        timer.tick(timer_single_handle);
+                        y_encrypted = helper.pack_outputs(evaluator, automorphism_key, y_encrypted);
+                        timer.tock(timer_single_handle);
+                    }
+
+                    timer_single_handle = timer.register_timer("Add s");
+                    timer.tick(timer_single_handle);
+                    y_encrypted.add_plain_inplace(evaluator, s_encoded, pool);
+                    timer.tock(timer_single_handle);
+
+                    stringstream y_serialized;
+                    timer_single_handle = timer.register_timer("Ser [y]");
+                    timer.tick(timer_single_handle);
+                    helper.serialize_outputs(evaluator, y_encrypted, y_serialized, this->args.use_zstd ? CompressionMode::Zstd : CompressionMode::Nil);
+                    timer.tock(timer_single_handle);;
+
+                    return std::make_pair(y_serialized.str(), std::move(timer));
+
+                };
+
+                // run threads
+                std::vector<std::string> y_serialized;
+                if (threads == 1) {
+                    auto [y_serialized_single, timer_single] = lambda_matmul(0, x_serialized[0], thread_helpers[0], context_automorphism_keys[0], context_w_encoded[0]);
                     y_serialized.push_back(y_serialized_single);
                     timers.push_back(timer_single);
-                }
-            }
-            thread_timer.finish("Server-Matmul");
-            if (timers.size() == 1) timers[0].print();
-            else TimerThreaded::Print(timers);
-            timers.clear();
-
-            size_t y_serialized_size = 0;
-            for (size_t i = 0; i < threads; i++) {
-                y_serialized_size += y_serialized[i].size();
-            }
-
-            thread_timer.restart();
-
-            // decrypt and decode outputs
-            GeneralVector y_decoded = GeneralVector::zeros_like(s, m * n);
-            auto lambda_decrypt_decode = [this, m_divided, m, n, &y_decoded](
-                size_t thread_id, std::string y_serialized, const MatmulHelper& helper
-            ) {
-                const GeneralHeContext& context = environment.get_context(thread_id);
-                const GeneralEncoder& encoder = context.encoder();
-                const Decryptor& decryptor = context.decryptor();
-                size_t m_lower = thread_id * m_divided;
-                size_t m_upper = std::min((thread_id + 1) * m_divided, m);
-
-                Timer timer; timer.tab(1);
-
-                size_t timer_single_handle = timer.register_timer("Deser [y]");
-                timer.tick(timer_single_handle);
-                stringstream y_serialized_stream(y_serialized);
-                Cipher2d y_encrypted = helper.deserialize_outputs(context.evaluator(), y_serialized_stream);
-                timer.tock(timer_single_handle);
-
-                timer_single_handle = timer.register_timer("Dec [y]");
-                timer.tick(timer_single_handle);
-                GeneralVector y_decoded_single(vector<double>({}));
-                if (encoder.is_batch()) {
-                    y_decoded_single = GeneralVector(helper.decrypt_outputs_uint64s(encoder.batch(), decryptor, y_encrypted), false);
-                } else if (encoder.is_ckks()) {
-                    y_decoded_single = helper.decrypt_outputs_doubles(encoder.ckks(), decryptor, y_encrypted);
-                } else if (encoder.is_ring32()) {
-                    y_decoded_single = helper.decrypt_outputs_ring2k<uint32_t>(encoder.poly32(), decryptor, y_encrypted);
-                } else if (encoder.is_ring64()) {
-                    y_decoded_single = GeneralVector(helper.decrypt_outputs_ring2k<uint64_t>(encoder.poly64(), decryptor, y_encrypted), true);
-                } else if (encoder.is_ring128()) {
-                    y_decoded_single = helper.decrypt_outputs_ring2k<uint128_t>(encoder.poly128(), decryptor, y_encrypted);
                 } else {
-                    throw std::runtime_error("Unsupported encoder");
-                }
-                // put to y_decoded
-                for (size_t i = m_lower; i < m_upper; i++) {
-                    for (size_t j = 0; j < n; j++) {
-                        if (encoder.is_batch()) {
-                            y_decoded.integers()[i * n + j] = y_decoded_single.integers()[(i - m_lower) * n + j];
-                        } else if (encoder.is_ckks()) {
-                            y_decoded.doubles()[i * n + j] = y_decoded_single.doubles()[(i - m_lower) * n + j];
-                        } else if (encoder.is_ring32()) {
-                            y_decoded.uint32s()[i * n + j] = y_decoded_single.uint32s()[(i - m_lower) * n + j];
-                        } else if (encoder.is_ring64()) {
-                            y_decoded.uint64s()[i * n + j] = y_decoded_single.uint64s()[(i - m_lower) * n + j];
-                        } else if (encoder.is_ring128()) {
-                            y_decoded.uint128s()[i * n + j] = y_decoded_single.uint128s()[(i - m_lower) * n + j];
-                        } else {
-                            throw std::runtime_error("Unsupported encoder");
-                        }
+                    std::vector<std::future<std::pair<std::string, Timer>>> futures;
+                    for (size_t i = 0; i < threads; i++) {
+                        size_t context_id = environment.get_context_index(i);
+                        futures.push_back(std::async(std::launch::async, lambda_matmul, i, 
+                            x_serialized[i], thread_helpers[i], context_automorphism_keys[context_id], 
+                            context_w_encoded[context_id]
+                        ));
+                    }
+                    for (size_t i = 0; i < threads; i++) {
+                        auto [y_serialized_single, timer_single] = futures[i].get();
+                        y_serialized.push_back(y_serialized_single);
+                        timers.push_back(timer_single);
                     }
                 }
-                timer.tock(timer_single_handle);
-
-                return timer;
-            };
-
-            // run threads
-            if (threads == 1) {
-                timers.push_back(lambda_decrypt_decode(0, y_serialized[0], thread_helpers[0]));
-            } else {
-                std::vector<std::future<Timer>> futures;
-                for (size_t i = 0; i < threads; i++) {
-                    futures.push_back(std::async(std::launch::async, lambda_decrypt_decode, i, y_serialized[i], thread_helpers[i]));
+                if (last_rep) {
+                    thread_timer.finish("Server-Matmul");
+                    if (timers.size() == 1) timers[0].print();
+                    else TimerThreaded::Print(timers);
                 }
+                timers.clear();
+
+                size_t y_serialized_size = 0;
                 for (size_t i = 0; i < threads; i++) {
-                    timers.push_back(futures[i].get());
+                    y_serialized_size += y_serialized[i].size();
+                }
+
+                thread_timer.restart();
+
+                // decrypt and decode outputs
+                GeneralVector y_decoded = GeneralVector::zeros_like(s, m * n);
+                auto lambda_decrypt_decode = [this, m_divided, m, n, &y_decoded](
+                    size_t thread_id, std::string y_serialized, const MatmulHelper& helper
+                ) {
+                    const GeneralHeContext& context = environment.get_context(thread_id);
+                    const GeneralEncoder& encoder = context.encoder();
+                    const Decryptor& decryptor = context.decryptor();
+                    size_t m_lower = thread_id * m_divided;
+                    size_t m_upper = std::min((thread_id + 1) * m_divided, m);
+
+                    Timer timer; timer.tab(1);
+
+                    size_t timer_single_handle = timer.register_timer("Deser [y]");
+                    timer.tick(timer_single_handle);
+                    stringstream y_serialized_stream(y_serialized);
+                    Cipher2d y_encrypted = helper.deserialize_outputs(context.evaluator(), y_serialized_stream);
+                    timer.tock(timer_single_handle);
+
+                    timer_single_handle = timer.register_timer("Dec [y]");
+                    timer.tick(timer_single_handle);
+                    GeneralVector y_decoded_single(vector<double>({}));
+                    if (encoder.is_batch()) {
+                        y_decoded_single = GeneralVector(helper.decrypt_outputs_uint64s(encoder.batch(), decryptor, y_encrypted), false);
+                    } else if (encoder.is_ckks()) {
+                        y_decoded_single = helper.decrypt_outputs_doubles(encoder.ckks(), decryptor, y_encrypted);
+                    } else if (encoder.is_ring32()) {
+                        y_decoded_single = helper.decrypt_outputs_ring2k<uint32_t>(encoder.poly32(), decryptor, y_encrypted);
+                    } else if (encoder.is_ring64()) {
+                        y_decoded_single = GeneralVector(helper.decrypt_outputs_ring2k<uint64_t>(encoder.poly64(), decryptor, y_encrypted), true);
+                    } else if (encoder.is_ring128()) {
+                        y_decoded_single = helper.decrypt_outputs_ring2k<uint128_t>(encoder.poly128(), decryptor, y_encrypted);
+                    } else {
+                        throw std::runtime_error("Unsupported encoder");
+                    }
+                    // put to y_decoded
+                    for (size_t i = m_lower; i < m_upper; i++) {
+                        for (size_t j = 0; j < n; j++) {
+                            if (encoder.is_batch()) {
+                                y_decoded.integers()[i * n + j] = y_decoded_single.integers()[(i - m_lower) * n + j];
+                            } else if (encoder.is_ckks()) {
+                                y_decoded.doubles()[i * n + j] = y_decoded_single.doubles()[(i - m_lower) * n + j];
+                            } else if (encoder.is_ring32()) {
+                                y_decoded.uint32s()[i * n + j] = y_decoded_single.uint32s()[(i - m_lower) * n + j];
+                            } else if (encoder.is_ring64()) {
+                                y_decoded.uint64s()[i * n + j] = y_decoded_single.uint64s()[(i - m_lower) * n + j];
+                            } else if (encoder.is_ring128()) {
+                                y_decoded.uint128s()[i * n + j] = y_decoded_single.uint128s()[(i - m_lower) * n + j];
+                            } else {
+                                throw std::runtime_error("Unsupported encoder");
+                            }
+                        }
+                    }
+                    timer.tock(timer_single_handle);
+
+                    return timer;
+                };
+
+                // run threads
+                if (threads == 1) {
+                    timers.push_back(lambda_decrypt_decode(0, y_serialized[0], thread_helpers[0]));
+                } else {
+                    std::vector<std::future<Timer>> futures;
+                    for (size_t i = 0; i < threads; i++) {
+                        futures.push_back(std::async(std::launch::async, lambda_decrypt_decode, i, y_serialized[i], thread_helpers[i]));
+                    }
+                    for (size_t i = 0; i < threads; i++) {
+                        timers.push_back(futures[i].get());
+                    }
+                }
+                if (last_rep) {
+                    thread_timer.finish("Client-Dec[y]");
+                    if (timers.size() == 1) timers[0].print();
+                    else TimerThreaded::Print(timers);
+                }
+                timers.clear();
+
+                total_timer.tock(total_timer_handle);
+                if (args.repeat > 1) {
+                    total_timer_once.tock(total_timer_once_handle);
+                    total_timer_once.print();
+                }
+
+                if (rep == args.repeat - 1) {
+                    std::cout << "Communication cost:\n";
+                    std::cout << "  [x] = " << x_serialized_size << " bytes" << std::endl;
+                    std::cout << "  [y] = " << y_serialized_size << " bytes" << std::endl;
+
+                    GeneralVector y_truth = matmul_plaintext(x, w, s, threads);
+                    success = y_decoded.near_equal(y_truth, context.tolerance());
                 }
             }
-            thread_timer.finish("Client-Dec[y]");
-            if (timers.size() == 1) timers[0].print();
-            else TimerThreaded::Print(timers);
-            timers.clear();
 
-            total_timer.tock(total_timer_handle);
-            total_timer.print();
+            total_timer.print_divided(args.repeat);
 
-            std::cout << "Communication:\n";
-            std::cout << "  [x] = " << x_serialized_size << " bytes" << std::endl;
-            std::cout << "  [y] = " << y_serialized_size << " bytes" << std::endl;
-
-            GeneralVector y_truth = matmul_plaintext(x, w, s, threads);
-            bool success = y_decoded.near_equal(y_truth, context.tolerance());
             if (!success) {
                 std::cout << "Output incorrect!" << std::endl;
             }
