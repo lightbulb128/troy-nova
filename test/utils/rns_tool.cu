@@ -605,7 +605,7 @@ namespace rns_tool {
                 Array<uint64_t> output(poly_modulus_degree, false);
                 if (device) input.to_device_inplace();
                 if (device) output.to_device_inplace();
-                rns_tool.decrypt_scale_and_round(input.const_reference(), output.reference());
+                rns_tool.decrypt_scale_and_round(input.const_reference(), poly_modulus_degree, output.reference());
                 if (device) input.to_host_inplace();
                 if (device) output.to_host_inplace();
                 if (!same_array_vector(output.const_reference(), {2, 0})) return false;

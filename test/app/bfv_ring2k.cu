@@ -73,9 +73,11 @@ namespace bfv_ring2k {
 
             constexpr size_t n = 10;
             auto message = random_sampler<T>(n, t_bit_length);
-            auto p = CoeffModulus::create(poly_modulus_degree, q_bits).to_vector()[0];
             
             Plaintext plaintext = encoder.scale_up_new(message, std::nullopt);
+            ASSERT_TRUE(plaintext.coeff_count() == n);
+            ASSERT_TRUE(plaintext.poly_modulus_degree() == poly_modulus_degree);
+            ASSERT_TRUE(plaintext.data().size() == plaintext.coeff_modulus_size() * n);
             std::vector<T> result = encoder.scale_down_new(plaintext);
             ASSERT_TRUE(same_vector(message, result));
 
@@ -147,12 +149,10 @@ namespace bfv_ring2k {
 
             constexpr size_t n = 10;
             auto message = random_sampler<T>(n, t_bit_length);
-            auto p = CoeffModulus::create(poly_modulus_degree, q_bits).to_vector()[0];
-            
             Plaintext plaintext = encoder.scale_up_new(message, std::nullopt);
             Ciphertext encrypted = encryptor.encrypt_asymmetric_new(plaintext);
             Plaintext decrypted = decryptor.bfv_decrypt_without_scaling_down_new(encrypted);
-            std::vector<T> result = encoder.scale_down_new(plaintext);
+            std::vector<T> result = encoder.scale_down_new(decrypted);
             ASSERT_TRUE(same_vector(message, result));
         }
     }
@@ -216,88 +216,95 @@ namespace bfv_ring2k {
             Decryptor decryptor(he_context, keygen.secret_key());
             Evaluator evaluator(he_context);
 
+            size_t n = 10;
             { // cipher add
-                vector<uint64_t> m0 = random_sampler<T>(poly_modulus_degree, t_bit_length);
+                vector<T> m0 = random_sampler<T>(n, t_bit_length);
                 Plaintext p0 = encoder.scale_up_new(m0, std::nullopt);
+                ASSERT_EQ(p0.coeff_count(), n);
+                ASSERT_EQ(p0.poly_modulus_degree(), poly_modulus_degree);
+                ASSERT_EQ(p0.data().size(), p0.coeff_modulus_size() * n);
                 Ciphertext c0 = encryptor.encrypt_asymmetric_new(p0);
-                vector<uint64_t> m1 = random_sampler<T>(poly_modulus_degree, t_bit_length);
+                vector<T> m1 = random_sampler<T>(n, t_bit_length);
                 Plaintext p1 = encoder.scale_up_new(m1, std::nullopt);
                 Ciphertext c1 = encryptor.encrypt_asymmetric_new(p1);
 
                 Ciphertext cadd = evaluator.add_new(c0, c1);
-                vector<uint64_t> madd(poly_modulus_degree);
-                for (size_t i = 0; i < poly_modulus_degree; i++) {
+                vector<T> madd(n);
+                for (size_t i = 0; i < n; i++) {
                     madd[i] = (m0[i] + m1[i]) & t_mask;
                 }
 
                 Plaintext decrypted = decryptor.bfv_decrypt_without_scaling_down_new(cadd);
-                vector<uint64_t> result = encoder.scale_down_new(decrypted);
+                vector<T> result = encoder.scale_down_new(decrypted);
                 ASSERT_TRUE(same_vector(madd, result));
             }
 
             { // plain add
-                vector<uint64_t> m0 = random_sampler<T>(poly_modulus_degree, t_bit_length);
+                vector<T> m0 = random_sampler<T>(n, t_bit_length);
                 Plaintext p0 = encoder.scale_up_new(m0, std::nullopt);
                 Ciphertext c0 = encryptor.encrypt_asymmetric_new(p0);
-                vector<uint64_t> m1 = random_sampler<T>(poly_modulus_degree, t_bit_length);
+                vector<T> m1 = random_sampler<T>(n, t_bit_length);
                 Plaintext p1 = encoder.scale_up_new(m1, std::nullopt);
 
                 Ciphertext cadd = evaluator.add_plain_new(c0, p1);
-                vector<uint64_t> madd(poly_modulus_degree);
-                for (size_t i = 0; i < poly_modulus_degree; i++) {
+                vector<T> madd(n);
+                for (size_t i = 0; i < n; i++) {
                     madd[i] = (m0[i] + m1[i]) & t_mask;
                 }
 
                 Plaintext decrypted = decryptor.bfv_decrypt_without_scaling_down_new(cadd);
-                vector<uint64_t> result = encoder.scale_down_new(decrypted);
+                vector<T> result = encoder.scale_down_new(decrypted);
                 ASSERT_TRUE(same_vector(madd, result));
             }
             
             { // cipher poly mult by plain scalar
-                vector<uint64_t> m0 = random_sampler<T>(poly_modulus_degree, t_bit_length);
+                vector<T> m0 = random_sampler<T>(n, t_bit_length);
                 Plaintext p0 = encoder.scale_up_new(m0, std::nullopt);
                 Ciphertext c0 = encryptor.encrypt_asymmetric_new(p0);
-                vector<uint64_t> m1 = random_sampler<T>(1, t_bit_length); // one element
-                Plaintext p1 = encoder.scale_up_new(m1, std::nullopt);
+                vector<T> m1 = random_sampler<T>(1, t_bit_length); // one element
+                Plaintext p1 = encoder.centralize_new(m1, std::nullopt); 
 
-                Ciphertext cadd = evaluator.add_plain_new(c0, p1);
-                vector<uint64_t> madd(poly_modulus_degree);
-                for (size_t i = 0; i < poly_modulus_degree; i++) {
-                    madd[i] = (m0[i] + m1[0]) & t_mask;
+                Ciphertext cadd = evaluator.multiply_plain_new(c0, p1);
+                vector<T> madd(n);
+                for (size_t i = 0; i < n; i++) {
+                    madd[i] = (m0[i] * m1[0]) & t_mask;
                 }
 
                 Plaintext decrypted = decryptor.bfv_decrypt_without_scaling_down_new(cadd);
-                vector<uint64_t> result = encoder.scale_down_new(decrypted);
+                vector<T> result = encoder.scale_down_new(decrypted);
                 ASSERT_TRUE(same_vector(madd, result));
             }
 
             { // cipher scalar mult by plain poly
-                vector<uint64_t> m0 = random_sampler<T>(1, t_bit_length); // one element
+                vector<T> m0 = random_sampler<T>(1, t_bit_length); // one element
                 Plaintext p0 = encoder.scale_up_new(m0, std::nullopt);
                 Ciphertext c0 = encryptor.encrypt_asymmetric_new(p0);
-                vector<uint64_t> m1 = random_sampler<T>(poly_modulus_degree, t_bit_length);
-                Plaintext p1 = encoder.scale_up_new(m1, std::nullopt);
+                vector<T> m1 = random_sampler<T>(n, t_bit_length);
+                Plaintext p1 = encoder.centralize_new(m1, std::nullopt);
+                ASSERT_EQ(p1.coeff_count(), n);
+                ASSERT_EQ(p1.poly_modulus_degree(), poly_modulus_degree);
+                ASSERT_EQ(p1.data().size(), p1.coeff_modulus_size() * n);
 
-                Ciphertext cadd = evaluator.add_plain_new(c0, p1);
-                vector<uint64_t> madd(poly_modulus_degree);
-                for (size_t i = 0; i < poly_modulus_degree; i++) {
-                    madd[i] = (m0[0] + m1[i]) & t_mask;
+                Ciphertext cadd = evaluator.multiply_plain_new(c0, p1);
+                vector<T> madd(n);
+                for (size_t i = 0; i < n; i++) {
+                    madd[i] = (m0[0] * m1[i]) & t_mask;
                 }
 
                 Plaintext decrypted = decryptor.bfv_decrypt_without_scaling_down_new(cadd);
-                vector<uint64_t> result = encoder.scale_down_new(decrypted);
+                vector<T> result = encoder.scale_down_new(decrypted);
                 ASSERT_TRUE(same_vector(madd, result));
             }
             
             { // cipher poly mult by plain poly
-                vector<uint64_t> m0 = random_sampler<T>(poly_modulus_degree, t_bit_length);
+                vector<T> m0 = random_sampler<T>(poly_modulus_degree, t_bit_length);
                 Plaintext p0 = encoder.scale_up_new(m0, std::nullopt);
                 Ciphertext c0 = encryptor.encrypt_asymmetric_new(p0);
-                vector<uint64_t> m1 = random_sampler<T>(poly_modulus_degree, t_bit_length);
+                vector<T> m1 = random_sampler<T>(poly_modulus_degree, t_bit_length);
                 Plaintext p1 = encoder.centralize_new(m1, std::nullopt);
 
-                Ciphertext cadd = evaluator.add_plain_new(c0, p1);
-                vector<uint64_t> madd(poly_modulus_degree, 0);
+                Ciphertext cadd = evaluator.multiply_plain_new(c0, p1);
+                vector<T> madd(poly_modulus_degree, 0);
                 for (size_t i = 0; i < poly_modulus_degree; i++) {
                     for (size_t j = 0; j < poly_modulus_degree; j++) {
                         T piece = (m0[i] * m1[j]) & t_mask;
@@ -311,55 +318,82 @@ namespace bfv_ring2k {
                 }
 
                 Plaintext decrypted = decryptor.bfv_decrypt_without_scaling_down_new(cadd);
-                vector<uint64_t> result = encoder.scale_down_new(decrypted);
+                vector<T> result = encoder.scale_down_new(decrypted);
+                ASSERT_TRUE(same_vector(madd, result));
+            }
+
+            { // cipher poly mult by plain poly partial
+                size_t n0 = 10; size_t n1 = 15;
+                vector<T> m0 = random_sampler<T>(n0, t_bit_length);
+                Plaintext p0 = encoder.scale_up_new(m0, std::nullopt);
+                Ciphertext c0 = encryptor.encrypt_asymmetric_new(p0);
+                vector<T> m1 = random_sampler<T>(n1, t_bit_length);
+                Plaintext p1 = encoder.centralize_new(m1, std::nullopt);
+
+                Ciphertext cadd = evaluator.multiply_plain_new(c0, p1);
+                vector<T> madd(poly_modulus_degree, 0);
+                for (size_t i = 0; i < n0; i++) {
+                    for (size_t j = 0; j < n1; j++) {
+                        T piece = (m0[i] * m1[j]) & t_mask;
+                        size_t id = (i + j) % poly_modulus_degree;
+                        if (i + j < poly_modulus_degree) {
+                            madd[id] = (madd[id] + piece) & t_mask;
+                        } else {
+                            madd[id] = (madd[id] - piece) & t_mask;
+                        }
+                    }
+                }
+
+                Plaintext decrypted = decryptor.bfv_decrypt_without_scaling_down_new(cadd);
+                vector<T> result = encoder.scale_down_new(decrypted);
                 ASSERT_TRUE(same_vector(madd, result));
             }
 
             {
                 // mod switch down
-                vector<uint64_t> m0 = random_sampler<T>(poly_modulus_degree, t_bit_length);
+                vector<T> m0 = random_sampler<T>(n, t_bit_length);
                 Plaintext p0 = encoder.scale_up_new(m0, std::nullopt);
                 Ciphertext c0 = encryptor.encrypt_asymmetric_new(p0);
                 Ciphertext c1 = evaluator.mod_switch_to_next_new(c0);
                 Plaintext decrypted = decryptor.bfv_decrypt_without_scaling_down_new(c1);
-                vector<uint64_t> result = encoder.scale_down_new(decrypted);
+                vector<T> result = encoder.scale_down_new(decrypted);
                 ASSERT_TRUE(same_vector(m0, result));
             }
         }
     }
 
     TEST(BFVRing2kTest, HostHeOperationsU32Test) {
-        template_test_encrypt<uint32_t>(false, 
+        template_test_he_operations<uint32_t>(false, 
             {40, 40, 40}, 
             {32, 20, 17}
         );
     }
     TEST(BFVRing2kTest, DeviceHeOperationsU32Test) {
-        template_test_encrypt<uint32_t>(true, 
+        template_test_he_operations<uint32_t>(true, 
             {40, 40, 40}, 
             {32, 20, 17}
         );
     }
     TEST(BFVRing2kTest, HostHeOperationsU64Test) {
-        template_test_encrypt<uint64_t>(false, 
+        template_test_he_operations<uint64_t>(false, 
             {40, 40, 40, 40, 40}, 
             {64, 50, 33}
         );
     }
     TEST(BFVRing2kTest, DeviceHeOperationsU64Test) {
-        template_test_encrypt<uint64_t>(true, 
+        template_test_he_operations<uint64_t>(true, 
             {40, 40, 40, 40, 40}, 
             {64, 50, 33}
         );
     }
     TEST(BFVRing2kTest, HostHeOperationsU128Test) {
-        template_test_encrypt<uint128_t>(false, 
+        template_test_he_operations<uint128_t>(false, 
             {60, 60, 60, 60, 60, 60},
             {128, 100, 65}
         );
     }
     TEST(BFVRing2kTest, DeviceHeOperationsU128Test) {
-        template_test_encrypt<uint128_t>(true, 
+        template_test_he_operations<uint128_t>(true, 
             {60, 60, 60, 60, 60, 60},
             {128, 100, 65}
         );

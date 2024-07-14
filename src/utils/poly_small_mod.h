@@ -55,59 +55,87 @@ namespace troy {namespace utils {
         negate_inplace_ps(poly, 1, poly.size(), ConstSlice<Modulus>::from_pointer(modulus));
     }
 
+    void scatter_partial_ps(ConstSlice<uint64_t> source_polys, size_t pcount, size_t source_degree, size_t destination_degree, size_t moduli_size, Slice<uint64_t> destination);
+    inline void scatter_partial_p(ConstSlice<uint64_t> source_poly, size_t source_degree, size_t destination_degree, size_t moduli_size, Slice<uint64_t> destination) {
+        scatter_partial_ps(source_poly, 1, source_degree, destination_degree, moduli_size, destination);
+    }
+    inline void scatter_partial(ConstSlice<uint64_t> source_poly, size_t source_degree, size_t destination_degree, Slice<uint64_t> destination) {
+        scatter_partial_ps(source_poly, 1, source_degree, destination_degree, 1, destination);
+    }
 
 
     void add_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result);
-
     inline void add_p(ConstSlice<uint64_t> poly1, ConstSlice<uint64_t> poly2, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         add_ps(poly1, poly2, 1, degree, moduli, result);
     }
-
     inline void add(ConstSlice<uint64_t> poly1, ConstSlice<uint64_t> poly2, ConstPointer<Modulus> modulus, Slice<uint64_t> result) {
         add_ps(poly1, poly2, 1, poly1.size(), ConstSlice<Modulus>::from_pointer(modulus), result);
     }
 
-
-
     inline void add_inplace_ps(Slice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli) {
         add_ps(polys1.as_const(), polys2, pcount, degree, moduli, polys1);
     }
-
     inline void add_inplace_p(Slice<uint64_t> poly1, ConstSlice<uint64_t> poly2, size_t degree, ConstSlice<Modulus> moduli) {
         add_inplace_ps(poly1, poly2, 1, degree, moduli);
     }
-
     inline void add_inplace(Slice<uint64_t> poly1, ConstSlice<uint64_t> poly2, ConstPointer<Modulus> modulus) {
         add_inplace_ps(poly1, poly2, 1, poly1.size(), ConstSlice<Modulus>::from_pointer(modulus));
     }
 
 
-
     void sub_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result);
-
     inline void sub_p(ConstSlice<uint64_t> poly1, ConstSlice<uint64_t> poly2, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         sub_ps(poly1, poly2, 1, degree, moduli, result);
     }
-
     inline void sub(ConstSlice<uint64_t> poly1, ConstSlice<uint64_t> poly2, ConstPointer<Modulus> modulus, Slice<uint64_t> result) {
         sub_ps(poly1, poly2, 1, poly1.size(), ConstSlice<Modulus>::from_pointer(modulus), result);
     }
 
-
-
     inline void sub_inplace_ps(Slice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli) {
         sub_ps(polys1.as_const(), polys2, pcount, degree, moduli, polys1);
     }
-
     inline void sub_inplace_p(Slice<uint64_t> poly1, ConstSlice<uint64_t> poly2, size_t degree, ConstSlice<Modulus> moduli) {
         sub_inplace_ps(poly1, poly2, 1, degree, moduli);
     }
-
     inline void sub_inplace(Slice<uint64_t> poly1, ConstSlice<uint64_t> poly2, ConstPointer<Modulus> modulus) {
         sub_inplace_ps(poly1, poly2, 1, poly1.size(), ConstSlice<Modulus>::from_pointer(modulus));
     }
 
+    void add_partial_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, Slice<uint64_t> result, size_t degree_result);
+    inline void add_partial_p(ConstSlice<uint64_t> poly1, ConstSlice<uint64_t> poly2, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, Slice<uint64_t> result, size_t degree_result) {
+        add_partial_ps(poly1, poly2, 1, degree1, degree2, moduli, result, degree_result);
+    }
+    inline void add_partial(ConstSlice<uint64_t> poly1, ConstSlice<uint64_t> poly2, size_t degree1, size_t degree2, ConstPointer<Modulus> modulus, Slice<uint64_t> result, size_t degree_result) {
+        add_partial_ps(poly1, poly2, 1, degree1, degree2, ConstSlice<Modulus>::from_pointer(modulus), result, degree_result);
+    }
 
+    void sub_partial_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, Slice<uint64_t> result, size_t degree_result);
+    inline void sub_partial_p(ConstSlice<uint64_t> poly1, ConstSlice<uint64_t> poly2, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, Slice<uint64_t> result, size_t degree_result) {
+        sub_partial_ps(poly1, poly2, 1, degree1, degree2, moduli, result, degree_result);
+    }
+    inline void sub_partial(ConstSlice<uint64_t> poly1, ConstSlice<uint64_t> poly2, size_t degree1, size_t degree2, ConstPointer<Modulus> modulus, Slice<uint64_t> result, size_t degree_result) {
+        sub_partial_ps(poly1, poly2, 1, degree1, degree2, ConstSlice<Modulus>::from_pointer(modulus), result, degree_result);
+    }
+
+    inline void add_partial_inplace_ps(Slice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli) {
+        add_partial_ps(polys1.as_const(), polys2, pcount, degree1, degree2, moduli, polys1, degree1);
+    }
+    inline void add_partial_inplace_p(Slice<uint64_t> poly1, ConstSlice<uint64_t> poly2, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli) {
+        add_partial_inplace_ps(poly1, poly2, 1, degree1, degree2, moduli);
+    }
+    inline void add_partial_inplace(Slice<uint64_t> poly1, ConstSlice<uint64_t> poly2, size_t degree1, size_t degree2, ConstPointer<Modulus> modulus) {
+        add_partial_inplace_ps(poly1, poly2, 1, degree1, degree2, ConstSlice<Modulus>::from_pointer(modulus));
+    }
+
+    inline void sub_partial_inplace_ps(Slice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli) {
+        sub_partial_ps(polys1.as_const(), polys2, pcount, degree1, degree2, moduli, polys1, degree1);
+    }
+    inline void sub_partial_inplace_p(Slice<uint64_t> poly1, ConstSlice<uint64_t> poly2, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli) {
+        sub_partial_inplace_ps(poly1, poly2, 1, degree1, degree2, moduli);
+    }
+    inline void sub_partial_inplace(Slice<uint64_t> poly1, ConstSlice<uint64_t> poly2, size_t degree1, size_t degree2, ConstPointer<Modulus> modulus) {
+        sub_partial_inplace_ps(poly1, poly2, 1, degree1, degree2, ConstSlice<Modulus>::from_pointer(modulus));
+    }
 
     void add_scalar_ps(ConstSlice<uint64_t> polys, uint64_t scalar, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result);
 

@@ -36,3 +36,7 @@
 ## 2024-07-03
 
 - Move the implementation of MemoryPool to different input files. Directly using macros in the header may lead to user's on including troy wrong with defines not given.
+
+## 2024-07-14
+
+- Allow scaled up polynomial plaintexts to store only partial coefficients, to save device memory when only a small degree polynomial is encoded.

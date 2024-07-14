@@ -157,7 +157,7 @@ namespace troy {
 
         // Divide scaling variant using BEHZ FullRNS techniques
         context_data->rns_tool().decrypt_scale_and_round(
-            temp.const_reference(), destination.poly(), pool
+            temp.const_reference(), coeff_count, destination.poly(), pool
         );
         destination.is_ntt_form() = false;
         destination.coeff_modulus_size() = coeff_modulus_size;

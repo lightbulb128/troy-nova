@@ -221,30 +221,62 @@ namespace evaluator {
         uint64_t t = context.t();
         double scale = context.scale();
         double tolerance = context.tolerance();
+    
+        {
+            GeneralVector message1 = context.random_simd_full();
+            GeneralVector message2 = context.random_simd_full();
+            Plaintext encoded1 = context.encoder().encode_simd(message1, std::nullopt, scale);
+            Plaintext encoded2 = context.encoder().encode_simd(message2, std::nullopt, scale);
+            Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1);
+            Ciphertext encrypted2 = context.encryptor().encrypt_asymmetric_new(encoded2);
+            Ciphertext multiplied = context.evaluator().multiply_new(encrypted1, encrypted2);
+            Plaintext decrypted = context.decryptor().decrypt_new(multiplied);
+            GeneralVector result = context.encoder().decode_simd(decrypted);
+            GeneralVector truth = message1.mul(message2, t);
+            ASSERT_TRUE(truth.near_equal(result, tolerance));
 
-        std::cerr << context.params_host() << std::endl;
+            // test multiply then add
+            GeneralVector message3 = context.random_simd_full();
+            Plaintext encoded3 = context.encoder().encode_simd(message3, std::nullopt, multiplied.scale());
+            Ciphertext encrypted3 = context.encryptor().encrypt_asymmetric_new(encoded3);
+            Ciphertext added = context.evaluator().add_new(multiplied, encrypted3);
+            decrypted = context.decryptor().decrypt_new(added);
+            result = context.encoder().decode_simd(decrypted);
+            truth = truth.add(message3, t);
+            ASSERT_TRUE(truth.near_equal(result, tolerance));
+        }
 
-        GeneralVector message1 = context.random_simd_full();
-        GeneralVector message2 = context.random_simd_full();
-        Plaintext encoded1 = context.encoder().encode_simd(message1, std::nullopt, scale);
-        Plaintext encoded2 = context.encoder().encode_simd(message2, std::nullopt, scale);
-        Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1);
-        Ciphertext encrypted2 = context.encryptor().encrypt_asymmetric_new(encoded2);
-        Ciphertext multiplied = context.evaluator().multiply_new(encrypted1, encrypted2);
-        Plaintext decrypted = context.decryptor().decrypt_new(multiplied);
-        GeneralVector result = context.encoder().decode_simd(decrypted);
-        GeneralVector truth = message1.mul(message2, t);
-        ASSERT_TRUE(truth.near_equal(result, tolerance));
-
-        // test multiply then add
-        GeneralVector message3 = context.random_simd_full();
-        Plaintext encoded3 = context.encoder().encode_simd(message3, std::nullopt, multiplied.scale());
-        Ciphertext encrypted3 = context.encryptor().encrypt_asymmetric_new(encoded3);
-        Ciphertext added = context.evaluator().add_new(multiplied, encrypted3);
-        decrypted = context.decryptor().decrypt_new(added);
-        result = context.encoder().decode_simd(decrypted);
-        truth = truth.add(message3, t);
-        ASSERT_TRUE(truth.near_equal(result, tolerance));
+        {
+            size_t n = context.params_host().poly_modulus_degree();
+            {
+                GeneralVector message1 = context.random_polynomial(n);
+                GeneralVector message2 = context.random_polynomial(n);
+                Plaintext encoded1 = context.encoder().encode_polynomial(message1, std::nullopt, scale);
+                Plaintext encoded2 = context.encoder().encode_polynomial(message2, std::nullopt, scale);
+                Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1);
+                Ciphertext encrypted2 = context.encryptor().encrypt_asymmetric_new(encoded2);
+                Ciphertext multiplied = context.evaluator().multiply_new(encrypted1, encrypted2);
+                Plaintext decrypted = context.decryptor().decrypt_new(multiplied);
+                GeneralVector result = context.encoder().decode_polynomial(decrypted);
+                GeneralVector truth = context.mul_poly(message1, message2);
+                ASSERT_TRUE(truth.near_equal(result, tolerance));
+            }
+            {
+                size_t c1 = n / 3;
+                size_t c2 = n / 4;
+                GeneralVector message1 = context.random_polynomial(c1);
+                GeneralVector message2 = context.random_polynomial(c2);
+                Plaintext encoded1 = context.encoder().encode_polynomial(message1, std::nullopt, scale);
+                Plaintext encoded2 = context.encoder().encode_polynomial(message2, std::nullopt, scale);
+                Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1);
+                Ciphertext encrypted2 = context.encryptor().encrypt_asymmetric_new(encoded2);
+                Ciphertext multiplied = context.evaluator().multiply_new(encrypted1, encrypted2);
+                Plaintext decrypted = context.decryptor().decrypt_new(multiplied);
+                GeneralVector result = context.encoder().decode_polynomial(decrypted);
+                GeneralVector truth = context.mul_poly(message1, message2);
+                ASSERT_TRUE(truth.near_equal(result, tolerance));
+            }
+        }
     }
     
 
@@ -344,7 +376,7 @@ namespace evaluator {
     }
 
     void test_keyswitching(const GeneralHeContext& context) {
-        uint64_t t = context.t();
+        // uint64_t t = context.t();
         double scale = context.scale();
         double tolerance = context.tolerance();
 
@@ -479,7 +511,7 @@ namespace evaluator {
 
 
     void test_mod_switch_to_next(const GeneralHeContext& context) {
-        uint64_t t = context.t();
+        // uint64_t t = context.t();
         double scale = context.scale();
         double tolerance = context.tolerance();
 
@@ -523,7 +555,7 @@ namespace evaluator {
     void test_mod_switch_plain_to_next(const GeneralHeContext& context) {
         // context must be ckks
         ASSERT_TRUE(context.params_host().scheme() == SchemeType::CKKS);
-        uint64_t t = context.t();
+        // uint64_t t = context.t();
         double scale = context.scale();
         double tolerance = context.tolerance();
 
@@ -548,7 +580,7 @@ namespace evaluator {
     void test_rescale_to_next(const GeneralHeContext& context) {
         // context must be ckks
         ASSERT_TRUE(context.params_host().scheme() == SchemeType::CKKS);
-        uint64_t t = context.t();
+        // uint64_t t = context.t();
         double scale = context.scale();
         double tolerance = context.tolerance();
 
@@ -580,22 +612,39 @@ namespace evaluator {
         double scale = context.scale();
         double tolerance = context.tolerance();
 
-        GeneralVector message1 = context.random_simd_full();
-        GeneralVector message2 = context.random_simd_full();
-        Plaintext encoded1 = context.encoder().encode_simd(message1, std::nullopt, scale);
-        Plaintext encoded2 = context.encoder().encode_simd(message2, std::nullopt, scale);
-        Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1);
-        Ciphertext added = context.evaluator().add_plain_new(encrypted1, encoded2);
-        Plaintext decrypted = context.decryptor().decrypt_new(added);
-        GeneralVector result = context.encoder().decode_simd(decrypted);
-        GeneralVector truth = message1.add(message2, t);
-        ASSERT_TRUE(truth.near_equal(result, tolerance));
+        {
+            GeneralVector message1 = context.random_simd_full();
+            GeneralVector message2 = context.random_simd_full();
+            Plaintext encoded1 = context.encoder().encode_simd(message1, std::nullopt, scale);
+            Plaintext encoded2 = context.encoder().encode_simd(message2, std::nullopt, scale);
+            Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1);
+            Ciphertext added = context.evaluator().add_plain_new(encrypted1, encoded2);
+            Plaintext decrypted = context.decryptor().decrypt_new(added);
+            GeneralVector result = context.encoder().decode_simd(decrypted);
+            GeneralVector truth = message1.add(message2, t);
+            ASSERT_TRUE(truth.near_equal(result, tolerance));
 
-        Ciphertext subtracted = context.evaluator().sub_plain_new(encrypted1, encoded2);
-        decrypted = context.decryptor().decrypt_new(subtracted);
-        result = context.encoder().decode_simd(decrypted);
-        truth = message1.sub(message2, t);
-        ASSERT_TRUE(truth.near_equal(result, tolerance));
+            Ciphertext subtracted = context.evaluator().sub_plain_new(encrypted1, encoded2);
+            decrypted = context.decryptor().decrypt_new(subtracted);
+            result = context.encoder().decode_simd(decrypted);
+            truth = message1.sub(message2, t);
+            ASSERT_TRUE(truth.near_equal(result, tolerance));
+        }
+
+        {
+            size_t n = context.encoder().slot_count();
+            size_t cc = n / 3;
+            GeneralVector message1 = context.random_polynomial(cc);
+            GeneralVector message2 = context.random_polynomial(cc);
+            Plaintext encoded1 = context.encoder().encode_polynomial(message1, std::nullopt, scale);
+            Plaintext encoded2 = context.encoder().encode_polynomial(message2, std::nullopt, scale);
+            Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1);
+            Ciphertext added = context.evaluator().add_plain_new(encrypted1, encoded2);
+            Plaintext decrypted = context.decryptor().decrypt_new(added);
+            GeneralVector result = context.encoder().decode_polynomial(decrypted);
+            GeneralVector truth = message1.add(message2, t); truth.resize(n);
+            ASSERT_TRUE(truth.near_equal(result, tolerance));
+        }
     }
 
     TEST(EvaluatorTest, HostBFVAddPlain) {
@@ -631,17 +680,42 @@ namespace evaluator {
         double scale = context.scale();
         double tolerance = context.tolerance();
 
-        GeneralVector message1 = context.random_simd_full();
-        GeneralVector message2 = context.random_simd_full();
-        Plaintext encoded1 = context.encoder().encode_simd(message1, std::nullopt, scale);
-        Plaintext encoded2 = context.encoder().encode_simd(message2, std::nullopt, scale);
-        Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1);
-        context.encoder().batch().scale_up_inplace(encoded2, encrypted1.parms_id());
-        Ciphertext added = context.evaluator().add_plain_new(encrypted1, encoded2);
-        Plaintext decrypted = context.decryptor().decrypt_new(added);
-        GeneralVector result = context.encoder().decode_simd(decrypted);
-        GeneralVector truth = message1.add(message2, t);
-        ASSERT_TRUE(truth.near_equal(result, tolerance));
+        {
+            GeneralVector message1 = context.random_simd_full();
+            GeneralVector message2 = context.random_simd_full();
+            Plaintext encoded1 = context.encoder().encode_simd(message1, std::nullopt, scale);
+            Plaintext encoded2 = context.encoder().encode_simd(message2, std::nullopt, scale);
+            Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1);
+            context.encoder().batch().scale_up_inplace(encoded2, encrypted1.parms_id());
+            Ciphertext added = context.evaluator().add_plain_new(encrypted1, encoded2);
+            Plaintext decrypted = context.decryptor().decrypt_new(added);
+            GeneralVector result = context.encoder().decode_simd(decrypted);
+            GeneralVector truth = message1.add(message2, t);
+            ASSERT_TRUE(truth.near_equal(result, tolerance));
+        }
+
+        {
+            size_t n = context.encoder().slot_count();
+            size_t cc = n / 3;
+            GeneralVector message1 = context.random_polynomial(cc);
+            GeneralVector message2 = context.random_polynomial(cc);
+            Plaintext encoded1 = context.encoder().encode_polynomial(message1, std::nullopt, scale);
+            ASSERT_EQ(encoded1.coeff_count(), cc);
+            Plaintext encoded2 = context.encoder().encode_polynomial(message2, std::nullopt, scale);
+            ASSERT_EQ(encoded2.coeff_count(), cc);
+            Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1);
+            context.encoder().batch().scale_up_inplace(encoded2, encrypted1.parms_id());
+            ASSERT_EQ(encoded2.coeff_count(), cc);
+            ASSERT_EQ(encoded2.poly_modulus_degree(), n);
+            ASSERT_EQ(encoded2.data().size(), encoded2.coeff_modulus_size() * cc);
+            Ciphertext added = context.evaluator().add_plain_new(encrypted1, encoded2);
+            Plaintext decrypted = context.decryptor().decrypt_new(added);
+            GeneralVector result = context.encoder().decode_polynomial(decrypted);
+            GeneralVector truth = message1.add(message2, t); truth.resize(n);
+            std::cout << result << std::endl;
+            std::cout << truth << std::endl;
+            ASSERT_TRUE(truth.near_equal(result, tolerance));
+        }
     }
 
     TEST(EvaluatorTest, HostBFVAddPlainScaled) {
@@ -659,20 +733,49 @@ namespace evaluator {
         double scale = context.scale();
         double tolerance = context.tolerance();
 
-        GeneralVector message1 = context.random_simd_full();
-        GeneralVector message2 = context.random_simd_full();
-        Plaintext encoded1 = context.encoder().encode_simd(message1, std::nullopt, scale);
-        Plaintext encoded2 = context.encoder().encode_simd(message2, std::nullopt, scale);
-        Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1);
-        context.encoder().batch().scale_up_inplace(encoded2, encrypted1.parms_id());
-        context.evaluator().transform_to_ntt_inplace(encrypted1);
-        context.evaluator().transform_plain_to_ntt_inplace(encoded2, encrypted1.parms_id());
-        Ciphertext added = context.evaluator().add_plain_new(encrypted1, encoded2);
-        context.evaluator().transform_from_ntt_inplace(added);
-        Plaintext decrypted = context.decryptor().decrypt_new(added);
-        GeneralVector result = context.encoder().decode_simd(decrypted);
-        GeneralVector truth = message1.add(message2, t);
-        ASSERT_TRUE(truth.near_equal(result, tolerance));
+        {
+            GeneralVector message1 = context.random_simd_full();
+            GeneralVector message2 = context.random_simd_full();
+            Plaintext encoded1 = context.encoder().encode_simd(message1, std::nullopt, scale);
+            Plaintext encoded2 = context.encoder().encode_simd(message2, std::nullopt, scale);
+            Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1);
+            context.encoder().batch().scale_up_inplace(encoded2, encrypted1.parms_id());
+            context.evaluator().transform_to_ntt_inplace(encrypted1);
+            context.evaluator().transform_plain_to_ntt_inplace(encoded2, encrypted1.parms_id());
+            Ciphertext added = context.evaluator().add_plain_new(encrypted1, encoded2);
+            context.evaluator().transform_from_ntt_inplace(added);
+            Plaintext decrypted = context.decryptor().decrypt_new(added);
+            GeneralVector result = context.encoder().decode_simd(decrypted);
+            GeneralVector truth = message1.add(message2, t);
+            ASSERT_TRUE(truth.near_equal(result, tolerance));
+        }
+
+        {
+            size_t n = context.encoder().slot_count();
+            size_t cc = n / 3;
+            GeneralVector message1 = context.random_polynomial(cc);
+            GeneralVector message2 = context.random_polynomial(cc);
+            Plaintext encoded1 = context.encoder().encode_polynomial(message1, std::nullopt, scale);
+            ASSERT_EQ(encoded1.coeff_count(), cc);
+            Plaintext encoded2 = context.encoder().encode_polynomial(message2, std::nullopt, scale);
+            ASSERT_EQ(encoded2.coeff_count(), cc);
+            Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1);
+            context.encoder().batch().scale_up_inplace(encoded2, encrypted1.parms_id());
+            ASSERT_EQ(encoded2.coeff_count(), cc);
+            ASSERT_EQ(encoded2.poly_modulus_degree(), n);
+            ASSERT_EQ(encoded2.data().size(), encoded2.coeff_modulus_size() * cc);
+            context.evaluator().transform_to_ntt_inplace(encrypted1);
+            context.evaluator().transform_plain_to_ntt_inplace(encoded2, encrypted1.parms_id());
+            ASSERT_EQ(encoded2.coeff_count(), n);
+            ASSERT_EQ(encoded2.poly_modulus_degree(), n);
+            ASSERT_EQ(encoded2.data().size(), encoded2.coeff_modulus_size() * n);
+            Ciphertext added = context.evaluator().add_plain_new(encrypted1, encoded2);
+            context.evaluator().transform_from_ntt_inplace(added);
+            Plaintext decrypted = context.decryptor().decrypt_new(added);
+            GeneralVector result = context.encoder().decode_polynomial(decrypted);
+            GeneralVector truth = message1.add(message2, t); truth.resize(n);
+            ASSERT_TRUE(truth.near_equal(result, tolerance));
+        }
     }
 
     TEST(EvaluatorTest, HostBFVAddPlainScaledNTT) {
@@ -719,6 +822,38 @@ namespace evaluator {
             decrypted = context.decryptor().decrypt_new(multiplied);
             result = context.encoder().decode_simd(decrypted);
             ASSERT_TRUE(truth.near_equal(result, tolerance));
+        }
+
+        {
+            size_t n = context.params_host().poly_modulus_degree();
+            size_t cc = n / 3;
+            GeneralVector message1 = context.random_polynomial(cc);
+            GeneralVector message2 = context.random_polynomial(cc);
+            Plaintext encoded1 = context.encoder().encode_polynomial(message1, std::nullopt, scale);
+            Plaintext encoded2 = context.encoder().encode_polynomial(message2, std::nullopt, scale);
+            Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1);
+            Ciphertext multiplied = context.evaluator().multiply_plain_new(encrypted1, encoded2);
+            Plaintext decrypted = context.decryptor().decrypt_new(multiplied);
+            GeneralVector result = context.encoder().decode_polynomial(decrypted);
+            GeneralVector truth = context.mul_poly(message1, message2); truth.resize(n);
+            ASSERT_TRUE(truth.near_equal(result, tolerance));
+
+            if (!encrypted1.is_ntt_form()) {
+                context.evaluator().transform_to_ntt_inplace(encrypted1);
+                context.evaluator().transform_plain_to_ntt_inplace(encoded2, encrypted1.parms_id());
+                multiplied = context.evaluator().multiply_plain_new(encrypted1, encoded2);
+                context.evaluator().transform_from_ntt_inplace(multiplied);
+                decrypted = context.decryptor().decrypt_new(multiplied);
+                result = context.encoder().decode_polynomial(decrypted);
+                ASSERT_TRUE(truth.near_equal(result, tolerance));
+            } else {
+                context.evaluator().transform_from_ntt_inplace(encrypted1);
+                context.evaluator().transform_to_ntt_inplace(encrypted1);
+                multiplied = context.evaluator().multiply_plain_new(encrypted1, encoded2);
+                decrypted = context.decryptor().decrypt_new(multiplied);
+                result = context.encoder().decode_polynomial(decrypted);
+                ASSERT_TRUE(truth.near_equal(result, tolerance));
+            }
         }
     }
 
@@ -767,6 +902,27 @@ namespace evaluator {
         GeneralVector result = context.encoder().decode_simd(decrypted);
         GeneralVector truth = message1.mul(message2, t);
         ASSERT_TRUE(truth.near_equal(result, tolerance));
+
+        {
+            size_t n = context.params_host().poly_modulus_degree();
+            size_t cc = n / 3;
+            GeneralVector message1 = context.random_polynomial(cc);
+            GeneralVector message2 = context.random_polynomial(cc);
+            Plaintext encoded1 = context.encoder().encode_polynomial(message1, std::nullopt, scale);
+            ASSERT_EQ(encoded1.coeff_count(), cc);
+            Plaintext encoded2 = context.encoder().encode_polynomial(message2, std::nullopt, scale);
+            ASSERT_EQ(encoded2.coeff_count(), cc);
+            Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1);
+            context.evaluator().transform_plain_to_ntt_inplace(encoded2, encrypted1.parms_id());
+            ASSERT_EQ(encoded2.coeff_count(), n);
+            ASSERT_EQ(encoded2.poly_modulus_degree(), n);
+            ASSERT_EQ(encoded2.data().size(), encoded2.coeff_modulus_size() * n);
+            Ciphertext multiplied = context.evaluator().multiply_plain_new(encrypted1, encoded2);
+            Plaintext decrypted = context.decryptor().decrypt_new(multiplied);
+            GeneralVector result = context.encoder().decode_polynomial(decrypted);
+            GeneralVector truth = context.mul_poly(message1, message2); truth.resize(n);
+            ASSERT_TRUE(truth.near_equal(result, tolerance));
+        }
     }
 
     TEST(EvaluatorTest, HostBFVMultiplyPlainNTT) {
@@ -804,6 +960,48 @@ namespace evaluator {
         GeneralVector result = context.encoder().decode_simd(decrypted);
         GeneralVector truth = message1.mul(message2, t);
         ASSERT_TRUE(truth.near_equal(result, tolerance));
+
+        {
+            size_t n = context.encoder().slot_count();
+            size_t cc = n / 3;
+            {
+                GeneralVector message1 = context.random_polynomial(n);
+                GeneralVector message2 = context.random_polynomial(n);
+                Plaintext encoded1 = context.encoder().encode_polynomial(message1, std::nullopt, scale);
+                ASSERT_EQ(encoded1.coeff_count(), n);
+                Plaintext encoded2 = context.encoder().encode_polynomial(message2, std::nullopt, scale);
+                ASSERT_EQ(encoded2.coeff_count(), n);
+                Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1);
+                context.encoder().batch().centralize_inplace(encoded2, std::nullopt);
+                ASSERT_EQ(encoded2.coeff_count(), n);
+                ASSERT_EQ(encoded2.poly_modulus_degree(), n);
+                ASSERT_EQ(encoded2.data().size(), encoded2.coeff_modulus_size() * n);
+                Ciphertext multiplied = context.evaluator().multiply_plain_new(encrypted1, encoded2);
+                Plaintext decrypted = context.decryptor().decrypt_new(multiplied);
+                GeneralVector result = context.encoder().decode_polynomial(decrypted);
+                GeneralVector truth = context.mul_poly(message1, message2); truth.resize(n);
+                ASSERT_TRUE(truth.near_equal(result, tolerance));
+            }
+            {
+                GeneralVector message1 = context.random_polynomial(cc);
+                GeneralVector message2 = context.random_polynomial(cc);
+                Plaintext encoded1 = context.encoder().encode_polynomial(message1, std::nullopt, scale);
+                ASSERT_EQ(encoded1.coeff_count(), cc);
+                Plaintext encoded2 = context.encoder().encode_polynomial(message2, std::nullopt, scale);
+                ASSERT_EQ(encoded2.coeff_count(), cc);
+                Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1);
+                context.encoder().batch().centralize_inplace(encoded2, std::nullopt);
+                ASSERT_EQ(encoded2.coeff_count(), cc);
+                ASSERT_EQ(encoded2.poly_modulus_degree(), n);
+                ASSERT_EQ(encoded2.data().size(), encoded2.coeff_modulus_size() * cc);
+                Ciphertext multiplied = context.evaluator().multiply_plain_new(encrypted1, encoded2);
+                Plaintext decrypted = context.decryptor().decrypt_new(multiplied);
+                GeneralVector result = context.encoder().decode_polynomial(decrypted);
+                GeneralVector truth = context.mul_poly(message1, message2); truth.resize(n);
+                ASSERT_TRUE(truth.near_equal(result, tolerance));
+            
+            }
+        }
     }
 
     TEST(EvaluatorTest, HostBFVMultiplyPlainCentralized) {
@@ -818,7 +1016,7 @@ namespace evaluator {
 
 
     void test_rotate(const GeneralHeContext& context) {
-        uint64_t t = context.t();
+        // uint64_t t = context.t();
         double scale = context.scale();
         double tolerance = context.tolerance();
 
@@ -883,7 +1081,7 @@ namespace evaluator {
     }
 
     void test_conjugate(const GeneralHeContext& context) {
-        uint64_t t = context.t();
+        // uint64_t t = context.t();
         double scale = context.scale();
         double tolerance = context.tolerance();
 

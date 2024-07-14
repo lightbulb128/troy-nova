@@ -434,11 +434,11 @@ namespace troy::linear {
         }
         ContextDataPointer context_data = context.get_context_data(parms_id).value();
         const EncryptionParameters& parms = context_data->parms();
-        custom_assert(parms.poly_modulus_degree() == destination.size());
+        custom_assert(parms.poly_modulus_degree() >= destination.size());
         size_t num_modulus = parms.coeff_modulus().size();
         size_t coeff_count = destination.size();
         custom_assert(input.coeff_modulus_size() == num_modulus);
-        custom_assert(input.poly_modulus_degree() == coeff_count);
+        custom_assert(input.coeff_count() == coeff_count);
         custom_assert(input.data().size() == num_modulus * coeff_count);
         const utils::RNSBase &base_Q = context_data->rns_tool().base_q();
         ConstSlice<troy::Modulus> coeff_modulus = parms.coeff_modulus();

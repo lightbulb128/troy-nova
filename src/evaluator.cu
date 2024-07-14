@@ -1604,18 +1604,18 @@ namespace troy {
             case SchemeType::BFV: {
                 if (plain.parms_id() == parms_id_zero) {
                     if (!subtract) {
-                        scaling_variant::multiply_add_plain(plain, context_data, encrypted.poly(0));
+                        scaling_variant::multiply_add_plain(plain, context_data, encrypted.poly(0), coeff_count);
                     } else {
-                        scaling_variant::multiply_sub_plain(plain, context_data, encrypted.poly(0));
+                        scaling_variant::multiply_sub_plain(plain, context_data, encrypted.poly(0), coeff_count);
                     }
                 } else {
                     if (plain.parms_id() != encrypted.parms_id()) {
                         throw std::invalid_argument("[Evaluator::translate_plain_inplace] Plaintext and ciphertext parameters do not match.");
                     }
                     if (!subtract) {
-                        utils::add_inplace_p(encrypted.poly(0), plain.poly(), coeff_count, coeff_modulus);
+                        utils::add_partial_inplace_p(encrypted.poly(0), plain.poly(), coeff_count, plain.coeff_count(), coeff_modulus);
                     } else {
-                        utils::sub_inplace_p(encrypted.poly(0), plain.poly(), coeff_count, coeff_modulus);
+                        utils::sub_partial_inplace_p(encrypted.poly(0), plain.poly(), coeff_count, plain.coeff_count(), coeff_modulus);
                     }
                 }
                 break;
@@ -1667,16 +1667,17 @@ namespace troy {
             
             // Generic case: any plaintext polynomial
             // Allocate temporary space for an entire RNS polynomial
-            scaling_variant::centralize(plain, context_data, temp.reference(), pool);
+            scaling_variant::centralize(plain, context_data, temp.reference(), coeff_count, pool);
         
         } else {
 
             // The plaintext is already conveyed to modulus Q.
             // Directly copy.
-            if (plain.data().size() != temp.size()) {
-                throw std::invalid_argument("[Evaluator::multiply_plain_normal_inplace] Invalid plain size.");
+            if (plain.coeff_count() == coeff_count) {
+                temp.copy_from_slice(plain.reference());
+            } else {
+                utils::scatter_partial_p(plain.const_poly(), plain.coeff_count(), coeff_count, coeff_modulus_size, temp.reference());
             }
-            temp.copy_from_slice(plain.reference());
             
         }
 
@@ -1829,12 +1830,9 @@ namespace troy {
 
         if (plain.parms_id() == parms_id_zero) {
             size_t plain_coeff_count = plain.coeff_count();
-
-            plain.resize(coeff_count * coeff_modulus_size);
-
+            plain.resize_rns(*context_, parms_id);
             size_t plain_upper_half_threshold = context_data->plain_upper_half_threshold();
             ConstSlice<uint64_t> plain_upper_half_increment = context_data->plain_upper_half_increment();
-            
 
             if (!context_data->qualifiers().using_fast_plain_lift) {
                 bool device = plain.on_device();
@@ -1862,6 +1860,11 @@ namespace troy {
         } else {
             if (plain.parms_id() != parms_id) {
                 throw std::invalid_argument("[Evaluator::transform_plain_to_ntt_inplace] Plaintext parameters do not match.");
+            }
+            if (plain.coeff_count() != coeff_count) {
+                Plaintext cloned = plain.clone(pool); cloned.resize_rns(*context_, plain.parms_id());
+                utils::scatter_partial_p(plain.const_poly(), plain.coeff_count(), coeff_count, coeff_modulus_size, cloned.poly());
+                plain = std::move(cloned);
             }
             utils::ntt_negacyclic_harvey_p(plain.poly(), coeff_count, ntt_tables);
             plain.is_ntt_form() = true;

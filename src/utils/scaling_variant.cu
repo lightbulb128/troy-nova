@@ -77,7 +77,6 @@ namespace troy {namespace scaling_variant {
 
     __global__ static void kernel_multiply_translate_plain(
         size_t plain_coeff_count,
-        size_t coeff_count,
         ConstSlice<uint64_t> plain_data,
         ConstSlice<MultiplyUint64Operand> coeff_div_plain_modulus,
         uint64_t plain_upper_half_threshold,
@@ -85,6 +84,7 @@ namespace troy {namespace scaling_variant {
         uint64_t plain_modulus_value,
         ConstSlice<Modulus> coeff_modulus,
         Slice<uint64_t> destination,
+        size_t destination_coeff_count,
         bool add_to_destination,
         bool subtract
     ) {
@@ -106,7 +106,7 @@ namespace troy {namespace scaling_variant {
         uint64_t scaled_rounded_coeff = utils::multiply_uint64operand_add_uint64_mod(
             plain_data[i], coeff_div_plain_modulus[j], fix[0], coeff_modulus[j]
         );
-        uint64_t& destination_target = destination[j * coeff_count + i];
+        uint64_t& destination_target = destination[j * destination_coeff_count + i];
         if (add_to_destination) {
             if (!subtract) {
                 destination_target = utils::add_uint64_mod(destination_target, scaled_rounded_coeff, coeff_modulus[j]);
@@ -118,7 +118,7 @@ namespace troy {namespace scaling_variant {
         }
     }
 
-    void scale_up(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, bool add_to_destination, bool subtract) {
+    void scale_up(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, size_t destination_coeff_count, bool add_to_destination, bool subtract) {
         bool device = plain.on_device();
         if (!utils::device_compatible(*context_data, plain, destination)) {
             throw std::invalid_argument("[scaling_variant::scale_up] Arguments are not on the same device.");
@@ -126,9 +126,8 @@ namespace troy {namespace scaling_variant {
         const EncryptionParameters& parms = context_data->parms();
         ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
         size_t plain_coeff_count = plain.coeff_count();
-        size_t coeff_count = parms.poly_modulus_degree();
-        if (plain_coeff_count > coeff_count) {
-            throw std::invalid_argument("[scaling_variant::scale_up] Plain coeff count too large.");
+        if (destination_coeff_count < plain_coeff_count) {
+            throw std::invalid_argument("[scaling_variant::scale_up] destination_coeff_count should no less than plain_coeff_count.");
         }
         size_t coeff_modulus_size = coeff_modulus.size();
         ConstSlice<uint64_t> plain_data = plain.data().const_reference();
@@ -158,12 +157,12 @@ namespace troy {namespace scaling_variant {
                     );
                     if (add_to_destination) {
                         if (!subtract) {
-                            destination[j * coeff_count + i] = utils::add_uint64_mod(destination[j * coeff_count + i], scaled_rounded_coeff, coeff_modulus[j]);
+                            destination[j * destination_coeff_count + i] = utils::add_uint64_mod(destination[j * destination_coeff_count + i], scaled_rounded_coeff, coeff_modulus[j]);
                         } else {
-                            destination[j * coeff_count + i] = utils::sub_uint64_mod(destination[j * coeff_count + i], scaled_rounded_coeff, coeff_modulus[j]);
+                            destination[j * destination_coeff_count + i] = utils::sub_uint64_mod(destination[j * destination_coeff_count + i], scaled_rounded_coeff, coeff_modulus[j]);
                         }
                     } else {
-                        destination[j * coeff_count + i] = scaled_rounded_coeff;
+                        destination[j * destination_coeff_count + i] = scaled_rounded_coeff;
                     }
                 }
             }
@@ -173,7 +172,6 @@ namespace troy {namespace scaling_variant {
             utils::set_device(destination.device_index());
             kernel_multiply_translate_plain<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 plain_coeff_count,
-                coeff_count,
                 plain_data,
                 coeff_div_plain_modulus,
                 plain_upper_half_threshold,
@@ -181,18 +179,19 @@ namespace troy {namespace scaling_variant {
                 parms.plain_modulus_host().value(),
                 coeff_modulus,
                 destination,
+                destination_coeff_count,
                 add_to_destination,
                 subtract
             );
         }
     }
 
-    void multiply_add_plain(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination) {
-        scale_up(plain, context_data, destination, true, false);
+    void multiply_add_plain(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, size_t destination_coeff_count) {
+        scale_up(plain, context_data, destination, destination_coeff_count, true, false);
     }
 
-    void multiply_sub_plain(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination) {
-        scale_up(plain, context_data, destination, true, true);
+    void multiply_sub_plain(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, size_t destination_coeff_count) {
+        scale_up(plain, context_data, destination, destination_coeff_count, true, true);
     }
 
     __global__ static void kernel_multiply_plain_normal_no_fast_plain_lift(
@@ -215,7 +214,7 @@ namespace troy {namespace scaling_variant {
     void multiply_plain_normal_no_fast_plain_lift(
         size_t plain_coeff_count, size_t coeff_modulus_size,
         ConstSlice<uint64_t> plain, 
-        Slice<uint64_t> temp, 
+        Slice<uint64_t> temp,
         uint64_t plain_upper_half_threshold,
         ConstSlice<uint64_t> plain_upper_half_increment
     ) {
@@ -256,7 +255,7 @@ namespace troy {namespace scaling_variant {
     }
 
     static void multiply_plain_normal_fast_plain_lift(
-        size_t plain_coeff_count, size_t coeff_count, size_t coeff_modulus_size,
+        size_t plain_coeff_count, size_t temp_coeff_count, size_t coeff_modulus_size,
         ConstSlice<uint64_t> plain, 
         Slice<uint64_t> temp, 
         uint64_t plain_upper_half_threshold,
@@ -266,7 +265,7 @@ namespace troy {namespace scaling_variant {
         if (!device) {
             for (size_t i = 0; i < coeff_modulus_size; i++) {
                 for (size_t j = 0; j < plain_coeff_count; j++) {
-                    temp[i * coeff_count + j] = (plain[j] >= plain_upper_half_threshold)
+                    temp[i * temp_coeff_count + j] = (plain[j] >= plain_upper_half_threshold)
                         ? plain[j] + plain_upper_half_increment[i]
                         : plain[j];
                 }
@@ -276,30 +275,29 @@ namespace troy {namespace scaling_variant {
             size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
             utils::set_device(temp.device_index());
             kernel_multiply_plain_normal_fast_plain_lift<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
-                plain_coeff_count, coeff_count, coeff_modulus_size,
+                plain_coeff_count, temp_coeff_count, coeff_modulus_size,
                 plain, temp, plain_upper_half_threshold, plain_upper_half_increment
             );
         }
     }
 
-    void centralize(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, MemoryPoolHandle pool) {
+    void centralize(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, size_t destination_coeff_count, MemoryPoolHandle pool) {
         if (!utils::device_compatible(*context_data, plain, destination)) {
             throw std::invalid_argument("[scaling_variant::centralize] Arguments are not on the same device.");
         }
         const EncryptionParameters& parms = context_data->parms();
         ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
         size_t plain_coeff_count = plain.coeff_count();
-        size_t coeff_count = parms.poly_modulus_degree();
-        if (plain_coeff_count > coeff_count) {
-            throw std::invalid_argument("[scaling_variant::centralize] Plain coeff count too large.");
+        if (destination_coeff_count < plain_coeff_count) {
+            throw std::invalid_argument("[scaling_variant::centralize] destination_coeff_count should no less than plain_coeff_count.");
         }
         size_t coeff_modulus_size = coeff_modulus.size();
         uint64_t plain_upper_half_threshold = context_data->plain_upper_half_threshold();
         ConstSlice<uint64_t> plain_upper_half_increment = context_data->plain_upper_half_increment();
-        if (destination.size() != coeff_modulus_size * coeff_count) {
+        if (destination.size() < coeff_modulus_size * plain_coeff_count) {
             throw std::invalid_argument("[scaling_variant::centralize] Destination has incorrect size.");
         }
-
+        destination.set_zero();
         if (!context_data->qualifiers().using_fast_plain_lift) {
             multiply_plain_normal_no_fast_plain_lift(
                 plain_coeff_count, coeff_modulus_size,
@@ -310,7 +308,7 @@ namespace troy {namespace scaling_variant {
             // Note that in this case plain_upper_half_increment holds its value in RNS form modulo the coeff_modulus
             // primes.
             multiply_plain_normal_fast_plain_lift(
-                plain_coeff_count, coeff_count, coeff_modulus_size,
+                plain_coeff_count, destination_coeff_count, coeff_modulus_size,
                 plain.poly(), destination, plain_upper_half_threshold, plain_upper_half_increment
             );
         }

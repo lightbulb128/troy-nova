@@ -873,8 +873,7 @@ namespace troy {namespace utils {
             destination.slice(base_Bsk_size * coeff_count, (base_Bsk_size + 1) * coeff_count), pool);
     }
 
-    static void host_decrypt_scale_and_round_step1(const RNSTool& self, Slice<uint64_t> destination, ConstSlice<uint64_t> temp_t_gamma) {
-        size_t coeff_count = self.coeff_count();
+    static void host_decrypt_scale_and_round_step1(const RNSTool& self, Slice<uint64_t> destination, size_t coeff_count, ConstSlice<uint64_t> temp_t_gamma) {
         uint64_t gamma = self.gamma()->value();
         uint64_t gamma_div_2 = gamma >> 1;
         const Modulus& t = *self.t();
@@ -924,9 +923,8 @@ namespace troy {namespace utils {
         }
     }
 
-    static void decrypt_scale_and_round_step1(const RNSTool& self, Slice<uint64_t> destination, ConstSlice<uint64_t> temp_t_gamma) {
+    static void decrypt_scale_and_round_step1(const RNSTool& self, Slice<uint64_t> destination, size_t coeff_count, ConstSlice<uint64_t> temp_t_gamma) {
         bool device = self.on_device();
-        size_t coeff_count = self.coeff_count();
         if (device) {
             size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
             utils::set_device(destination.device_index());
@@ -939,31 +937,30 @@ namespace troy {namespace utils {
                 temp_t_gamma
             );
         } else {
-            host_decrypt_scale_and_round_step1(self, destination, temp_t_gamma);
+            host_decrypt_scale_and_round_step1(self, destination, coeff_count, temp_t_gamma);
         }
     }
     
-    void RNSTool::decrypt_scale_and_round(ConstSlice<uint64_t> phase, Slice<uint64_t> destination, MemoryPoolHandle pool) const {
+    void RNSTool::decrypt_scale_and_round(ConstSlice<uint64_t> phase, size_t phase_coeff_count, Slice<uint64_t> destination, MemoryPoolHandle pool) const {
         bool device = this->on_device();
         if (!utils::device_compatible(*this, phase, destination)) {
             throw std::invalid_argument("[RNSTool::decrypt_scale_and_round] RNSTool, phase and destination must be on the same device.");
         }
         size_t base_q_size = this->base_q().size();
         size_t base_t_gamma_size = this->base_t_gamma().size();
-        size_t coeff_count = this->coeff_count();
 
         // Compute |gamma * t|_qi * ct(s)
-        Array<uint64_t> temp(coeff_count * base_q_size, device, pool);
+        Array<uint64_t> temp(phase_coeff_count * base_q_size, device, pool);
         utils::multiply_uint64operand_p(
-            phase.const_slice(0, base_q_size * coeff_count),
+            phase.const_slice(0, base_q_size * phase_coeff_count),
             this->prod_t_gamma_mod_q(),
-            coeff_count,
+            phase_coeff_count,
             this->base_q().base(),
             temp.reference()
         );
 
         // Make another temp destination to get the poly in mod {t, gamma}
-        Array<uint64_t> temp_t_gamma(coeff_count * base_t_gamma_size, device, pool);
+        Array<uint64_t> temp_t_gamma(phase_coeff_count * base_t_gamma_size, device, pool);
         this->base_q_to_t_gamma_conv()
             .fast_convert_array(temp.const_reference(), temp_t_gamma.reference(), pool);
         
@@ -971,13 +968,13 @@ namespace troy {namespace utils {
         utils::multiply_uint64operand_inplace_p(
             temp_t_gamma.reference(),
             this->neg_inv_q_mod_t_gamma(),
-            coeff_count,
+            phase_coeff_count,
             this->base_t_gamma().base()
         );
 
         // Need to correct values in temp_t_gamma (gamma component only) which are
         // larger than floor(gamma/2)
-        decrypt_scale_and_round_step1(*this, destination, temp_t_gamma.const_reference());
+        decrypt_scale_and_round_step1(*this, destination, phase_coeff_count, temp_t_gamma.const_reference());
     }
 
     static void host_mod_t_and_divide_q_last_inplace_step1(const RNSTool& self, Slice<uint64_t> input, ConstSlice<uint64_t> neg_c_last_mod_t) {

@@ -338,9 +338,9 @@ namespace troy {
         } else {
             destination.to_host_inplace();
         }
-        destination.resize_rns(*this->context_, pid);
+        destination.resize_rns_partial(*this->context_, pid, plain.coeff_count());
         destination.is_ntt_form() = false;
-        scaling_variant::scale_up(plain, context_data, destination.reference(), false, false);
+        scaling_variant::scale_up(plain, context_data, destination.reference(), plain.coeff_count(), false, false);
         return destination;
     }
 
@@ -362,15 +362,16 @@ namespace troy {
         }
         destination.coeff_modulus_size() = plain.coeff_modulus_size();
         destination.poly_modulus_degree() = plain.poly_modulus_degree();
+        destination.coeff_count() = plain.coeff_count();
         destination.parms_id() = parms_id_zero;
-        destination.resize(plain.poly_modulus_degree());
+        destination.resize(plain.coeff_count());
         destination.is_ntt_form() = false;
         std::optional<ContextDataPointer> context_data_opt = this->context_->get_context_data(plain.parms_id());
         if (!context_data_opt.has_value()) {
             throw std::invalid_argument("[BatchEncoder::scale_down_new] Could not find context data.");
         }
         ContextDataPointer context_data = context_data_opt.value();
-        context_data->rns_tool().decrypt_scale_and_round(plain.const_reference(), destination.reference(), pool);
+        context_data->rns_tool().decrypt_scale_and_round(plain.const_reference(), plain.coeff_count(), destination.reference(), pool);
         return destination;
     }
 
@@ -389,9 +390,9 @@ namespace troy {
         } else {
             destination.to_host_inplace();
         }
-        destination.resize_rns(*this->context_, pid);
+        destination.resize_rns_partial(*this->context_, pid, plain.coeff_count());
         destination.is_ntt_form() = false;
-        scaling_variant::centralize(plain, context_data, destination.reference(), pool);
+        scaling_variant::centralize(plain, context_data, destination.reference(), plain.coeff_count(), pool);
         return destination;
     }
 
