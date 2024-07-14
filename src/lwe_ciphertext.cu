@@ -23,9 +23,11 @@ namespace troy {
                 size_t block_size = utils::ceil_div(c0.size(), utils::KERNEL_THREAD_COUNT);
                 utils::set_device(c0.device_index());
                 kernel_assemble_lwe_scatter_c0<<<block_size, utils::KERNEL_THREAD_COUNT>>>(poly_modulus_degree, rlwec0, c0);
+                utils::stream_sync();
             } else {
                 utils::set_device(c0.device_index());
                 kernel_assemble_lwe_scatter_c0<<<1, c0.size()>>>(poly_modulus_degree, rlwec0, c0);
+                utils::stream_sync();
             }
         }
     }

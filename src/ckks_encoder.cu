@@ -201,6 +201,7 @@ namespace troy {
             kernel_multiply_complex_scalar<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 CustomComplex::slice(operand), fix
             );
+            utils::stream_sync();
         }
     }
 
@@ -223,6 +224,7 @@ namespace troy {
             kernel_multiply_double_scalar<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 operand, fix
             );
+            utils::stream_sync();
         }
     }
 
@@ -269,6 +271,7 @@ namespace troy {
             kernel_fft_transform_from_rev_layer<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 layer, CustomComplex::slice(operand), logn, CustomComplex::slice(roots)
             );
+            utils::stream_sync();
         }
     }
 
@@ -333,6 +336,7 @@ namespace troy {
             kernel_fft_transform_to_rev_layer<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 layer, CustomComplex::slice(operand), logn, CustomComplex::slice(roots)
             );
+            utils::stream_sync();
         }
     }
 
@@ -383,6 +387,7 @@ namespace troy {
                 index_map,
                 CustomComplex::slice(target)
             );
+            utils::stream_sync();
         }
     }
 
@@ -412,6 +417,7 @@ namespace troy {
                 index_map,
                 CustomComplex::slice(target)
             );
+            utils::stream_sync();
         }
     }
 
@@ -441,6 +447,7 @@ namespace troy {
                 CustomComplex::slice(complex_array),
                 real_array
             );
+            utils::stream_sync();
         }
     }
 
@@ -489,6 +496,7 @@ namespace troy {
             kernel_set_plaintext_value_array_64bits<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 coeff_count, real_values, coeff_modulus, destination
             );
+            utils::stream_sync();
         }
     }
 
@@ -537,6 +545,7 @@ namespace troy {
             kernel_set_plaintext_value_array_128bits<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 coeff_count, real_values, coeff_modulus, destination
             );
+            utils::stream_sync();
         }
     }
 
@@ -582,6 +591,7 @@ namespace troy {
             kernel_decompose_double_absolute_array<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 real_values, total, coeff_modulus_size, destination
             );
+            utils::stream_sync();
         }
     }
 
@@ -630,6 +640,7 @@ namespace troy {
             kernel_set_decomposed_value_array<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 real_values, decomposed_values, n, coeff_modulus, destination
             );
+            utils::stream_sync();
         }
     }
 
@@ -854,6 +865,7 @@ namespace troy {
             kernel_broadcast_double<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 d, destination
             );
+            utils::stream_sync();
         }
     }
 
@@ -876,6 +888,7 @@ namespace troy {
             kernel_broadcast_integer<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 value, destination
             );
+            utils::stream_sync();
         }
     }
     */
@@ -959,6 +972,7 @@ namespace troy {
             kernel_reduce_values<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 values, coeff_count, modulus, destination
             );
+            utils::stream_sync();
         }
 
     }
@@ -1142,6 +1156,7 @@ namespace troy {
                 inputs, coeff_count, decryption_modulus, coeff_modulus_size, upper_half_threshold, 
                 CustomComplex::slice(destination), inv_scale
             );
+            utils::stream_sync();
         }
     }
     

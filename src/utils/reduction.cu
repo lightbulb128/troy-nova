@@ -34,6 +34,7 @@ namespace troy { namespace reduction {
             utils::Array<T> max_array(thread_count, true, pool);
             utils::set_device(max_array.device_index());
             kernel_max<<<1, thread_count>>>(inputs, max_array.reference());
+            utils::stream_sync();
             max_array.to_host_inplace();
             return max(max_array.const_reference());
         }
@@ -71,6 +72,7 @@ namespace troy { namespace reduction {
             utils::Array<T> min_array(thread_count, true, pool);
             utils::set_device(min_array.device_index());
             kernel_min<<<1, thread_count>>>(inputs, min_array.reference());
+            utils::stream_sync();
             min_array.to_host_inplace();
             return min(min_array.const_reference());
         }
@@ -104,6 +106,7 @@ namespace troy { namespace reduction {
             utils::Array<T> sum_array(thread_count, true, pool);
             utils::set_device(sum_array.device_index());
             kernel_sum<<<1, thread_count>>>(inputs, sum_array.reference());
+            utils::stream_sync();
             sum_array.to_host_inplace();
             return sum(sum_array.const_reference());
         }
@@ -137,6 +140,7 @@ namespace troy { namespace reduction {
             utils::Array<size_t> count_array(thread_count, true, pool);
             utils::set_device(count_array.device_index());
             kernel_nonzero_count<<<1, thread_count>>>(inputs, count_array.reference());
+            utils::stream_sync();
             count_array.to_host_inplace();
             return sum(count_array.const_reference());
         }

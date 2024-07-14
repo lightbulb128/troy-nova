@@ -1,6 +1,7 @@
 #include "batch_encoder.h"
 #include "encryption_parameters.h"
 #include "utils/basics.h"
+#include "utils/memory_pool.h"
 #include "utils/scaling_variant.h"
 
 namespace troy {
@@ -93,6 +94,7 @@ namespace troy {
             size_t block_count = utils::ceil_div(n, utils::KERNEL_THREAD_COUNT);
             utils::set_device(input.device_index());
             kernel_reverse_bits<<<block_count, utils::KERNEL_THREAD_COUNT>>>(logn, input);
+            utils::stream_sync();
         }
     }
 
@@ -123,6 +125,7 @@ namespace troy {
             size_t block_count = utils::ceil_div(destination.size(), utils::KERNEL_THREAD_COUNT);
             utils::set_device(values.device_index());
             kernel_encode_set_values<<<block_count, utils::KERNEL_THREAD_COUNT>>>(values, index_map, destination);
+            utils::stream_sync();
         }
     }
     
@@ -254,6 +257,7 @@ namespace troy {
             size_t block_count = utils::ceil_div(destination.size(), utils::KERNEL_THREAD_COUNT);
             utils::set_device(values.device_index());
             kernel_decode_set_values<<<block_count, utils::KERNEL_THREAD_COUNT>>>(values, index_map, destination);
+            utils::stream_sync();
         }
     }
     
@@ -275,7 +279,7 @@ namespace troy {
             destination.copy_from_slice(destination_host.const_reference());
             return;
         }
-        
+
         // check compatible
         if (!utils::device_compatible(destination, *this)) {
             throw std::invalid_argument("[BatchEncoder::decode_slice] Values and destination are not compatible.");

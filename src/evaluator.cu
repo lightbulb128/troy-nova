@@ -763,6 +763,7 @@ namespace troy {
                 t_poly_lazy, coeff_count, key_component_count, 
                 key_vector_j, key_poly_coeff_size, t_operand, key_index, key_modulus
             );
+            utils::stream_sync();
         }
     }
     
@@ -817,6 +818,7 @@ namespace troy {
                 t_poly_lazy, coeff_count, key_component_count, 
                 key_vector_j, key_poly_coeff_size, t_operand, key_index
             );
+            utils::stream_sync();
         }
     }
 
@@ -856,6 +858,7 @@ namespace troy {
             kernel_ski_util3<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_poly_lazy, coeff_count, key_component_count, rns_modulus_size, t_poly_prod_iter
             );
+            utils::stream_sync();
         }
     }
 
@@ -903,6 +906,7 @@ namespace troy {
                 t_poly_lazy, coeff_count, key_component_count, 
                 rns_modulus_size, t_poly_prod_iter, key_modulus
             );
+            utils::stream_sync();
         }
     }
 
@@ -1008,12 +1012,14 @@ namespace troy {
                 decomp_modulus_size, qk_inv_qp, qk,
                 delta.reference()
             );
+            utils::stream_sync();
             utils::ntt_negacyclic_harvey_p(delta.reference(), coeff_count, key_ntt_tables.const_slice(0, decomp_modulus_size));
             utils::set_device(t_poly_prod_i.device_index());
             kernel_ski_util5_step2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_poly_prod_i, coeff_count, key_modulus, 
                 decomp_modulus_size, modswitch_factors, encrypted_i, delta.const_reference()
             );
+            utils::stream_sync();
         }
     }
 
@@ -1072,6 +1078,7 @@ namespace troy {
             kernel_ski_util6<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_last, coeff_count, qk, key_modulus, decomp_modulus_size, t_ntt
             );
+            utils::stream_sync();
         }
     }
 
@@ -1128,6 +1135,7 @@ namespace troy {
                 t_poly_prod_i, t_ntt, coeff_count, encrypted_i, is_ckks, 
                 decomp_modulus_size, key_modulus, modswitch_factors
             );
+            utils::stream_sync();
         }
     }
 
@@ -1801,6 +1809,7 @@ namespace troy {
                 plain_coeff_count, coeff_count, coeff_modulus_size,
                 plain, plain_upper_half_threshold, plain_upper_half_increment
             );
+            utils::stream_sync();
         }
     }
 
@@ -2052,11 +2061,13 @@ namespace troy {
                 kernel_extract_lwe_gather_c0<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                     coeff_modulus_size, coeff_count, term, rlwe_c0, c0
                 );
+                utils::stream_sync();
             } else {
                 utils::set_device(c0.device_index());
                 kernel_extract_lwe_gather_c0<<<1, coeff_modulus_size>>>(
                     coeff_modulus_size, coeff_count, term, rlwe_c0, c0
                 );
+                utils::stream_sync();
             }
         }
     }

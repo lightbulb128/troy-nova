@@ -51,8 +51,9 @@ namespace uint_small_mod {
         Array<Modulus> device_modulus = modulus.to_device(MemoryPool::GlobalPool());
 
         Array<bool> r(16, true, MemoryPool::GlobalPool()); 
-        cudaSetDevice(r.device_index());
+        utils::set_device(r.device_index());
         kernel_increment_uint64_mod<<<4, 4>>>(device_modulus.const_reference(), r.reference());
+        utils::stream_sync();
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
@@ -103,8 +104,9 @@ namespace uint_small_mod {
         Array<Modulus> device_modulus = modulus.to_device(MemoryPool::GlobalPool());
 
         Array<bool> r(16, true, MemoryPool::GlobalPool()); 
-        cudaSetDevice(r.device_index());
+        utils::set_device(r.device_index());
         kernel_decrement_uint64_mod<<<4, 4>>>(device_modulus.const_reference(), r.reference());
+        utils::stream_sync();
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
@@ -162,8 +164,9 @@ namespace uint_small_mod {
         Array<Modulus> device_modulus = modulus.to_device(MemoryPool::GlobalPool());
 
         Array<bool> r(16, true, MemoryPool::GlobalPool()); 
-        cudaSetDevice(r.device_index());
+        utils::set_device(r.device_index());
         kernel_negate_uint64_mod<<<4, 4>>>(device_modulus.const_reference(), r.reference());
+        utils::stream_sync();
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
@@ -213,8 +216,9 @@ namespace uint_small_mod {
         Array<Modulus> device_modulus = modulus.to_device(MemoryPool::GlobalPool());
 
         Array<bool> r(16, true, MemoryPool::GlobalPool()); 
-        cudaSetDevice(r.device_index());
-        kernel_divide2_uint64_mod<<<4, 4>>>(device_modulus.const_reference(), r.reference());
+        utils::set_device(r.device_index());
+        kernel_divide2_uint64_mod<<<4, 4>>>(device_modulus.const_reference(), r.reference());        utils::stream_sync();
+        utils::stream_sync();
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
@@ -275,8 +279,10 @@ namespace uint_small_mod {
         Array<Modulus> device_modulus = modulus.to_device(MemoryPool::GlobalPool());
 
         Array<bool> r(16, true, MemoryPool::GlobalPool()); 
-        cudaSetDevice(r.device_index());
+        utils::set_device(r.device_index());
         kernel_add_uint64_mod<<<4, 4>>>(device_modulus.const_reference(), r.reference());
+        utils::stream_sync();
+
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
@@ -339,8 +345,9 @@ namespace uint_small_mod {
         Array<Modulus> device_modulus = modulus.to_device(MemoryPool::GlobalPool());
 
         Array<bool> r(16, true, MemoryPool::GlobalPool()); 
-        cudaSetDevice(r.device_index());
+        utils::set_device(r.device_index());
         kernel_sub_uint64_mod<<<4, 4>>>(device_modulus.const_reference(), r.reference());
+        utils::stream_sync();
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
@@ -419,8 +426,9 @@ namespace uint_small_mod {
         Array<Modulus> device_modulus = modulus.to_device(MemoryPool::GlobalPool());
 
         Array<bool> r(16, true, MemoryPool::GlobalPool()); 
-        cudaSetDevice(r.device_index());
+        utils::set_device(r.device_index());
         kernel_barrett_reduce_uint128_mod<<<4, 4>>>(device_modulus.const_reference(), r.reference());
+        utils::stream_sync();
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
@@ -483,8 +491,9 @@ namespace uint_small_mod {
         Array<Modulus> device_modulus = modulus.to_device(MemoryPool::GlobalPool());
 
         Array<bool> r(16, true, MemoryPool::GlobalPool()); 
-        cudaSetDevice(r.device_index());
+        utils::set_device(r.device_index());
         kernel_multiply_uint64_mod<<<4, 4>>>(device_modulus.const_reference(), r.reference());
+        utils::stream_sync();
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
@@ -536,8 +545,9 @@ namespace uint_small_mod {
         Array<Modulus> device_modulus = modulus.to_device(MemoryPool::GlobalPool());
 
         Array<bool> r(16, true, MemoryPool::GlobalPool()); 
-        cudaSetDevice(r.device_index());
+        utils::set_device(r.device_index());
         kernel_multiply_add_uint64_mod<<<4, 4>>>(device_modulus.const_reference(), r.reference());
+        utils::stream_sync();
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
@@ -641,8 +651,9 @@ namespace uint_small_mod {
         Array<Modulus> device_modulus = modulus.to_device(MemoryPool::GlobalPool());
 
         Array<bool> r(16, true, MemoryPool::GlobalPool()); 
-        cudaSetDevice(r.device_index());
+        utils::set_device(r.device_index());
         kernel_modulo_uint_mod<<<4, 4>>>(device_modulus.const_reference(), r.reference());
+        utils::stream_sync();
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
@@ -693,8 +704,9 @@ namespace uint_small_mod {
         Array<Modulus> device_modulus = modulus.to_device(MemoryPool::GlobalPool());
 
         Array<bool> r(16, true, MemoryPool::GlobalPool()); 
-        cudaSetDevice(r.device_index());
+        utils::set_device(r.device_index());
         kernel_exponentiate_uint64_mod<<<4, 4>>>(device_modulus.const_reference(), r.reference());
+        utils::stream_sync();
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();

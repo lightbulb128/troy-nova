@@ -35,7 +35,7 @@ namespace bench::matmul {
         size_t n;
         size_t r;
 
-        size_t poly_modulus_degree = 1024;
+        size_t poly_modulus_degree = 8192;
         size_t simd_log_t = 40;
         size_t ring2k_log_t = 0;
         std::vector<size_t> log_q = { 60, 40, 40, 60 };
@@ -51,6 +51,8 @@ namespace bench::matmul {
         size_t mod_switch_down_levels = 0;
         bool pack_lwes = true;
         bool use_zstd = false;
+
+        bool no_check_correctness = false;
         
         Arguments(int argc, char** argv) {
             ArgumentParser parser(argc, argv);
@@ -101,6 +103,7 @@ namespace bench::matmul {
             bool no_pack_lwes = parser.get_bool_store_true("-np").value_or(parser.get_bool_store_true("--no-pack-lwes").value_or(false));
             pack_lwes = !no_pack_lwes;
             use_zstd = parser.get_bool_store_true("--use-zstd").value_or(false);
+            no_check_correctness = parser.get_bool_store_true("--no-check-correctness").value_or(false);
 
             if (threads < 1) {
                 throw std::invalid_argument("threads must be at least 1");
@@ -179,6 +182,7 @@ namespace bench::matmul {
             std::cout << "  -msd, --mod-switch-down-levels" << std::endl;
             std::cout << "  -np, --no-pack-lwes         Do not pack lwes" << std::endl;
             std::cout << "  --use-zstd                  Use Zstd for compressing serialized ciphers" << std::endl;
+            std::cout << "  --no-check-correctness       Do not check correctness" << std::endl;
             std::cout << std::endl;
         }
 
@@ -230,6 +234,7 @@ namespace bench::matmul {
             std::cout << "  mod-down-levels     = " << mod_switch_down_levels << std::endl;
             std::cout << "  pack-lwes           = " << bool_to_string(pack_lwes) << std::endl;
             std::cout << "  use-zstd            = " << bool_to_string(use_zstd) << std::endl;
+            std::cout << "  no-check-correct    = " << bool_to_string(no_check_correctness) << std::endl;
 
             std::cout << "  seed                = " << "0x" << std::hex << seed << std::dec << std::endl;
             if (scheme_ckks) {
@@ -429,9 +434,6 @@ namespace bench::matmul {
 
             for (size_t rep = 0; rep < args.repeat; rep++) {
                 bool last_rep = rep == args.repeat - 1;
-                if (last_rep) {
-                    std::cout << "Printing step timings for the last repetition" << std::endl;
-                }
                 total_timer.tick(total_timer_handle);
 
                 TimerOnce thread_timer;
@@ -714,8 +716,12 @@ namespace bench::matmul {
                     std::cout << "  [x] = " << x_serialized_size << " bytes" << std::endl;
                     std::cout << "  [y] = " << y_serialized_size << " bytes" << std::endl;
 
-                    GeneralVector y_truth = matmul_plaintext(x, w, s, threads);
-                    success = y_decoded.near_equal(y_truth, context.tolerance());
+                    if (args.no_check_correctness) {
+                        success = true;
+                    } else {
+                        GeneralVector y_truth = matmul_plaintext(x, w, s, threads);
+                        success = y_decoded.near_equal(y_truth, context.tolerance());
+                    }
                 }
             }
 

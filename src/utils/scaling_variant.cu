@@ -64,6 +64,7 @@ namespace troy {namespace scaling_variant {
                 destination,
                 subtract
             );
+            utils::stream_sync();
         }
     }
 
@@ -183,6 +184,7 @@ namespace troy {namespace scaling_variant {
                 add_to_destination,
                 subtract
             );
+            utils::stream_sync();
         }
     }
 
@@ -235,6 +237,7 @@ namespace troy {namespace scaling_variant {
                 plain_coeff_count, coeff_modulus_size,
                 plain, temp, plain_upper_half_threshold, plain_upper_half_increment
             );
+            utils::stream_sync();
         }
     }
 
@@ -278,6 +281,7 @@ namespace troy {namespace scaling_variant {
                 plain_coeff_count, temp_coeff_count, coeff_modulus_size,
                 plain, temp, plain_upper_half_threshold, plain_upper_half_increment
             );
+            utils::stream_sync();
         }
     }
 

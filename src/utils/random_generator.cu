@@ -36,6 +36,7 @@ namespace troy {namespace utils {
             size_t block_count = utils::ceil_div(n, utils::KERNEL_THREAD_COUNT);
             utils::set_device(bytes.device_index());
             kernel_fill_uint128s<<<block_count, utils::KERNEL_THREAD_COUNT>>>(bytes, seed, counter);
+            utils::stream_sync();
             counter = counter.add(n);
         }
     }
@@ -127,6 +128,7 @@ namespace troy {namespace utils {
                 destination, degree, moduli,
                 this->seed, this->counter
             );
+            utils::stream_sync();
             this->counter = this->counter.add(degree);
         }
     }
@@ -188,6 +190,7 @@ namespace troy {namespace utils {
             kernel_sample_poly_centered_binomial<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 destination, degree, moduli, this->seed, this->counter
             );
+            utils::stream_sync();
             this->counter = this->counter.add(degree);
         }
     }

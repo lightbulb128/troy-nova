@@ -31,6 +31,7 @@ namespace troy {namespace utils {
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
             kernel_modulo_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys, pcount, degree, moduli, result);
+            utils::stream_sync();
         } else {
             host_modulo_ps(polys, pcount, degree, moduli, result);
         }
@@ -65,6 +66,7 @@ namespace troy {namespace utils {
             size_t block_count = ceil_div<size_t>(total, thread_count);
             utils::set_device(result.device_index());
             kernel_negate_ps<<<block_count, thread_count>>>(polys, pcount, degree, moduli, result);
+            utils::stream_sync();
         } else {
             host_negate_ps(polys, pcount, degree, moduli, result);
         }
@@ -100,6 +102,7 @@ namespace troy {namespace utils {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
             utils::set_device(result.device_index());
             kernel_add_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys1, polys2, pcount, degree, moduli, result);
+            utils::stream_sync();
         } else {
             host_add_ps(polys1, polys2, pcount, degree, moduli, result);
         }
@@ -133,6 +136,7 @@ namespace troy {namespace utils {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
             utils::set_device(result.device_index());
             kernel_sub_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys1, polys2, pcount, degree, moduli, result);
+            utils::stream_sync();
         } else {
             host_sub_ps(polys1, polys2, pcount, degree, moduli, result);
         }
@@ -180,6 +184,7 @@ namespace troy {namespace utils {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree_result, KERNEL_THREAD_COUNT);
             utils::set_device(result.device_index());
             kernel_add_partial_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys1, polys2, pcount, degree1, degree2, moduli, result, degree_result);
+            utils::stream_sync();
         } else {
             host_add_partial_ps(polys1, polys2, pcount, degree1, degree2, moduli, result, degree_result);
         }
@@ -225,6 +230,7 @@ namespace troy {namespace utils {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree_result, KERNEL_THREAD_COUNT);
             utils::set_device(result.device_index());
             kernel_sub_partial_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys1, polys2, pcount, degree1, degree2, moduli, result, degree_result);
+            utils::stream_sync();
         } else {
             host_sub_partial_ps(polys1, polys2, pcount, degree1, degree2, moduli, result, degree_result);
         }
@@ -264,6 +270,7 @@ namespace troy {namespace utils {
             size_t block_count = ceil_div<size_t>(pcount * moduli_size * destination_degree, KERNEL_THREAD_COUNT);
             utils::set_device(destination.device_index());
             kernel_scatter_partial_ps<<<block_count, KERNEL_THREAD_COUNT>>>(source_polys, pcount, source_degree, destination_degree, moduli_size, destination);
+            utils::stream_sync();
         } else {
             host_scatter_partial_ps(source_polys, pcount, source_degree, destination_degree, moduli_size, destination);
         }
@@ -299,6 +306,7 @@ namespace troy {namespace utils {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
             utils::set_device(result.device_index());
             kernel_add_scalar_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys, scalar, pcount, degree, moduli, result);
+            utils::stream_sync();
         } else {
             host_add_scalar_ps(polys, scalar, pcount, degree, moduli, result);
         }
@@ -332,6 +340,7 @@ namespace troy {namespace utils {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
             utils::set_device(result.device_index());
             kernel_sub_scalar_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys, scalar, pcount, degree, moduli, result);
+            utils::stream_sync();
         } else {
             host_sub_scalar_ps(polys, scalar, pcount, degree, moduli, result);
         }
@@ -365,6 +374,7 @@ namespace troy {namespace utils {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
             utils::set_device(result.device_index());
             kernel_multiply_scalar_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys, scalar, pcount, degree, moduli, result);
+            utils::stream_sync();
         } else {
             host_multiply_scalar_ps(polys, scalar, pcount, degree, moduli, result);
         }
@@ -401,6 +411,7 @@ namespace troy {namespace utils {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
             utils::set_device(result.device_index());
             kernel_multiply_scalars_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys, scalars, pcount, degree, moduli, result);
+            utils::stream_sync();
         } else {
             host_multiply_scalars_ps(polys, scalars, pcount, degree, moduli, result);
         }
@@ -436,6 +447,7 @@ namespace troy {namespace utils {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
             utils::set_device(result.device_index());
             kernel_multiply_uint64operand_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys, operand, pcount, degree, moduli, result);
+            utils::stream_sync();
         } else {
             host_multiply_uint64operand_ps(polys, operand, pcount, degree, moduli, result);
         }
@@ -492,6 +504,7 @@ namespace troy {namespace utils {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
             utils::set_device(result.device_index());
             kernel_dyadic_product_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys1, polys2, pcount, degree, moduli, result);
+            utils::stream_sync();
         } else {
             host_dyadic_product_ps(polys1, polys2, pcount, degree, moduli, result);
         }
@@ -550,6 +563,7 @@ namespace troy {namespace utils {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
             utils::set_device(result.device_index());
             kernel_negacyclic_shift_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys, shift, pcount, degree, moduli, result);
+            utils::stream_sync();
         } else {
             host_negacyclic_shift_ps(polys, shift, pcount, degree, moduli, result);
         }

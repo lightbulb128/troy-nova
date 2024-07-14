@@ -180,6 +180,7 @@ namespace troy {namespace utils {
                 moduli,
                 result
             );
+            utils::stream_sync();
         } else {
             host_apply_ps(*this, polys, pcount, galois_element, moduli, result);
         }
@@ -233,7 +234,8 @@ namespace troy {namespace utils {
                 this->coeff_count(),
                 result,
                 permutation_table
-            );;
+            );
+            utils::stream_sync();
         } else {
             host_apply_ntt_ps(
                 polys, pcount, coeff_modulus_size, 

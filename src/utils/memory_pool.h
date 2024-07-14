@@ -21,6 +21,15 @@ namespace troy {namespace utils {
         return count;
     }
 
+    inline static void stream_sync() {
+        cudaError_t status = cudaStreamSynchronize(0);
+        if (status != cudaSuccess) {
+            std::string msg = "[stream_sync] cudaStreamSynchronize failed: ";
+            msg += cudaGetErrorString(status);
+            throw std::runtime_error(msg);
+        }
+    }
+
     class MemoryPool;
     typedef std::shared_ptr<MemoryPool> MemoryPoolHandle;
 

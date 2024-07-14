@@ -42,6 +42,7 @@ if(TROY_TEST)
         special_prime_for_encryption.cu
 
         multithread.cu
+        # temp.cu
     )
 
     if(TROY_ZSTD)
