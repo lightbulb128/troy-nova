@@ -6,6 +6,9 @@ We also include some utilities for privacy computing, including the matrix multi
 
 # Build
 
+* **Requirements**: CUDA 11.7 and CMake 3.18.
+* **Tested environment**: Ubuntu 20.04 with CUDA 12.4, NVIDIA A100 and RTX 4090. g++ and gcc 11.4.
+
 ### Build C++/CUDA.
 
 ```
