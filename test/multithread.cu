@@ -106,17 +106,17 @@ namespace multithread {
 
     }    
     
-    TEST(MultithreadTest, HostSinglePoolMultiThread) {
+    TEST(MultithreadTest, HostSharedPoolSimple) {
         GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, false, 0x123, 0);
         test_single_pool_multi_thread(ghe, 64, 4);
     }
-    TEST(MultithreadTest, DeviceSinglePoolMultiThread) {
+    TEST(MultithreadTest, DeviceSharedPoolSimple) {
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, false, 0x123, 0);
         test_single_pool_multi_thread(ghe, 64, 4);
         utils::MemoryPool::Destroy();
     }
 
-    bool test_multiple_pools(const GeneralHeContext& context, size_t device_index, size_t thread_index = 0) {
+    bool test_troublesome_pools(const GeneralHeContext& context, size_t device_index, size_t thread_index = 0, bool check_pool = true, bool shared_pool = false) {
 
         auto context_pool = context.context()->pool();
 
@@ -128,7 +128,8 @@ namespace multithread {
             IF_FALSE_PRINT_RETURN(context_pool == nullptr, "context_pool");
         }
         
-        auto good_pool = [device, context_pool](MemoryPoolHandle pool, MemoryPoolHandle expect) {
+        auto good_pool = [device, context_pool, check_pool](MemoryPoolHandle pool, MemoryPoolHandle expect) {
+            if (!check_pool) return true;
             if (device) {
                 bool all_on_device = pool != nullptr && expect != nullptr && context_pool != nullptr;
                 bool same = pool != context_pool && pool == expect;
@@ -139,7 +140,8 @@ namespace multithread {
             }
         };
 
-        auto create_new_memory_pool = [device, device_index]() {
+        auto create_new_memory_pool = [device, device_index, shared_pool, &context]() {
+            if (shared_pool) return context.pool();
             return device ? MemoryPool::create(device_index) : nullptr;
         };
 
@@ -857,7 +859,7 @@ namespace multithread {
             Encryptor encryptor_other = Encryptor(context.context());
             encryptor_other.set_secret_key(secret_key_other, context_pool_other);
             KSwitchKeys kswitch_key = context.key_generator().create_keyswitching_key(secret_key_other, false, context_pool_other);
-            if (device) context_pool_other->deny();
+            if (device && check_pool && !shared_pool) context_pool_other->deny();
 
             MemoryPoolHandle pool = create_new_memory_pool();
             GeneralVector message = context.random_simd_full();
@@ -1171,11 +1173,81 @@ namespace multithread {
 
         }
 
-
-
         return true;
 
     }
+
+    void test_shared_pool(size_t threads, bool device, SchemeType scheme, size_t n, size_t log_t, vector<size_t> log_qi, 
+            bool expand_mod_chain, uint64_t seed, double input_max = 0, double scale = 0, double tolerance = 1e-4,
+            bool to_device_after_keygeneration = false, bool use_special_prime_for_encryption = false
+    ) {
+
+        GeneralHeContext context(
+            device, scheme, n, log_t, log_qi, 
+            expand_mod_chain, seed, input_max, scale, tolerance, 
+            to_device_after_keygeneration, use_special_prime_for_encryption
+        );
+
+        auto test_thread = [&context](int thread) {
+            return test_troublesome_pools(context, 0, thread, false, true);
+        };
+
+        utils::stream_sync();
+        vector<std::future<bool>> thread_instances;
+        for (size_t i = 0; i < threads; i++) {
+            thread_instances.push_back(std::async(test_thread, i));
+        }
+
+        for (size_t i = 0; i < threads; i++) {
+            ASSERT_TRUE(thread_instances[i].get());
+        }
+
+    }
+    
+    static constexpr size_t SHARED_POOL_THREADS = 16;
+
+    TEST(MultithreadTest, HostBFVSharedPool) {
+        test_shared_pool(4, false, 
+            SchemeType::BFV, 32, 35, 
+            { 60, 40, 40, 60 }, true, 0x123, 0
+        );
+    }
+    TEST(MultithreadTest, DeviceBFVSharedPool) {
+        test_shared_pool(SHARED_POOL_THREADS, true, 
+            SchemeType::BFV, 32, 35, 
+            { 60, 40, 40, 60 }, true, 0x123, 0
+        );
+        MemoryPool::Destroy();
+    }
+    TEST(MultithreadTest, HostBGVSharedPool) {
+        test_shared_pool(4, false, 
+            SchemeType::BGV, 32, 35, 
+            { 60, 40, 40, 60 }, true, 0x123, 0
+        );
+    }
+    TEST(MultithreadTest, DeviceBGVSharedPool) {
+        test_shared_pool(SHARED_POOL_THREADS, true, 
+            SchemeType::BGV, 32, 35, 
+            { 60, 40, 40, 60 }, true, 0x123, 0
+        );
+        MemoryPool::Destroy();
+    }
+    TEST(MultithreadTest, HostCKKSSharedPool) {
+        test_shared_pool(4, false,
+            SchemeType::CKKS, 32, 0, 
+            { 60, 40, 40, 60 }, true, 0x123, 
+            10, 1ull<<20, 1e-2
+        );
+    }
+    TEST(MultithreadTest, DeviceCKKSSharedPool) {
+        test_shared_pool(SHARED_POOL_THREADS, true,
+            SchemeType::CKKS, 32, 0, 
+            { 60, 40, 40, 60 }, true, 0x123, 
+            10, 1ull<<20, 1e-2
+        );
+        MemoryPool::Destroy();
+    }
+
 
     void test_shared_context_multiple_pools(size_t threads, bool device, SchemeType scheme, size_t n, size_t log_t, vector<size_t> log_qi, 
             bool expand_mod_chain, uint64_t seed, double input_max = 0, double scale = 0, double tolerance = 1e-4,
@@ -1205,7 +1277,7 @@ namespace multithread {
         auto test_thread = [
             context_pool, scheme, &context
         ](int thread) {
-            return test_multiple_pools(context, 0, thread);
+            return test_troublesome_pools(context, 0, thread);
         };
 
         utils::stream_sync();
@@ -1220,6 +1292,8 @@ namespace multithread {
 
     }
 
+    static constexpr size_t DEVICE_THREADS = 4;
+
     TEST(MultithreadTest, HostBFVSharedContextMultiPools) {
         test_shared_context_multiple_pools(4, false, 
             SchemeType::BFV, 32, 35, 
@@ -1227,7 +1301,7 @@ namespace multithread {
         );
     }
     TEST(MultithreadTest, DeviceBFVSharedContextMultiPools) {
-        test_shared_context_multiple_pools(4, true, 
+        test_shared_context_multiple_pools(DEVICE_THREADS, true, 
             SchemeType::BFV, 32, 35, 
             { 60, 40, 40, 60 }, true, 0x123, 0
         );
@@ -1240,7 +1314,7 @@ namespace multithread {
         );
     }
     TEST(MultithreadTest, DeviceBGVSharedContextMultiPools) {
-        test_shared_context_multiple_pools(4, true, 
+        test_shared_context_multiple_pools(DEVICE_THREADS, true, 
             SchemeType::BGV, 32, 35, 
             { 60, 40, 40, 60 }, true, 0x123, 0
         );
@@ -1254,7 +1328,7 @@ namespace multithread {
         );
     }
     TEST(MultithreadTest, DeviceCKKSSharedContextMultiPools) {
-        test_shared_context_multiple_pools(4, true,
+        test_shared_context_multiple_pools(DEVICE_THREADS, true,
             SchemeType::CKKS, 32, 0, 
             { 60, 40, 40, 60 }, true, 0x123, 
             10, 1ull<<20, 1e-2
@@ -1296,7 +1370,7 @@ namespace multithread {
         utils::stream_sync();
         auto test_thread = [=](int thread, std::shared_ptr<GeneralHeContext> context) {
             size_t device_index = thread % device_count;
-            return test_multiple_pools(*context, device_index, thread);
+            return test_troublesome_pools(*context, device_index, thread);
         };
 
         vector<std::future<bool>> thread_instances;
@@ -1310,6 +1384,8 @@ namespace multithread {
 
     }
 
+    static constexpr size_t DEVICE_THREADS_MULTIPLE_OF_DEVICES = 4;
+
     TEST(MultithreadTest, HostBFVMultiDevices) {
         test_multi_devices(8, 4, false, 
             SchemeType::BFV, 32, 35, 
@@ -1322,7 +1398,7 @@ namespace multithread {
         if (success != cudaSuccess || device_count <= 1) {
             GTEST_SKIP_("No multiple devices available");
         }
-        test_multi_devices(device_count * 2 + 1, device_count, true, 
+        test_multi_devices(device_count * DEVICE_THREADS_MULTIPLE_OF_DEVICES + 1, device_count, true, 
             SchemeType::BFV, 32, 35, 
             { 60, 40, 40, 60 }, true, 0x123, 0
         );
@@ -1339,7 +1415,7 @@ namespace multithread {
         if (success != cudaSuccess || device_count <= 1) {
             GTEST_SKIP_("No multiple devices available");
         }
-        test_multi_devices(device_count * 2 + 1, device_count, true, 
+        test_multi_devices(device_count * DEVICE_THREADS_MULTIPLE_OF_DEVICES + 1, device_count, true, 
             SchemeType::BGV, 32, 35, 
             { 60, 40, 40, 60 }, true, 0x123, 0
         );
@@ -1357,7 +1433,7 @@ namespace multithread {
         if (success != cudaSuccess || device_count <= 1) {
             GTEST_SKIP_("No multiple devices available");
         }
-        test_multi_devices(device_count * 2 + 1, device_count, true,
+        test_multi_devices(device_count * DEVICE_THREADS_MULTIPLE_OF_DEVICES + 1, device_count, true,
             SchemeType::CKKS, 32, 0, 
             { 60, 40, 40, 60 }, true, 0x123, 
             10, 1ull<<20, 1e-2

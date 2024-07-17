@@ -84,3 +84,9 @@ if(TROY_BENCH)
     target_link_libraries(bench_ntt troy)
 
 endif()
+
+# add_executable(custom)
+# target_sources(custom PRIVATE 
+#     custom.cu
+# )
+# target_link_libraries(custom troy)

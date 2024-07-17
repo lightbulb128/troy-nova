@@ -1,4 +1,5 @@
 #include "memory_pool.h"
+#include <thread>
 
 namespace troy::utils {
 
@@ -12,13 +13,15 @@ namespace troy::utils {
     struct MemoryPool::Impl {
         static const int PRESERVED_MEMORY_BYTES = 1024 * 1024 * 32;
         std::shared_mutex mutex;
-        std::multimap<size_t, void*> unused;
+
+        // key-value pairs are (allocated memory size, (pointer address, last used thread id))
+        std::multimap<size_t, std::pair<void*, std::thread::id>> unused;
+
         std::multimap<void*, size_t> allocated;
         std::set<void*> zombie;
         size_t total_allocated;
         bool destroyed;
     };
-
     
     // User shouldn't call this but call create() instead
     MemoryPool::MemoryPool(size_t device_index): device_index(device_index) {
@@ -104,7 +107,7 @@ namespace troy::utils {
             throw std::runtime_error("[MemoryPool(safe)::release] The pointer is not in the allocated set.");
         }
         size_t size = iterator->second;
-        impl_->unused.insert(std::make_pair(size, ptr));
+        impl_->unused.insert(std::make_pair(size, std::make_pair(ptr, std::this_thread::get_id())));
     }
 
     void* MemoryPool::allocate(size_t required) {
@@ -120,7 +123,17 @@ namespace troy::utils {
             lock.unlock();
             return try_allocate(required);
         } else {
-            void* ptr = iterator->second;
+            void* ptr = iterator->second.first;
+            std::thread::id last_used_id = iterator->second.second;
+            if (last_used_id != std::this_thread::get_id()) {
+                // A new thread is now taking over the memory which was last used by another thread.
+                // To avoid data racing, we need to execute a cudaDeviceSync
+                // before returning the pointer.
+                cudaError_t status = cudaDeviceSynchronize();
+                if (status != cudaSuccess) {
+                    runtime_error("[MemoryPool(safe)::allocate] cudaDeviceSynchronize failed.", status);
+                }
+            }
             impl_->unused.erase(iterator);
             return ptr;
         }
@@ -130,12 +143,12 @@ namespace troy::utils {
         std::unique_lock lock(impl_->mutex);
         for (auto it = impl_->unused.begin(); it != impl_->unused.end();) {
             set_device();
-            cudaError_t status = cudaFree(it->second);
+            cudaError_t status = cudaFree(it->second.first);
             if (status != cudaSuccess) {
                 runtime_error("[MemoryPool(safe)::release_unused] cudaFree failed.", status);
             }
             // remove pointer from allocated
-            auto it2 = impl_->allocated.find(it->second);
+            auto it2 = impl_->allocated.find(it->second.first);
             if (it2 == impl_->allocated.end()) {
                 throw std::runtime_error("[MemoryPool(safe)::release_unused] The pointer is not in the allocated set.");
             }
@@ -149,12 +162,12 @@ namespace troy::utils {
         // first release all unused
         for (auto it = impl_->unused.begin(); it != impl_->unused.end();) {
             set_device();
-            cudaError_t status = cudaFree(it->second);
+            cudaError_t status = cudaFree(it->second.first);
             if (status != cudaSuccess) {
                 runtime_error("[MemoryPool(safe)::destroy] cudaFree unused failed.", status);
             }
             // remove pointer from allocated
-            auto it2 = impl_->allocated.find(it->second);
+            auto it2 = impl_->allocated.find(it->second.first);
             if (it2 == impl_->allocated.end()) {
                 throw std::runtime_error("[MemoryPool(safe)::destroy] The pointer is not in the allocated set.");
             }

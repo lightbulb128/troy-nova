@@ -69,6 +69,7 @@ namespace troy {
             if (status != cudaSuccess) {
                 runtime_error("[kernel_provider::memset] cudaMemset failed", status);
             }
+            utils::stream_sync();
         }
 
         template <typename T>

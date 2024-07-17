@@ -8,3 +8,4 @@ binder/*.so
 gather_code.*
 .cache/
 .clangd
+test/custom.cu

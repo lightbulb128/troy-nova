@@ -21,7 +21,19 @@ namespace troy {namespace utils {
         return count;
     }
 
+    // If "TROY_STREAM_SYNC_AFTER_KERNEL_CALLS" is enabled,
+    // this will call cudaStreamSynchronize(0). Otherwise, it does nothing.
     void stream_sync();
+
+    inline void stream_sync_concrete() {
+        cudaError_t status = cudaStreamSynchronize(0);
+        if (status != cudaSuccess) {
+            std::string msg = "[stream_sync_concrete] cudaStreamSynchronize failed: ";
+            msg += cudaGetErrorString(status);
+            throw std::runtime_error(msg);
+        }
+    }
+
 
     class MemoryPool;
     typedef std::shared_ptr<MemoryPool> MemoryPoolHandle;
