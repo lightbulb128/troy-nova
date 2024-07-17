@@ -1,6 +1,7 @@
 #include "batch_encoder.h"
 #include "encryption_parameters.h"
 #include "utils/basics.h"
+#include "utils/memory_pool.h"
 #include "utils/scaling_variant.h"
 
 namespace troy {
@@ -91,9 +92,9 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(n, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(input.device_index());
+            utils::set_device(input.device_index());
             kernel_reverse_bits<<<block_count, utils::KERNEL_THREAD_COUNT>>>(logn, input);
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
 
@@ -122,9 +123,9 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(destination.size(), utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(values.device_index());
+            utils::set_device(values.device_index());
             kernel_encode_set_values<<<block_count, utils::KERNEL_THREAD_COUNT>>>(values, index_map, destination);
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
     
@@ -254,9 +255,9 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(destination.size(), utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(values.device_index());
+            utils::set_device(values.device_index());
             kernel_decode_set_values<<<block_count, utils::KERNEL_THREAD_COUNT>>>(values, index_map, destination);
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
     
@@ -278,7 +279,7 @@ namespace troy {
             destination.copy_from_slice(destination_host.const_reference());
             return;
         }
-        
+
         // check compatible
         if (!utils::device_compatible(destination, *this)) {
             throw std::invalid_argument("[BatchEncoder::decode_slice] Values and destination are not compatible.");
@@ -341,9 +342,9 @@ namespace troy {
         } else {
             destination.to_host_inplace();
         }
-        destination.resize_rns(*this->context_, pid);
+        destination.resize_rns_partial(*this->context_, pid, plain.coeff_count());
         destination.is_ntt_form() = false;
-        scaling_variant::scale_up(plain, context_data, destination.reference(), false, false);
+        scaling_variant::scale_up(plain, context_data, destination.reference(), plain.coeff_count(), false, false);
         return destination;
     }
 
@@ -365,15 +366,16 @@ namespace troy {
         }
         destination.coeff_modulus_size() = plain.coeff_modulus_size();
         destination.poly_modulus_degree() = plain.poly_modulus_degree();
+        destination.coeff_count() = plain.coeff_count();
         destination.parms_id() = parms_id_zero;
-        destination.resize(plain.poly_modulus_degree());
+        destination.resize(plain.coeff_count());
         destination.is_ntt_form() = false;
         std::optional<ContextDataPointer> context_data_opt = this->context_->get_context_data(plain.parms_id());
         if (!context_data_opt.has_value()) {
             throw std::invalid_argument("[BatchEncoder::scale_down_new] Could not find context data.");
         }
         ContextDataPointer context_data = context_data_opt.value();
-        context_data->rns_tool().decrypt_scale_and_round(plain.const_reference(), destination.reference(), pool);
+        context_data->rns_tool().decrypt_scale_and_round(plain.const_reference(), plain.coeff_count(), destination.reference(), pool);
         return destination;
     }
 
@@ -392,9 +394,9 @@ namespace troy {
         } else {
             destination.to_host_inplace();
         }
-        destination.resize_rns(*this->context_, pid);
+        destination.resize_rns_partial(*this->context_, pid, plain.coeff_count());
         destination.is_ntt_form() = false;
-        scaling_variant::centralize(plain, context_data, destination.reference(), pool);
+        scaling_variant::centralize(plain, context_data, destination.reference(), plain.coeff_count(), pool);
         return destination;
     }
 

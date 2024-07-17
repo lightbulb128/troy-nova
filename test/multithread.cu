@@ -94,6 +94,7 @@ namespace multithread {
 
         };
 
+        utils::stream_sync();
         vector<std::future<bool>> thread_instances;
         for (size_t i = 0; i < threads; i++) {
             thread_instances.push_back(std::async(test_thread, i));
@@ -127,7 +128,6 @@ namespace multithread {
             IF_FALSE_PRINT_RETURN(context_pool == nullptr, "context_pool");
         }
         
-
         auto good_pool = [device, context_pool](MemoryPoolHandle pool, MemoryPoolHandle expect) {
             if (device) {
                 bool all_on_device = pool != nullptr && expect != nullptr && context_pool != nullptr;
@@ -138,8 +138,6 @@ namespace multithread {
                 return all_nullptr;
             }
         };
-
-
 
         auto create_new_memory_pool = [device, device_index]() {
             return device ? MemoryPool::create(device_index) : nullptr;
@@ -1210,6 +1208,7 @@ namespace multithread {
             return test_multiple_pools(context, 0, thread);
         };
 
+        utils::stream_sync();
         vector<std::future<bool>> thread_instances;
         for (size_t i = 0; i < threads; i++) {
             thread_instances.push_back(std::async(test_thread, i));
@@ -1294,6 +1293,7 @@ namespace multithread {
             }
         }
 
+        utils::stream_sync();
         auto test_thread = [=](int thread, std::shared_ptr<GeneralHeContext> context) {
             size_t device_index = thread % device_count;
             return test_multiple_pools(*context, device_index, thread);

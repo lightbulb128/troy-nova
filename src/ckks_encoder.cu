@@ -197,11 +197,11 @@ namespace troy {
         } else {
             size_t total = operand.size();
             size_t block_size = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(operand.device_index());
+            utils::set_device(operand.device_index());
             kernel_multiply_complex_scalar<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 CustomComplex::slice(operand), fix
             );
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
 
@@ -220,11 +220,11 @@ namespace troy {
         } else {
             size_t total = operand.size();
             size_t block_size = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(operand.device_index());
+            utils::set_device(operand.device_index());
             kernel_multiply_double_scalar<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 operand, fix
             );
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
 
@@ -267,11 +267,11 @@ namespace troy {
         } else {
             size_t total = 1 << (logn - 1);
             size_t block_size = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(operand.device_index());
+            utils::set_device(operand.device_index());
             kernel_fft_transform_from_rev_layer<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 layer, CustomComplex::slice(operand), logn, CustomComplex::slice(roots)
             );
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
 
@@ -332,11 +332,11 @@ namespace troy {
         } else {
             size_t total = 1 << (logn - 1);
             size_t block_size = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(operand.device_index());
+            utils::set_device(operand.device_index());
             kernel_fft_transform_to_rev_layer<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 layer, CustomComplex::slice(operand), logn, CustomComplex::slice(roots)
             );
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
 
@@ -381,13 +381,13 @@ namespace troy {
             }
         } else {
             size_t block_size = utils::ceil_div(from.size() * 2, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(target.device_index());
+            utils::set_device(target.device_index());
             kernel_set_conjugate_values<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 CustomComplex::slice(from),
                 index_map,
                 CustomComplex::slice(target)
             );
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
 
@@ -411,13 +411,13 @@ namespace troy {
             }
         } else {
             size_t block_size = utils::ceil_div(count, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(target.device_index());
+            utils::set_device(target.device_index());
             kernel_retrieve_conjugate_values<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 CustomComplex::slice(from),
                 index_map,
                 CustomComplex::slice(target)
             );
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
 
@@ -442,12 +442,12 @@ namespace troy {
             }
         } else {
             size_t block_size = utils::ceil_div(n, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(complex_array.device_index());
+            utils::set_device(complex_array.device_index());
             kernel_gather_real<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 CustomComplex::slice(complex_array),
                 real_array
             );
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
 
@@ -492,11 +492,11 @@ namespace troy {
         } else {
             size_t total = real_values.size() * coeff_modulus.size();
             size_t block_size = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(real_values.device_index());
+            utils::set_device(real_values.device_index());
             kernel_set_plaintext_value_array_64bits<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 coeff_count, real_values, coeff_modulus, destination
             );
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
 
@@ -541,11 +541,11 @@ namespace troy {
         } else {
             size_t total = real_values.size() * coeff_modulus.size();
             size_t block_size = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(real_values.device_index());
+            utils::set_device(real_values.device_index());
             kernel_set_plaintext_value_array_128bits<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 coeff_count, real_values, coeff_modulus, destination
             );
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
 
@@ -587,11 +587,11 @@ namespace troy {
         } else {
             size_t total = real_values.size();
             size_t block_size = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(real_values.device_index());
+            utils::set_device(real_values.device_index());
             kernel_decompose_double_absolute_array<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 real_values, total, coeff_modulus_size, destination
             );
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
 
@@ -636,11 +636,11 @@ namespace troy {
         } else {
             size_t total = n * coeff_modulus.size();
             size_t block_size = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(real_values.device_index());
+            utils::set_device(real_values.device_index());
             kernel_set_decomposed_value_array<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 real_values, decomposed_values, n, coeff_modulus, destination
             );
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
 
@@ -861,11 +861,11 @@ namespace troy {
         } else {
             size_t total = destination.size();
             size_t block_size = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(destination.device_index());
+            utils::set_device(destination.device_index());
             kernel_broadcast_double<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 d, destination
             );
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
 
@@ -888,6 +888,7 @@ namespace troy {
             kernel_broadcast_integer<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 value, destination
             );
+            utils::stream_sync();
         }
     }
     */
@@ -967,11 +968,11 @@ namespace troy {
         } else {
             size_t total = values.size() * modulus.size();
             size_t block_size = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(values.device_index());
+            utils::set_device(values.device_index());
             kernel_reduce_values<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 values, coeff_count, modulus, destination
             );
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
 
     }
@@ -1150,12 +1151,12 @@ namespace troy {
         } else {
             size_t total = coeff_count;
             size_t block_size = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(inputs.device_index());
+            utils::set_device(inputs.device_index());
             kernel_accumulate_complex<<<block_size, utils::KERNEL_THREAD_COUNT>>>(
                 inputs, coeff_count, decryption_modulus, coeff_modulus_size, upper_half_threshold, 
                 CustomComplex::slice(destination), inv_scale
             );
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
     

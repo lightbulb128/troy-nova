@@ -31,6 +31,7 @@ namespace troy {namespace utils {
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
             kernel_modulo_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys, pcount, degree, moduli, result);
+            utils::stream_sync();
         } else {
             host_modulo_ps(polys, pcount, degree, moduli, result);
         }
@@ -49,7 +50,9 @@ namespace troy {namespace utils {
 
     __global__ void kernel_negate_ps(ConstSlice<uint64_t> polys, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-        result[idx] = polys[idx] == 0 ? 0 : moduli[(idx / degree) % moduli.size()].value() - polys[idx];
+        if (idx < pcount * moduli.size() * degree) {
+            result[idx] = polys[idx] == 0 ? 0 : moduli[(idx / degree) % moduli.size()].value() - polys[idx];
+        }
     }
 
     void negate_ps(ConstSlice<uint64_t> polys, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
@@ -61,9 +64,9 @@ namespace troy {namespace utils {
             size_t total = pcount * moduli.size() * degree;
             size_t thread_count = min(total, KERNEL_THREAD_COUNT);
             size_t block_count = ceil_div<size_t>(total, thread_count);
-            cudaSetDevice(result.device_index());
+            utils::set_device(result.device_index());
             kernel_negate_ps<<<block_count, thread_count>>>(polys, pcount, degree, moduli, result);
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         } else {
             host_negate_ps(polys, pcount, degree, moduli, result);
         }
@@ -97,9 +100,9 @@ namespace troy {namespace utils {
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
-            cudaSetDevice(result.device_index());
+            utils::set_device(result.device_index());
             kernel_add_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys1, polys2, pcount, degree, moduli, result);
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         } else {
             host_add_ps(polys1, polys2, pcount, degree, moduli, result);
         }
@@ -131,11 +134,145 @@ namespace troy {namespace utils {
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
-            cudaSetDevice(result.device_index());
+            utils::set_device(result.device_index());
             kernel_sub_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys1, polys2, pcount, degree, moduli, result);
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         } else {
             host_sub_ps(polys1, polys2, pcount, degree, moduli, result);
+        }
+    }
+
+    static void host_add_partial_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, Slice<uint64_t> result, size_t degree_result) {
+        for (size_t i = 0; i < pcount; i++) {
+            for (size_t j = 0; j < moduli.size(); j++) {
+                for (size_t k = 0; k < degree_result; k++) {
+                    size_t idx1 = i * moduli.size() * degree1 + j * degree1 + k;
+                    size_t idx2 = i * moduli.size() * degree2 + j * degree2 + k;
+                    size_t idx = i * moduli.size() * degree_result + j * degree_result + k;
+                    uint64_t c1 = k < degree1 ? polys1[idx1] : 0;
+                    uint64_t c2 = k < degree2 ? polys2[idx2] : 0;
+                    uint64_t p = c1 + c2;
+                    result[idx] = p >= moduli[j].value() ? p - moduli[j].value() : p;
+                }
+            }
+        }
+    }
+
+    static __global__ void kernel_add_partial_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, Slice<uint64_t> result, size_t degree_result) {
+        size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < pcount * moduli.size() * degree_result) {
+            size_t i = idx / (moduli.size() * degree_result);
+            size_t j = (idx / degree_result) % moduli.size();
+            size_t k = idx % degree_result;
+            size_t idx1 = i * moduli.size() * degree1 + j * degree1 + k;
+            size_t idx2 = i * moduli.size() * degree2 + j * degree2 + k;
+            uint64_t c1 = k < degree1 ? polys1[idx1] : 0;
+            uint64_t c2 = k < degree2 ? polys2[idx2] : 0;
+            uint64_t p = c1 + c2;
+            result[idx] = p >= moduli[j].value() ? p - moduli[j].value() : p;
+        }
+    }
+
+    void add_partial_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, Slice<uint64_t> result, size_t degree_result) {
+        if (!device_compatible(polys1, polys2, moduli, result)) {
+            throw std::runtime_error("[add_partial_ps] All inputs must be on the same device");
+        }
+        if (degree_result < degree1 || degree_result < degree2) {
+            throw std::runtime_error("[add_partial_ps] degree_result must be at least degree1 and degree2");
+        }
+        if (result.on_device()) {
+            size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree_result, KERNEL_THREAD_COUNT);
+            utils::set_device(result.device_index());
+            kernel_add_partial_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys1, polys2, pcount, degree1, degree2, moduli, result, degree_result);
+            utils::stream_sync();
+        } else {
+            host_add_partial_ps(polys1, polys2, pcount, degree1, degree2, moduli, result, degree_result);
+        }
+    }
+
+    static void host_sub_partial_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, Slice<uint64_t> result, size_t degree_result) {
+        for (size_t i = 0; i < pcount; i++) {
+            for (size_t j = 0; j < moduli.size(); j++) {
+                for (size_t k = 0; k < degree_result; k++) {
+                    size_t idx1 = i * moduli.size() * degree1 + j * degree1 + k;
+                    size_t idx2 = i * moduli.size() * degree2 + j * degree2 + k;
+                    size_t idx = i * moduli.size() * degree_result + j * degree_result + k;
+                    uint64_t c1 = k < degree1 ? polys1[idx1] : 0;
+                    uint64_t c2 = k < degree2 ? polys2[idx2] : 0;
+                    result[idx] = c1 >= c2 ? c1 - c2 : moduli[j].value() - c2 + c1;
+                }
+            }
+        }
+    }
+
+    static __global__ void kernel_sub_partial_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, Slice<uint64_t> result, size_t degree_result) {
+        size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < pcount * moduli.size() * degree_result) {
+            size_t i = idx / (moduli.size() * degree_result);
+            size_t j = (idx / degree_result) % moduli.size();
+            size_t k = idx % degree_result;
+            size_t idx1 = i * moduli.size() * degree1 + j * degree1 + k;
+            size_t idx2 = i * moduli.size() * degree2 + j * degree2 + k;
+            uint64_t c1 = k < degree1 ? polys1[idx1] : 0;
+            uint64_t c2 = k < degree2 ? polys2[idx2] : 0;
+            result[idx] = c1 >= c2 ? c1 - c2 : moduli[j].value() - c2 + c1;
+        }
+    }
+
+    void sub_partial_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, Slice<uint64_t> result, size_t degree_result) {
+        if (!device_compatible(polys1, polys2, moduli, result)) {
+            throw std::runtime_error("[sub_partial_ps] All inputs must be on the same device");
+        }
+        if (degree_result < degree1 || degree_result < degree2) {
+            throw std::runtime_error("[sub_partial_ps] degree_result must be at least degree1 and degree2");
+        }
+        if (result.on_device()) {
+            size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree_result, KERNEL_THREAD_COUNT);
+            utils::set_device(result.device_index());
+            kernel_sub_partial_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys1, polys2, pcount, degree1, degree2, moduli, result, degree_result);
+            utils::stream_sync();
+        } else {
+            host_sub_partial_ps(polys1, polys2, pcount, degree1, degree2, moduli, result, degree_result);
+        }
+    }
+
+    static void host_scatter_partial_ps(ConstSlice<uint64_t> source_polys, size_t pcount, size_t source_degree, size_t destination_degree, size_t moduli_size, Slice<uint64_t> destination) {
+        for (size_t i = 0; i < pcount; i++) {
+            for (size_t j = 0; j < moduli_size; j++) {
+                for (size_t k = 0; k < destination_degree; k++) {
+                    size_t idx = i * moduli_size * destination_degree + j * destination_degree + k;
+                    size_t source_idx = i * moduli_size * source_degree + j * source_degree + k;
+                    destination[idx] = k < source_degree ? source_polys[source_idx] : 0;
+                }
+            }
+        }
+    }
+
+    static __global__ void kernel_scatter_partial_ps(ConstSlice<uint64_t> source_polys, size_t pcount, size_t source_degree, size_t destination_degree, size_t moduli_size, Slice<uint64_t> destination) {
+        size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < pcount * moduli_size * destination_degree) {
+            size_t i = idx / (moduli_size * destination_degree);
+            size_t j = (idx / destination_degree) % moduli_size;
+            size_t k = idx % destination_degree;
+            size_t source_idx = i * moduli_size * source_degree + j * source_degree + k;
+            destination[idx] = k < source_degree ? source_polys[source_idx] : 0;
+        }
+    }
+
+    void scatter_partial_ps(ConstSlice<uint64_t> source_polys, size_t pcount, size_t source_degree, size_t destination_degree, size_t moduli_size, Slice<uint64_t> destination) {
+        if (!device_compatible(source_polys, destination)) {
+            throw std::runtime_error("[scatter_partial_ps] All inputs must be on the same device");
+        }
+        if (destination_degree < source_degree) {
+            throw std::runtime_error("[scatter_partial_ps] destination_degree must be at least source_degree");
+        }
+        if (destination.on_device()) {
+            size_t block_count = ceil_div<size_t>(pcount * moduli_size * destination_degree, KERNEL_THREAD_COUNT);
+            utils::set_device(destination.device_index());
+            kernel_scatter_partial_ps<<<block_count, KERNEL_THREAD_COUNT>>>(source_polys, pcount, source_degree, destination_degree, moduli_size, destination);
+            utils::stream_sync();
+        } else {
+            host_scatter_partial_ps(source_polys, pcount, source_degree, destination_degree, moduli_size, destination);
         }
     }
 
@@ -167,9 +304,9 @@ namespace troy {namespace utils {
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
-            cudaSetDevice(result.device_index());
+            utils::set_device(result.device_index());
             kernel_add_scalar_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys, scalar, pcount, degree, moduli, result);
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         } else {
             host_add_scalar_ps(polys, scalar, pcount, degree, moduli, result);
         }
@@ -201,9 +338,9 @@ namespace troy {namespace utils {
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
-            cudaSetDevice(result.device_index());
+            utils::set_device(result.device_index());
             kernel_sub_scalar_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys, scalar, pcount, degree, moduli, result);
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         } else {
             host_sub_scalar_ps(polys, scalar, pcount, degree, moduli, result);
         }
@@ -235,9 +372,9 @@ namespace troy {namespace utils {
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
-            cudaSetDevice(result.device_index());
+            utils::set_device(result.device_index());
             kernel_multiply_scalar_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys, scalar, pcount, degree, moduli, result);
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         } else {
             host_multiply_scalar_ps(polys, scalar, pcount, degree, moduli, result);
         }
@@ -272,9 +409,9 @@ namespace troy {namespace utils {
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
-            cudaSetDevice(result.device_index());
+            utils::set_device(result.device_index());
             kernel_multiply_scalars_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys, scalars, pcount, degree, moduli, result);
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         } else {
             host_multiply_scalars_ps(polys, scalars, pcount, degree, moduli, result);
         }
@@ -308,9 +445,9 @@ namespace troy {namespace utils {
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
-            cudaSetDevice(result.device_index());
+            utils::set_device(result.device_index());
             kernel_multiply_uint64operand_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys, operand, pcount, degree, moduli, result);
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         } else {
             host_multiply_uint64operand_ps(polys, operand, pcount, degree, moduli, result);
         }
@@ -365,9 +502,9 @@ namespace troy {namespace utils {
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
-            cudaSetDevice(result.device_index());
+            utils::set_device(result.device_index());
             kernel_dyadic_product_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys1, polys2, pcount, degree, moduli, result);
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         } else {
             host_dyadic_product_ps(polys1, polys2, pcount, degree, moduli, result);
         }
@@ -424,9 +561,9 @@ namespace troy {namespace utils {
         }
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
-            cudaSetDevice(result.device_index());
+            utils::set_device(result.device_index());
             kernel_negacyclic_shift_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys, shift, pcount, degree, moduli, result);
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         } else {
             host_negacyclic_shift_ps(polys, shift, pcount, degree, moduli, result);
         }

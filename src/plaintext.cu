@@ -53,11 +53,12 @@ namespace troy {
         return size;
     }
 
-    void Plaintext::resize_rns_internal(size_t poly_modulus_degree, size_t coeff_modulus_size) {
-        size_t data_size = poly_modulus_degree * coeff_modulus_size;
+    void Plaintext::resize_rns_internal(size_t poly_modulus_degree, size_t coeff_modulus_size, size_t coeff_count) {
+        size_t data_size = coeff_count * coeff_modulus_size;
         this->data().resize(data_size);
         this->poly_modulus_degree_ = poly_modulus_degree;
         this->coeff_modulus_size_ = coeff_modulus_size;
+        this->coeff_count_ = coeff_count;
     }
 
     void Plaintext::resize_rns(const HeContext& context, const ParmsID& parms_id) {
@@ -71,7 +72,21 @@ namespace troy {
         ContextDataPointer context_data = context_data_optional.value();
         const EncryptionParameters& parms = context_data->parms();
         this->parms_id_ = parms_id;
-        this->resize_rns_internal(parms.poly_modulus_degree(), parms.coeff_modulus().size());
+        this->resize_rns_internal(parms.poly_modulus_degree(), parms.coeff_modulus().size(), parms.poly_modulus_degree());
+    }
+
+    void Plaintext::resize_rns_partial(const HeContext& context, const ParmsID& parms_id, size_t coeff_count) {
+        if (!context.parameters_set()) {
+            throw std::invalid_argument("[Plaintext::resize_rns] context is not set");
+        }
+        std::optional<ContextDataPointer> context_data_optional = context.get_context_data(parms_id);
+        if (!context_data_optional.has_value()) {
+            throw std::invalid_argument("[Plaintext::resize_rns] parms_id is not valid");
+        }
+        ContextDataPointer context_data = context_data_optional.value();
+        const EncryptionParameters& parms = context_data->parms();
+        this->parms_id_ = parms_id;
+        this->resize_rns_internal(parms.poly_modulus_degree(), parms.coeff_modulus().size(), coeff_count);
     }
 
 

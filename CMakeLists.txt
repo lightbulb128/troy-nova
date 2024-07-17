@@ -11,6 +11,7 @@ option(TROY_MEMORY_POOL_UNSAFE "Use unsafe memory pool" OFF)
 option(TROY_PYBIND "Build python encapsulation with Pybind11" ON)
 option(TROY_EXAMPLES "Build examples" OFF)
 option(TROY_ZSTD "Use Zstandard for compression" ON)
+option(TROY_STREAM_SYNC_AFTER_KERNEL_CALLS "Synchronize stream after each kernel call" OFF)
 
 if (TROY_MEMORY_POOL_UNSAFE)
   # if TROY_MEMORY_POOL_UNSAFE is enabled, TROY_MEMORY_POOL must be enabled
@@ -98,6 +99,14 @@ if(TROY_ZSTD)
       set(TROY_ZSTD_STATIC_LINK_NAME "libzstd_static")
     endif()
     unset(TROY_ZSTD_NOT_FOUND)
+cmake_minimum_required(VERSION 3.16)
+
+if (TROY_MEMORY_POOL_UNSAFE)
+  # if TROY_MEMORY_POOL_UNSAFE is enabled, TROY_MEMORY_POOL must be enabled
+  if(NOT TROY_MEMORY_POOL)
+    message(WARNING "TROY_MEMORY_POOL_UNSAFE is enabled, but TROY_MEMORY_POOL is set to OFF.")
+    message(WARNING "Setting TROY_MEMORY_POOL to ON.")
+    set(TROY_MEMORY_POOL ON)
   endif()
 endif()
 
@@ -138,6 +147,10 @@ if(TROY_TEST)
 endif()
 
 # --------- Stard building -----------
+
+if(TROY_STREAM_SYNC_AFTER_KERNEL_CALLS)
+  add_compile_definitions(TROY_STREAM_SYNC_AFTER_KERNEL_CALLS)
+endif()
 
 find_package(Threads REQUIRED)
 

@@ -65,6 +65,7 @@ namespace troy {
         uint64_t t = plain_modulus.value();
         uint64_t half_t = t >> 1;
         // dunno why GCC complains about an unused typedef here
+        #pragma GCC diagnostic push
         #pragma GCC diagnostic ignored "-Wunused-local-typedefs"
         auto sum_abs = [half_t, t](uint64_t x, uint64_t y) -> uint64_t {
             int64_t x_bal = x > half_t ? static_cast<int64_t>(x - t) : static_cast<int64_t>(x);
@@ -758,12 +759,12 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(coeff_count * key_component_count, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(t_poly_lazy.device_index());
+            utils::set_device(t_poly_lazy.device_index());
             kernel_ski_util1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_poly_lazy, coeff_count, key_component_count, 
                 key_vector_j, key_poly_coeff_size, t_operand, key_index, key_modulus
             );
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
     
@@ -813,12 +814,12 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(coeff_count * key_component_count, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(t_poly_lazy.device_index());
+            utils::set_device(t_poly_lazy.device_index());
             kernel_ski_util2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_poly_lazy, coeff_count, key_component_count, 
                 key_vector_j, key_poly_coeff_size, t_operand, key_index
             );
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
 
@@ -854,11 +855,11 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(coeff_count * key_component_count, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(t_poly_lazy.device_index());
+            utils::set_device(t_poly_lazy.device_index());
             kernel_ski_util3<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_poly_lazy, coeff_count, key_component_count, rns_modulus_size, t_poly_prod_iter
             );
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
 
@@ -901,12 +902,12 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(coeff_count * key_component_count, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(t_poly_lazy.device_index());
+            utils::set_device(t_poly_lazy.device_index());
             kernel_ski_util4<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_poly_lazy, coeff_count, key_component_count, 
                 rns_modulus_size, t_poly_prod_iter, key_modulus
             );
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
 
@@ -1006,20 +1007,20 @@ namespace troy {
         } else {
             Array<uint64_t> delta(coeff_count * decomp_modulus_size, true, pool);
             size_t block_count = utils::ceil_div(coeff_count * decomp_modulus_size, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(t_last.device_index());
+            utils::set_device(t_last.device_index());
             kernel_ski_util5_step1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_last, coeff_count, plain_modulus, key_modulus, 
                 decomp_modulus_size, qk_inv_qp, qk,
                 delta.reference()
             );
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
             utils::ntt_negacyclic_harvey_p(delta.reference(), coeff_count, key_ntt_tables.const_slice(0, decomp_modulus_size));
-            cudaSetDevice(t_poly_prod_i.device_index());
+            utils::set_device(t_poly_prod_i.device_index());
             kernel_ski_util5_step2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_poly_prod_i, coeff_count, key_modulus, 
                 decomp_modulus_size, modswitch_factors, encrypted_i, delta.const_reference()
             );
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
 
@@ -1074,11 +1075,11 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(t_last.device_index());
+            utils::set_device(t_last.device_index());
             kernel_ski_util6<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_last, coeff_count, qk, key_modulus, decomp_modulus_size, t_ntt
             );
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
 
@@ -1130,12 +1131,12 @@ namespace troy {
             }
         } else {
             size_t block_count = utils::ceil_div(coeff_count * decomp_modulus_size, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(t_poly_prod_i.device_index());
+            utils::set_device(t_poly_prod_i.device_index());
             kernel_ski_util7<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_poly_prod_i, t_ntt, coeff_count, encrypted_i, is_ckks, 
                 decomp_modulus_size, key_modulus, modswitch_factors
             );
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
 
@@ -1612,18 +1613,18 @@ namespace troy {
             case SchemeType::BFV: {
                 if (plain.parms_id() == parms_id_zero) {
                     if (!subtract) {
-                        scaling_variant::multiply_add_plain(plain, context_data, encrypted.poly(0));
+                        scaling_variant::multiply_add_plain(plain, context_data, encrypted.poly(0), coeff_count);
                     } else {
-                        scaling_variant::multiply_sub_plain(plain, context_data, encrypted.poly(0));
+                        scaling_variant::multiply_sub_plain(plain, context_data, encrypted.poly(0), coeff_count);
                     }
                 } else {
                     if (plain.parms_id() != encrypted.parms_id()) {
                         throw std::invalid_argument("[Evaluator::translate_plain_inplace] Plaintext and ciphertext parameters do not match.");
                     }
                     if (!subtract) {
-                        utils::add_inplace_p(encrypted.poly(0), plain.poly(), coeff_count, coeff_modulus);
+                        utils::add_partial_inplace_p(encrypted.poly(0), plain.poly(), coeff_count, plain.coeff_count(), coeff_modulus);
                     } else {
-                        utils::sub_inplace_p(encrypted.poly(0), plain.poly(), coeff_count, coeff_modulus);
+                        utils::sub_partial_inplace_p(encrypted.poly(0), plain.poly(), coeff_count, plain.coeff_count(), coeff_modulus);
                     }
                 }
                 break;
@@ -1675,16 +1676,17 @@ namespace troy {
             
             // Generic case: any plaintext polynomial
             // Allocate temporary space for an entire RNS polynomial
-            scaling_variant::centralize(plain, context_data, temp.reference(), pool);
+            scaling_variant::centralize(plain, context_data, temp.reference(), coeff_count, pool);
         
         } else {
 
             // The plaintext is already conveyed to modulus Q.
             // Directly copy.
-            if (plain.data().size() != temp.size()) {
-                throw std::invalid_argument("[Evaluator::multiply_plain_normal_inplace] Invalid plain size.");
+            if (plain.coeff_count() == coeff_count) {
+                temp.copy_from_slice(plain.reference());
+            } else {
+                utils::scatter_partial_p(plain.const_poly(), plain.coeff_count(), coeff_count, coeff_modulus_size, temp.reference());
             }
-            temp.copy_from_slice(plain.reference());
             
         }
 
@@ -1803,12 +1805,12 @@ namespace troy {
         } else {
             size_t total = plain_coeff_count * coeff_modulus_size;
             size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
-            cudaSetDevice(plain.device_index());
+            utils::set_device(plain.device_index());
             kernel_transform_plain_to_ntt_fast_plain_lift<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 plain_coeff_count, coeff_count, coeff_modulus_size,
                 plain, plain_upper_half_threshold, plain_upper_half_increment
             );
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
 
@@ -1838,12 +1840,9 @@ namespace troy {
 
         if (plain.parms_id() == parms_id_zero) {
             size_t plain_coeff_count = plain.coeff_count();
-
-            plain.resize(coeff_count * coeff_modulus_size);
-
+            plain.resize_rns(*context_, parms_id);
             size_t plain_upper_half_threshold = context_data->plain_upper_half_threshold();
             ConstSlice<uint64_t> plain_upper_half_increment = context_data->plain_upper_half_increment();
-            
 
             if (!context_data->qualifiers().using_fast_plain_lift) {
                 bool device = plain.on_device();
@@ -1871,6 +1870,11 @@ namespace troy {
         } else {
             if (plain.parms_id() != parms_id) {
                 throw std::invalid_argument("[Evaluator::transform_plain_to_ntt_inplace] Plaintext parameters do not match.");
+            }
+            if (plain.coeff_count() != coeff_count) {
+                Plaintext cloned = plain.clone(pool); cloned.resize_rns(*context_, plain.parms_id());
+                utils::scatter_partial_p(plain.const_poly(), plain.coeff_count(), coeff_count, coeff_modulus_size, cloned.poly());
+                plain = std::move(cloned);
             }
             utils::ntt_negacyclic_harvey_p(plain.poly(), coeff_count, ntt_tables);
             plain.is_ntt_form() = true;
@@ -2054,17 +2058,18 @@ namespace troy {
         } else {
             if (coeff_modulus_size >= utils::KERNEL_THREAD_COUNT) {
                 size_t block_count = utils::ceil_div(coeff_modulus_size, utils::KERNEL_THREAD_COUNT);
-                cudaSetDevice(c0.device_index());
+                utils::set_device(c0.device_index());
                 kernel_extract_lwe_gather_c0<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                     coeff_modulus_size, coeff_count, term, rlwe_c0, c0
                 );
+                utils::stream_sync();
             } else {
-                cudaSetDevice(c0.device_index());
+                utils::set_device(c0.device_index());
                 kernel_extract_lwe_gather_c0<<<1, coeff_modulus_size>>>(
                     coeff_modulus_size, coeff_count, term, rlwe_c0, c0
                 );
+                utils::stream_sync();
             }
-            cudaStreamSynchronize(0);
         }
     }
     

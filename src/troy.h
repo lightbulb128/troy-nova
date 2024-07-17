@@ -1,5 +1,6 @@
 #pragma once
 
+#include "utils/timer.h"
 #include "batch_encoder.h"
 #include "ciphertext.h"
 #include "ckks_encoder.h"

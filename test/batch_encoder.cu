@@ -145,6 +145,41 @@ namespace batch_encoder {
         auto original_vec = plain.data().to_vector();
         auto scale_down_vec = scale_down.data().to_vector();
         ASSERT_TRUE(same_vector(original_vec, scale_down_vec));
+
+        // partial
+        size_t n = encoder.slot_count();
+        size_t cc = n / 3;
+        {
+            std::vector<uint64_t> plain_vec(cc);
+            for (size_t i = 0; i < cc; i++) {
+                plain_vec[i] = i % t.value();
+            }
+            Plaintext plain = encoder.encode_polynomial_new(plain_vec);
+            ASSERT_EQ(plain.coeff_count(), cc);
+            Plaintext scale_up = encoder.scale_up_new(plain, std::nullopt);
+            ASSERT_EQ(scale_up.coeff_count(), cc);
+            ASSERT_EQ(scale_up.poly_modulus_degree(), n);
+            ASSERT_EQ(scale_up.data().size(), scale_up.coeff_modulus_size() * cc);
+            Plaintext scale_down = encoder.scale_down_new(scale_up);
+            ASSERT_EQ(scale_down.coeff_count(), cc);
+            ASSERT_EQ(scale_down.poly_modulus_degree(), n);
+            auto scale_down_vec = scale_down.data().to_vector();
+            auto original_vec = plain.data().to_vector();
+            ASSERT_TRUE(same_vector(original_vec, scale_down_vec));
+        }
+
+        // partial centralize should have good sizes
+        {
+            std::vector<uint64_t> plain_vec(cc);
+            for (size_t i = 0; i < cc; i++) {
+                plain_vec[i] = i % t.value();
+            }
+            Plaintext plain = encoder.encode_polynomial_new(plain_vec);
+            Plaintext centralized = encoder.centralize_new(plain, std::nullopt);
+            ASSERT_EQ(centralized.coeff_count(), cc);
+            ASSERT_EQ(centralized.poly_modulus_degree(), n);
+            ASSERT_EQ(centralized.data().size(), centralized.coeff_modulus_size() * cc);
+        }
     }
 
     TEST(BatchEncoderTest, HostScaleUpDown) {

@@ -20,8 +20,9 @@ namespace basics {
     TEST(Basics, DeviceOnDevice) {
         MemoryPoolHandle pool = MemoryPool::GlobalPool();
         Array<bool> r(16, true, pool);
-        cudaSetDevice(r.device_index());
+        utils::set_device(r.device_index());
         kernel_on_device<<<4, 4>>>(r.reference());
+        utils::stream_sync();
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
@@ -108,8 +109,9 @@ namespace basics {
 
     TEST(Basics, DeviceBits) {
         Array<bool> r(16, true, MemoryPool::GlobalPool()); 
-        cudaSetDevice(r.device_index());
+        utils::set_device(r.device_index());
         kernel_bits<<<4, 4>>>(r.reference());
+        utils::stream_sync();
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
@@ -200,8 +202,9 @@ namespace basics {
 
     TEST(Basics, DeviceAdd) {
         Array<bool> r(16, true, MemoryPool::GlobalPool()); 
-        cudaSetDevice(r.device_index());
+        utils::set_device(r.device_index());
         kernel_add<<<4, 4>>>(r.reference());
+        utils::stream_sync();
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
@@ -342,8 +345,9 @@ namespace basics {
 
     TEST(Basics, DeviceMultiply) {
         Array<bool> r(16, true, MemoryPool::GlobalPool()); 
-        cudaSetDevice(r.device_index());
+        utils::set_device(r.device_index());
         kernel_multiply<<<4, 4>>>(r.reference());
+        utils::stream_sync();
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
@@ -427,7 +431,7 @@ namespace basics {
 }
 
 // int main() {
-//     cudaSetDevice(0);
+//     utils::set_device(0);
 //     RUN_TEST(basics, host_on_device);
 //     RUN_TEST(basics, device_on_device);
 //     return 0;

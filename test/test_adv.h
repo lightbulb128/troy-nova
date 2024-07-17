@@ -437,6 +437,33 @@ namespace tool {
             }
         }
 
+        inline GeneralVector mul_poly(const GeneralVector& other, size_t degree, uint64_t modulus) const {
+            if (size() > degree || other.size() > degree) {
+                throw std::invalid_argument("[GeneralVector::mul_poly] Degree too small");
+            }
+            if (integers_) {
+                vector<uint64_t> vec(std::min(degree, size() + other.size() - 1), 0);
+                for (size_t i = 0; i < size(); i++) for (size_t j = 0; j < other.size(); j++) {
+                    // switch to u128 before mod
+                    __uint128_t tmp = static_cast<__uint128_t>(integers_->at(i)) * static_cast<__uint128_t>(other.integers_->at(j));
+                    uint64_t v = static_cast<uint64_t>(tmp % modulus);
+                    if (i + j >= degree) v = (modulus - v) % modulus;
+                    vec[(i + j) % degree] = (vec[(i + j) % degree] + v) % modulus;
+                }
+                return GeneralVector(std::move(vec), false);
+            } else if (doubles_) {
+                vector<double> vec(std::min(degree, size() + other.size() - 1), 0);
+                for (size_t i = 0; i < size(); i++) for (size_t j = 0; j < other.size(); j++) {
+                    double v = doubles_->at(i) * other.doubles_->at(j);
+                    if (i + j >= degree) v = -v;
+                    vec[(i + j) % degree] += v;
+                }
+                return GeneralVector(std::move(vec));
+            } else {
+                throw std::invalid_argument("[GeneralVector::mul_poly] Cannot mul_poly empty vector");
+            }
+        }
+
         template <typename T>
         inline GeneralVector ring2k_mul(const GeneralVector& other, T mask) const {
             ring2k_check<T>();
@@ -444,6 +471,26 @@ namespace tool {
             for (size_t i = 0; i < size(); i++) {
                 T tmp = ring2k_at<T>(i) * other.ring2k_at<T>(i);
                 vec[i] = static_cast<T>(tmp & mask);
+            }
+            if constexpr (std::is_same_v<T, uint64_t>) {
+                return GeneralVector(std::move(vec), true);
+            } else {
+                return GeneralVector(std::move(vec));
+            }
+        }
+
+        template <typename T>
+        inline GeneralVector ring2k_mul_poly(const GeneralVector& other, size_t degree, T mask) const {
+            ring2k_check<T>();
+            if (size() > degree || other.size() > degree) {
+                throw std::invalid_argument("[GeneralVector::ring2k_mul_poly] Degree too small");
+            }
+            vector<T> vec(std::min(degree, size() + other.size() - 1), 0);
+            for (size_t i = 0; i < size(); i++) for (size_t j = 0; j < other.size(); j++) {
+                T tmp = ring2k_at<T>(i) * other.ring2k_at<T>(j);
+                T v = static_cast<T>(tmp & mask);
+                if (i + j >= degree) v = (-v) & mask;
+                vec[(i + j) % degree] = (vec[i] + v) & mask;
             }
             if constexpr (std::is_same_v<T, uint64_t>) {
                 return GeneralVector(std::move(vec), true);
@@ -1052,6 +1099,21 @@ namespace tool {
                     return vec1.ring2k_mul<uint128_t>(vec2, ring_mask_);
                 } else {
                     throw std::invalid_argument("[GeneralHeContext::mul] Unsupported type");
+                }
+            }
+        }
+        inline GeneralVector mul_poly(const GeneralVector& vec1, const GeneralVector& vec2) const {
+            size_t degree = params_host_.poly_modulus_degree();
+            if (ring_mask_ == 0) return vec1.mul_poly(vec2, degree, t_);
+            else {
+                if (vec1.is_uint32s()) {
+                    return vec1.ring2k_mul_poly<uint32_t>(vec2, degree, ring_mask_);
+                } else if (vec1.is_uint64s()) {
+                    return vec1.ring2k_mul_poly<uint64_t>(vec2, degree, ring_mask_);
+                } else if (vec1.is_uint128s()) {
+                    return vec1.ring2k_mul_poly<uint128_t>(vec2, degree, ring_mask_);
+                } else {
+                    throw std::invalid_argument("[GeneralHeContext::mul_poly] Unsupported type");
                 }
             }
         }

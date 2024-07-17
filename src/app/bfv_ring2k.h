@@ -70,10 +70,13 @@ namespace troy::linear {
                 if (!utils::device_compatible(source, *this)) {
                     throw std::invalid_argument("[PolynomialEncoderRNSHelper:scale_up] source and helper must be on the same device");
                 }
+                if (source.size() > context.key_context_data_pointer()->parms().poly_modulus_degree()) {
+                    throw std::invalid_argument("[PolynomialEncoderRNSHelper:scale_up] source size is larger than poly_modulus_degree");
+                }
                 if (on_device()) destination.to_device_inplace(pool);
                 else destination.to_host_inplace();
                 destination.is_ntt_form() = false;
-                destination.resize_rns(context, parms_id_);
+                destination.resize_rns_partial(context, parms_id_, source.size());
                 for (size_t i = 0; i < destination.coeff_modulus_size(); i++) {
                     this->scale_up_component(source, context, i, destination.component(i));
                 }
@@ -82,10 +85,13 @@ namespace troy::linear {
                 if (!utils::device_compatible(source, *this)) {
                     throw std::invalid_argument("[PolynomialEncoderRNSHelper:scale_up] source and helper must be on the same device");
                 }
+                if (source.size() > context.key_context_data_pointer()->parms().poly_modulus_degree()) {
+                    throw std::invalid_argument("[PolynomialEncoderRNSHelper:scale_up] source size is larger than poly_modulus_degree");
+                }
                 if (on_device()) destination.to_device_inplace(pool);
                 else destination.to_host_inplace();
                 destination.is_ntt_form() = false;
-                destination.resize_rns(context, parms_id_);
+                destination.resize_rns_partial(context, parms_id_, source.size());
                 for (size_t i = 0; i < destination.coeff_modulus_size(); i++) {
                     this->centralize_at_component(source, context, i, destination.component(i));
                 }
@@ -204,17 +210,17 @@ namespace troy::linear {
             }
             void scale_down(const Plaintext& input, std::vector<T>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
                 if (input.on_device()) {
-                    utils::Array<T> destination_array(input.poly_modulus_degree(), true, pool);
+                    utils::Array<T> destination_array(input.coeff_count(), true, pool);
                     this->scale_down_slice(input, destination_array.reference(), pool);
                     destination = destination_array.to_vector();
                 } else {
-                    destination.resize(input.poly_modulus_degree());
+                    destination.resize(input.coeff_count());
                     this->scale_down_slice(input, utils::Slice<T>(destination.data(), destination.size(), false, nullptr), pool);
                 }
             }
 
             utils::Array<T> scale_down_slice_new(const Plaintext& input, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-                utils::Array<T> destination(input.poly_modulus_degree(), on_device(), pool);
+                utils::Array<T> destination(input.coeff_count(), on_device(), pool);
                 this->scale_down_slice(input, destination.reference(), pool);
                 return destination;
             }

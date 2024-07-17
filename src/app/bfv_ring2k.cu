@@ -240,13 +240,13 @@ namespace troy::linear {
             }
         } else {
             size_t block_count = ceil_div(source.size(), KERNEL_THREAD_COUNT);
-            cudaSetDevice(destination.device_index());
+            utils::set_device(destination.device_index());
             kernel_scale_up_component<T><<<block_count, KERNEL_THREAD_COUNT>>>(
                 source, context_data->parms().coeff_modulus(), 
                 Q_div_t_mod_qi_.const_reference(), Q_mod_t_, 
                 t_half_, t_bit_length_, modulus_index, destination
             );
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
 
@@ -315,13 +315,13 @@ namespace troy::linear {
             }
         } else {
             size_t block_count = ceil_div(source.size(), KERNEL_THREAD_COUNT);
-            cudaSetDevice(destination.device_index());
+            utils::set_device(destination.device_index());
             kernel_scale_up_component_uint128<<<block_count, KERNEL_THREAD_COUNT>>>(
                 source, context_data->parms().coeff_modulus(), 
                 Q_div_t_mod_qi_.const_reference(), Q_mod_t_, 
                 t_half_, t_bit_length_, modulus_index, destination
             );
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
 
@@ -365,11 +365,11 @@ namespace troy::linear {
             }
         } else {
             size_t block_count = ceil_div(source.size(), KERNEL_THREAD_COUNT);
-            cudaSetDevice(destination.device_index());
+            utils::set_device(destination.device_index());
             kernel_centralize_at_component<T><<<block_count, KERNEL_THREAD_COUNT>>>(
                 source, parms.coeff_modulus().at(modulus_index), t_half_, mod_t_mask_, destination
             );
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
 
@@ -437,11 +437,11 @@ namespace troy::linear {
         }
         ContextDataPointer context_data = context.get_context_data(parms_id).value();
         const EncryptionParameters& parms = context_data->parms();
-        custom_assert(parms.poly_modulus_degree() == destination.size());
+        custom_assert(parms.poly_modulus_degree() >= destination.size());
         size_t num_modulus = parms.coeff_modulus().size();
         size_t coeff_count = destination.size();
         custom_assert(input.coeff_modulus_size() == num_modulus);
-        custom_assert(input.poly_modulus_degree() == coeff_count);
+        custom_assert(input.coeff_count() == coeff_count);
         custom_assert(input.data().size() == num_modulus * coeff_count);
         const utils::RNSBase &base_Q = context_data->rns_tool().base_q();
         ConstSlice<troy::Modulus> coeff_modulus = parms.coeff_modulus();
@@ -509,7 +509,7 @@ namespace troy::linear {
             }
         } else {
             size_t block_count = ceil_div(coeff_count, KERNEL_THREAD_COUNT);
-            cudaSetDevice(destination.device_index());
+            utils::set_device(destination.device_index());
             kernel_scale_down<T><<<block_count, KERNEL_THREAD_COUNT>>>(
                 num_modulus, coeff_count, tmp.const_reference(),
                 punctured_q_mod_t_.const_reference(),
@@ -517,7 +517,7 @@ namespace troy::linear {
                 base_on_gamma.const_reference(), gamma_.as_const_pointer(),
                 destination
             );
-            cudaStreamSynchronize(0);
+            utils::stream_sync();
         }
     }
 

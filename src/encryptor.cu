@@ -139,7 +139,7 @@ namespace troy {
                     this->encrypt_zero_internal(this->context()->first_parms_id(), is_asymmetric, save_seed, u_prng, destination, pool);
                     // Multiply plain by scalar coeff_div_plaintext and reposition if in upper-half.
                     // Result gets added into the c_0 term of ciphertext (c_0,c_1).
-                    scaling_variant::multiply_add_plain(plain, this->context()->first_context_data().value(), destination.poly(0));
+                    scaling_variant::multiply_add_plain(plain, this->context()->first_context_data().value(), destination.poly(0), destination.poly_modulus_degree());
                 } else {
                     ParmsID parms_id = plain.parms_id();
                     std::optional<ContextDataPointer> context_data_optional = this->context()->get_context_data(parms_id);
@@ -149,8 +149,8 @@ namespace troy {
                     ContextDataPointer context_data = context_data_optional.value();
                     const EncryptionParameters& parms = context_data->parms();
                     this->encrypt_zero_internal(parms_id, is_asymmetric, save_seed, u_prng, destination, pool);
-                    utils::add_inplace_p(
-                        destination.poly(0), plain.poly(), parms.poly_modulus_degree(), parms.coeff_modulus()
+                    utils::add_partial_inplace_p(
+                        destination.poly(0), plain.poly(), parms.poly_modulus_degree(), plain.coeff_count(), parms.coeff_modulus()
                     );
                 }
                 break;
@@ -195,7 +195,7 @@ namespace troy {
                 plain_copy.resize(coeff_count * coeff_modulus_size);
                 plain_copy.data().reference().set_zero();
 
-                scaling_variant::centralize(plain, context_data, plain_copy.reference(), pool);
+                scaling_variant::centralize(plain, context_data, plain_copy.reference(), coeff_count, pool);
 
                 // Transform to NTT domain
                 utils::ntt_negacyclic_harvey_p(plain_copy.reference(), coeff_count, ntt_tables);

@@ -121,7 +121,7 @@ namespace troy {namespace utils {
 
         void fast_b_conv_m_tilde(ConstSlice<uint64_t> input, Slice<uint64_t> destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
 
-        void decrypt_scale_and_round(ConstSlice<uint64_t> phase, Slice<uint64_t> destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        void decrypt_scale_and_round(ConstSlice<uint64_t> phase, size_t phase_coeff_count, Slice<uint64_t> destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
 
         void mod_t_and_divide_q_last_inplace(Slice<uint64_t> input, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
 

@@ -108,8 +108,9 @@ namespace modulus {
         Array<Modulus> device_modulus = modulus.to_device();
 
         Array<bool> r(16, true); 
-        cudaSetDevice(r.device_index());
+        utils::set_device(r.device_index());
         kernel_create_modulus<<<4, 4>>>(device_modulus.const_reference(), r.reference());
+        utils::stream_sync();
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
         cudaDeviceSynchronize();
@@ -160,11 +161,11 @@ namespace modulus {
         Array<Modulus> device_modulus = modulus.to_device();
 
         Array<bool> r(16, true); 
-        cudaSetDevice(r.device_index());
+        utils::set_device(r.device_index());
         kernel_reduce<<<4, 4>>>(device_modulus.const_reference(), r.reference());
+        utils::stream_sync();
         Array<bool> h = r.to_host();
         EXPECT_TRUE(all_is_true(h));
-        cudaDeviceSynchronize();
         utils::MemoryPool::Destroy();
     }
 
