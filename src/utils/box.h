@@ -8,6 +8,7 @@
 namespace troy { namespace utils {
 
 // allow class-memaccess for gcc
+#pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wclass-memaccess"
 
     template<class T>

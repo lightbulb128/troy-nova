@@ -65,6 +65,7 @@ namespace troy {
         uint64_t t = plain_modulus.value();
         uint64_t half_t = t >> 1;
         // dunno why GCC complains about an unused typedef here
+        #pragma GCC diagnostic push
         #pragma GCC diagnostic ignored "-Wunused-local-typedefs"
         auto sum_abs = [half_t, t](uint64_t x, uint64_t y) -> uint64_t {
             int64_t x_bal = x > half_t ? static_cast<int64_t>(x - t) : static_cast<int64_t>(x);
