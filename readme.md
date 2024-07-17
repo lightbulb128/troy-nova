@@ -130,11 +130,73 @@ Note that if you use the default memory pool, it is recommented that you call `M
 
 You can disable the management of device memory by memory pools by applying `TROY_MEMORY_POOL=OFF` to cmake. If so, although memory pools can still be created, they do not manage the memory but simply call cudaMalloc and cudaFree whenever their methods are called. When memory pool is enabled, some users report unexpected exceptions complaining `"[MemoryPool::get] The singleton has been destroyed."` when using the library. One could check if `MemoryPool::Destroy()` has been called prematurely in your program to locate the problem, or one could simply provide a `TROY_MEMORY_POOL_UNSAFE=OFF` to try to avoid it. This `TROY_MEMORY_POOL_UNSAFE` is an experimental hacking solution (because I have not reproduced the error on my machine yet 😢), so if you still get the errors please file an issue.
 
-## Multithreading with Memory Pools
+## Multithreading or multiple devices usage with memory pools
 
-Multithreaded programs **should** use different memory pools for each thread, since I have observed some issues when all threads use the same memory pool. You can create the context in the main thread with a single memory pool, but when you conduct HE computations on multiple threads, you should provide unique memory pools for each thread. Alternatively, you could turn on `TROY_STREAM_SYNC_AFTER_KERNEL_CALLS` in cmake, this guarantees any memory pool shared by multiple threads won't lead to racing conditions, but it could result in some performance drop.
+Some programs could benefit from multithreading, but running multiple threads with memory pools could be tricky. You could implement your multithread application with the following paradigms, and for example you can see `examples/20_memory_pools.cu`.
 
-Furthermore, if you wish to use **multiple GPUs, you must** create multiple memory pools to handle the memory for each device. You can create new instances of memory pools by calling `MemoryPool::Create`, which takes the device index as an argument. See [`memory_pool.h`](src/utils/memory_pool.h). For the usage multiple memory pools, see the example at `examples/20_memory_pools.cu`.
+### Multithreading with a single device
+
+1. **Lazy** - just use one global memory pool shared by all threads, that is, you don't bother to specify any memory pools in the API. When allocation and deallocation occurs, the memory pool will be locked to ensure thread safety. When a piece of allocated memory previously used by one thread is taken by another thread, a `cudaDeviceSynchronize` will be executed, to prevent data racing (because kernel calls by the previous thread might still not be finished, as the default stream of different threads are not synchronous). This might lead to minor efficiency drop.
+
+    ```c++
+        HeContextPointer he = HeContext::create(...);
+        he->to_device_inplace();
+        KeyGenerator keygen = ...;
+        Encryptor encryptor = ...;
+        auto thread_lambda = [&he, &encryptor](){
+            // simply don't care about any memory pools
+            Ciphertext c = encryptor.encrypt_zero_symmetric(...);
+        };
+        std::vector<std::thread> threads;
+        for (size_t i = 0; i < thread_num; i++) {
+            threads.push_back(std::thread(thread_lambda));
+        }
+    ```
+
+2. **Recommended** - one memory pool for each thread. You could create a new memory pool (`MemoryPool::create`) at the start of each thread, and use that for all operations inside that thread. Note, you can create common objects (e.g. usually `HeContext` and utility classes like `Encryptor`, etc.) *in the main thread with the global pool*, and in spawned threads you just create keys, plaintexts and ciphertexts with the thread-unique pool. There is no need to create `HeContext` for each different thread. 
+
+
+    ```c++
+        HeContextPointer he = HeContext::create(...);
+        // just use global memory pool to create the context
+        he->to_device_inplace();
+        KeyGenerator keygen = ...;
+        Encryptor encryptor = ...;
+        auto thread_lambda = [&he, &encryptor](){
+            // create memory pool on the default device 
+            MemoryPoolHandle pool = MemoryPool::create(0);
+            // supply the pool for any operation that involves memory allocation
+            Ciphertext c = encryptor.encrypt_zero_symmetric(..., pool);
+        };
+        std::vector<std::thread> threads;
+        for (size_t i = 0; i < thread_num; i++) {
+            threads.push_back(std::thread(thread_lambda));
+        }
+    ```
+
+### Multiple devices
+
+If you wish to use **multiple GPUs, you must** create multiple memory pools to handle the memory for each device. You can create new instances of memory pools by calling `MemoryPool::create`, which takes the device index as an argument. Objects stored in different device memories cannot interact (e.g. addition between a device-0 ciphertext and a device-1 ciphertext will give undefined results). If wished, you can convey objects to other devices by calling its `to_device, to_device_inplace, clone` methods, and provide a `MemoryPoolHandle` which is created on the destination device as an argument. You can directly create multiple contexts for different devices. However, if you wish these contexts to have the same secret key, you should convey the same secret key cloned to different devices to the `KeyGenerator` constructor. Below is an example.
+
+```c++
+    // First we create a context and a keygen on the default device
+    HeContextPointer he = HeContext::create(...);
+    he->to_device_inplace();
+    KeyGenerator keygen = ...;
+    // Obtain the secret key
+    SecretKey secret_key = keygen.secret_key().clone();
+    auto thread_lambda = [&secret_key](size_t device_index){
+        // Create a handle for the memory pool on the specific device
+        MemoryPoolHandle pool = MemoryPool::create(device_index);
+        // Create context and convey to that device
+        HeContextPointer he = HeContext::create(...); 
+        he->to_device_inplace(pool);
+        // Create keygen and set the same secret key
+        KeyGenerator keygen(he, secret_key, pool);
+        // Now you can create encryptor etc
+        ...
+    };
+```
 
 
 # Contribute
