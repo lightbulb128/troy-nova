@@ -99,6 +99,9 @@ if(TROY_ZSTD)
       set(TROY_ZSTD_STATIC_LINK_NAME "libzstd_static")
     endif()
     unset(TROY_ZSTD_NOT_FOUND)
+  endif()
+endif()
+
 cmake_minimum_required(VERSION 3.16)
 
 if (TROY_MEMORY_POOL_UNSAFE)
