@@ -18,36 +18,6 @@ namespace troy {namespace utils {
         }
         return res;
     }
-
-    __host__ __device__
-    uint64_t gcd(uint64_t x, uint64_t y) {
-        while (y != 0) {
-            uint64_t r = x % y;
-            x = y;
-            y = r;
-        }
-        return x;
-    }
-    
-    __host__ __device__
-    void xgcd(uint64_t a, uint64_t b, uint64_t &gcd, int64_t &x, int64_t &y) {
-        int64_t x0 = 1, y0 = 0, x1 = 0, y1 = 1;
-        while (b != 0) {
-            int64_t q = a / b;
-            int64_t r = a % b;
-            a = b;
-            b = r;
-            int64_t x2 = x0 - q * x1;
-            int64_t y2 = y0 - q * y1;
-            x0 = x1;
-            y0 = y1;
-            x1 = x2;
-            y1 = y2;
-        }
-        gcd = a;
-        x = x0;
-        y = y0;
-    }
     
     std::vector<Modulus> get_primes(uint64_t factor, size_t bit_size, size_t count) {
         std::vector<Modulus> ret;
