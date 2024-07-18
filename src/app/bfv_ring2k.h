@@ -53,6 +53,7 @@ namespace troy::linear {
             inline utils::ConstSlice<T> punctured_q_mod_t() const noexcept { return punctured_q_mod_t_.const_reference(); }
             inline utils::ConstSlice<utils::MultiplyUint64Operand> gamma_t_mod_Q() const noexcept { return gamma_t_mod_Q_.const_reference(); }
             inline const utils::BaseConverter& base_Q_to_gamma() const noexcept { return base_Q_to_gamma_; }
+            inline const utils::RNSBase& base_Q() const { return base_Q_to_gamma_.input_base(); }
             inline T mod_t_mask() const noexcept { return mod_t_mask_; }
             inline T t_half() const noexcept { return t_half_; }
             inline T Q_mod_t() const noexcept { return Q_mod_t_; }
@@ -98,6 +99,7 @@ namespace troy::linear {
             }
             
             void scale_down(const Plaintext& input, const HeContext& context, utils::Slice<T> destination, MemoryPoolHandle pool) const;
+            void decentralize(const Plaintext& input, const HeContext& context, utils::Slice<T> destination, T correction_factor, MemoryPoolHandle pool) const;
 
     };
 
@@ -204,7 +206,7 @@ namespace troy::linear {
             void scale_down_slice(const Plaintext& input, utils::Slice<T> destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
                 auto helper = get_helper(input.parms_id());
                 if (!helper.has_value()) {
-                    throw std::invalid_argument("[PolynomialEncoderRing2k:scale_down] No helper found for the given parms_id");
+                    throw std::invalid_argument("[PolynomialEncoderRing2k::scale_down_slice] No helper found for the given parms_id");
                 }
                 helper.value()->scale_down(input, *context_, destination, pool);
             }
@@ -229,6 +231,37 @@ namespace troy::linear {
                 this->scale_down(input, destination, pool);
                 return destination;
             }
+
+
+            void decentralize_slice(const Plaintext& input, utils::Slice<T> destination, T correction_factor = 1, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+                auto helper = get_helper(input.parms_id());
+                if (!helper.has_value()) {
+                    throw std::invalid_argument("[PolynomialEncoderRing2k::decentralize_slice] No helper found for the given parms_id");
+                }
+                helper.value()->decentralize(input, *context_, destination, correction_factor, pool);
+            }
+            void decentralize(const Plaintext& input, std::vector<T>& destination, T correction_factor = 1, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+                if (input.on_device()) {
+                    utils::Array<T> destination_array(input.coeff_count(), true, pool);
+                    this->decentralize_slice(input, destination_array.reference(), correction_factor, pool);
+                    destination = destination_array.to_vector();
+                } else {
+                    destination.resize(input.coeff_count());
+                    this->decentralize_slice(input, utils::Slice<T>(destination.data(), destination.size(), false, nullptr), correction_factor, pool);
+                }
+            }
+
+            utils::Array<T> decentralize_slice_new(const Plaintext& input, T correction_factor = 1, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+                utils::Array<T> destination(input.coeff_count(), on_device(), pool);
+                this->decentralize_slice(input, destination.reference(), correction_factor, pool);
+                return destination;
+            }
+            std::vector<T> decentralize_new(const Plaintext& input, T correction_factor = 1, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+                std::vector<T> destination;
+                this->decentralize(input, destination, correction_factor, pool);
+                return destination;
+            }
+            
 
     };
 

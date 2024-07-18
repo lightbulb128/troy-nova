@@ -93,8 +93,8 @@ namespace troy::linear {
             throw std::invalid_argument("[PolynomialEncoderRNSHelper::PolynomialEncoderRNSHelper] t_bit_length must be greater than type_bits<T>() / 2");
         }
         EncryptionParameters parms = context_data->parms();
-        if (parms.scheme() != SchemeType::BFV) {
-            throw std::invalid_argument("[PolynomialEncoderRNSHelper::PolynomialEncoderRNSHelper] scheme must be BFV");
+        if (parms.scheme() != SchemeType::BFV && parms.scheme() != SchemeType::BGV) {
+            throw std::invalid_argument("[PolynomialEncoderRNSHelper::PolynomialEncoderRNSHelper] scheme must be BFV or BGV");
         }
         if (context_data->parms().on_device()) {
             throw std::invalid_argument("[PolynomialEncoderRNSHelper::PolynomialEncoderRNSHelper] context_data must be on host. Please turn context to device after the encoder is created.");
@@ -518,6 +518,183 @@ namespace troy::linear {
                 destination
             );
             utils::stream_sync();
+        }
+    }
+
+    void host_decentralize_step1(const utils::RNSBase& ibase, ConstSlice<uint64_t> input, Slice<uint64_t> temp, Slice<double> v) {
+        size_t count = input.size() / ibase.size();
+        for (size_t i = 0; i < ibase.size(); i++) {
+            const MultiplyUint64Operand& op = ibase.inv_punctured_product_mod_base()[i];
+            const Modulus& base = ibase.base()[i];
+            double divisor = static_cast<double>(base.value());
+            if (op.operand == 1) {
+                for (size_t j = 0; j < count; j++) {
+                    temp[j * ibase.size() + i] = utils::barrett_reduce_uint64(input[i * count + j], base);
+                    double dividend = static_cast<double>(temp[j * ibase.size() + i]);
+                    v[j * ibase.size() + i] = dividend / divisor;
+                }
+            } else {
+                for (size_t j = 0; j < count; j++) {
+                    temp[j * ibase.size() + i] = utils::multiply_uint64operand_mod(input[i * count + j], op, base);
+                    double dividend = static_cast<double>(temp[j * ibase.size() + i]);
+                    v[j * ibase.size() + i] = dividend / divisor;
+                }
+            }
+        }
+    }
+
+    __global__ void kernel_decentralize_step1(
+        ConstSlice<Modulus> ibase, 
+        ConstSlice<MultiplyUint64Operand> ibase_inv_punctured_product_mod_base,
+        ConstSlice<uint64_t> input, Slice<uint64_t> temp, Slice<double> v
+    ) {
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        if (global_index >= input.size()) {
+            return;
+        }
+        size_t ibase_size = ibase.size();
+        size_t count = input.size() / ibase_size;
+        size_t i = global_index / count;
+        size_t j = global_index % count;
+        const MultiplyUint64Operand& op = ibase_inv_punctured_product_mod_base[i];
+        const Modulus& base = ibase[i];
+        if (op.operand == 1) {
+            temp[j * ibase_size + i] = utils::barrett_reduce_uint64(input[global_index], base);
+        } else {
+            temp[j * ibase_size + i] = utils::multiply_uint64operand_mod(input[global_index], op, base);
+        }
+        double dividend = static_cast<double>(temp[j * ibase_size + i]);
+        v[j * ibase_size + i] = dividend / static_cast<double>(base.value());
+    }
+
+    template <typename T>
+    __host__ __device__
+    inline T general_dot_product_mod(ConstSlice<uint64_t> operand1, ConstSlice<T> operand2, T t_mask) {
+        T accumulated = 0;
+        for (size_t i = 0; i < operand1.size(); i++) {
+            accumulated += static_cast<T>(operand1[i]) * operand2[i];
+        }
+        return accumulated & t_mask;
+    }
+
+    template <typename T>
+    void host_decentralize_step2(const utils::RNSBase& base_q, ConstSlice<T> base_change_matrix, T q_mod_t, T t_mask, ConstSlice<uint64_t> temp, ConstSlice<double> v, Slice<T> output) {
+        size_t base_q_size = base_q.size();
+        size_t count = temp.size() / base_q_size;
+        for (size_t j = 0; j < count; j++) {
+            double aggregated_v = 0;
+            for (size_t i = j*base_q_size; i < (j+1)*base_q_size; i++) {
+                aggregated_v += v[i];
+            }
+            T aggregated_rounded_v = std::round(aggregated_v);
+            T sum_mod_obase = general_dot_product_mod(
+                temp.const_slice(j * base_q_size, (j + 1) * base_q_size),
+                base_change_matrix, // because output has only one modulus, the row is the matrix itself.
+                t_mask
+            );
+            T v_q_mod_p = (aggregated_rounded_v * q_mod_t) & t_mask;
+            output[j] = (sum_mod_obase - v_q_mod_p) & t_mask;
+        }
+    }
+
+    template <typename T>
+    __global__ void kernel_decentralize_step2(
+        size_t base_q_size,
+        ConstSlice<T> base_change_matrix,
+        T q_mod_t, T t_mask, ConstSlice<uint64_t> temp, ConstSlice<double> v, Slice<T> output
+    ) {
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        if (global_index >= output.size()) {
+            return;
+        }
+        size_t j = global_index;
+        double aggregated_v = 0;
+        for (size_t i = j*base_q_size; i < (j+1)*base_q_size; i++) {
+            aggregated_v += v[i];
+        }
+        T aggregated_rounded_v = std::round(aggregated_v);
+        T sum_mod_obase = general_dot_product_mod(
+            temp.const_slice(j * base_q_size, (j + 1) * base_q_size),
+            base_change_matrix, // because output has only one modulus, the row is the matrix itself.
+            t_mask
+        );
+        T v_q_mod_p = (aggregated_rounded_v * q_mod_t) & t_mask;
+        output[j] = (sum_mod_obase - v_q_mod_p) & t_mask;
+    }
+
+    template <typename T>
+    void host_multiply_scalar_mask_inplace(Slice<T> target, T scalar, T mask) {
+        for (size_t i = 0; i < target.size(); i++) {
+            target[i] = (target[i] * scalar) & mask;
+        }
+    }
+
+    template <typename T>
+    __global__ static void kernel_multiply_scalar_mask_inplace(Slice<T> target, T scalar, T mask) {
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        if (global_index >= target.size()) {
+            return;
+        }
+        target[global_index] = (target[global_index] * scalar) & mask;
+    }
+
+
+
+    template <typename T>
+    void PolynomialEncoderRNSHelper<T>::decentralize(const Plaintext& input, const HeContext& context, utils::Slice<T> destination, T correction_factor, MemoryPoolHandle pool) const {
+        // Ref: Bajard et al. "A Full RNS Variant of FV like Somewhat Homomorphic
+        // Encryption Schemes" (Section 3.2 & 3.3)
+        // NOTE(juhou): Basically the same code in seal/util/rns.cpp instead we
+        // use the plain modulus `t` as 2^k here.
+        ParmsID parms_id = input.parms_id();
+        if (parms_id == parms_id_zero) {
+            throw std::invalid_argument("[PolynomialEncoderRNSHelper::scale_down] input is not valid");
+        }
+        if (input.on_device() != this->on_device() || input.on_device() != destination.on_device()) {
+            throw std::invalid_argument("[PolynomialEncoderRNSHelper::scale_down] self, input, destination are not in the same device");
+        }
+        ContextDataPointer context_data = context.get_context_data(parms_id).value();
+        const EncryptionParameters& parms = context_data->parms();
+        custom_assert(parms.poly_modulus_degree() >= destination.size());
+        size_t num_modulus = parms.coeff_modulus().size();
+        size_t coeff_count = destination.size();
+        custom_assert(input.coeff_modulus_size() == num_modulus);
+        custom_assert(input.coeff_count() == coeff_count);
+        custom_assert(input.data().size() == num_modulus * coeff_count);
+        const utils::RNSBase &base_Q = context_data->rns_tool().base_q();
+        ConstSlice<troy::Modulus> coeff_modulus = parms.coeff_modulus();
+        custom_assert(input.on_device() == destination.on_device(), "[PolynomialEncoderRNSHelper::scale_down] input and destination are not in the same device");
+        bool device = input.on_device();
+
+        Array<uint64_t> temp(coeff_count * num_modulus, device, pool);
+        Array<double> v(coeff_count * num_modulus, device, pool);
+
+        if (!device) {
+            host_decentralize_step1(base_Q, input.const_reference(), temp.reference(), v.reference());
+            host_decentralize_step2(base_Q, this->punctured_q_mod_t(), Q_mod_t_, mod_t_mask_, temp.const_reference(), v.const_reference(), destination);
+        } else {
+            size_t block_count = ceil_div(input.data().size(), KERNEL_THREAD_COUNT);
+            utils::set_device(destination.device_index());
+            kernel_decentralize_step1<<<block_count, KERNEL_THREAD_COUNT>>>(
+                coeff_modulus, base_Q.inv_punctured_product_mod_base(),
+                input.const_reference(), temp.reference(), v.reference()
+            );
+            block_count = ceil_div(coeff_count, KERNEL_THREAD_COUNT);
+            kernel_decentralize_step2<<<block_count, KERNEL_THREAD_COUNT>>>(
+                base_Q.size(), this->punctured_q_mod_t(),
+                Q_mod_t_, mod_t_mask_, temp.const_reference(), v.const_reference(), destination
+            );
+        }
+
+        if (correction_factor != 1) {
+            T fix = inverse_ring2k(correction_factor) & mod_t_mask_;
+            if (!device) {
+                host_multiply_scalar_mask_inplace(destination, fix, mod_t_mask_);
+            } else {
+                size_t block_count = ceil_div(destination.size(), KERNEL_THREAD_COUNT);
+                utils::set_device(destination.device_index());
+                kernel_multiply_scalar_mask_inplace<<<block_count, KERNEL_THREAD_COUNT>>>(destination, fix, mod_t_mask_);
+            }
         }
     }
 

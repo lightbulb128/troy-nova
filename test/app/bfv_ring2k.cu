@@ -126,6 +126,78 @@ namespace bfv_ring2k {
         );
     }
 
+
+    template <typename T>
+    void template_test_centralize_decentralize(bool device, vector<size_t> q_bits, vector<size_t> t_bits) {
+        for (size_t t_bit_length: t_bits) {
+            size_t poly_modulus_degree = 32;
+            EncryptionParameters parms = EncryptionParameters(SchemeType::BFV);
+            parms.set_plain_modulus(PlainModulus::batching(poly_modulus_degree, 30)); // this does not affect anything
+            parms.set_poly_modulus_degree(poly_modulus_degree);
+            parms.set_coeff_modulus(CoeffModulus::create(poly_modulus_degree, q_bits));
+            HeContextPointer he_context = HeContext::create(parms, true, SecurityLevel::Nil, 0x123);
+            PolynomialEncoderRing2k<T> encoder(he_context, t_bit_length);
+
+            if (device) {
+                he_context->to_device_inplace();
+                encoder.to_device_inplace();
+            }
+
+            constexpr size_t n = 10;
+            auto message = random_sampler<T>(n, t_bit_length);
+            
+            Plaintext plaintext = encoder.centralize_new(message, std::nullopt);
+            ASSERT_TRUE(plaintext.coeff_count() == n);
+            ASSERT_TRUE(plaintext.poly_modulus_degree() == poly_modulus_degree);
+            ASSERT_TRUE(plaintext.data().size() == plaintext.coeff_modulus_size() * n);
+            std::vector<T> result = encoder.decentralize_new(plaintext);
+            ASSERT_TRUE(same_vector(message, result));
+
+            ParmsID second_parms_id = he_context->first_context_data_pointer()->next_context_data_pointer()->parms_id();
+            message = random_sampler<T>(n, t_bit_length);
+            plaintext = encoder.centralize_new(message, second_parms_id);
+            result = encoder.decentralize_new(plaintext);
+            ASSERT_TRUE(same_vector(message, result));
+        }
+    }
+
+    TEST(BFVRing2kTest, HostCentralizeDecentralizeU32Test) {
+        template_test_centralize_decentralize<uint32_t>(false, 
+            {40, 40, 40}, 
+            {32, 20, 17}
+        );
+    }
+    TEST(BFVRing2kTest, DeviceCentralizeDecentralizeU32Test) {
+        template_test_centralize_decentralize<uint32_t>(true, 
+            {40, 40, 40}, 
+            {32, 20, 17}
+        );
+    }
+    TEST(BFVRing2kTest, HostCentralizeDecentralizeU64Test) {
+        template_test_centralize_decentralize<uint64_t>(false, 
+            {40, 40, 40, 40}, 
+            {64, 50, 33}
+        );
+    }
+    TEST(BFVRing2kTest, DeviceCentralizeDecentralizeU64Test) {
+        template_test_centralize_decentralize<uint64_t>(true, 
+            {40, 40, 40, 40}, 
+            {64, 50, 33}
+        );
+    }
+    TEST(BFVRing2kTest, HostCentralizeDecentralizeU128Test) {
+        template_test_centralize_decentralize<uint128_t>(false, 
+            {60, 60, 60, 60, 60, 60},
+            {128, 100, 65}
+        );
+    }
+    TEST(BFVRing2kTest, DeviceCentralizeDecentralizeU128Test) {
+        template_test_centralize_decentralize<uint128_t>(true, 
+            {60, 60, 60, 60, 60, 60},
+            {128, 100, 65}
+        );
+    }
+
     template <typename T>
     void template_test_encrypt(bool device, vector<size_t> q_bits, vector<size_t> t_bits) {
         for (size_t t_bit_length: t_bits) {
