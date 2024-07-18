@@ -158,9 +158,6 @@ namespace troy {
                 break;
             }
             case SchemeType::CKKS: {
-                if (!plain.is_ntt_form()) {
-                    throw std::invalid_argument("[Encryptor::encrypt_internal] CKKS - Plaintext is not in NTT form.");
-                }
                 std::optional<ContextDataPointer> context_data_optional = this->context()->get_context_data(plain.parms_id());
                 if (!context_data_optional.has_value()) {
                     throw std::invalid_argument("[Encryptor::encrypt_internal] CKKS - Plaintext parms_id is not valid.");

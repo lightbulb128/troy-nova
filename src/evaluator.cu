@@ -1799,6 +1799,24 @@ namespace troy {
         }
     }
 
+    void Evaluator::transform_plain_from_ntt_inplace(Plaintext& plain) const {
+        if (!plain.is_ntt_form()) {
+            throw std::invalid_argument("[Evaluator::transform_plain_from_ntt_inplace] Plaintext is already in NTT form.");
+        }
+        if (plain.parms_id() == parms_id_zero) {
+            throw std::invalid_argument("[Evaluator::transform_plain_from_ntt_inplace] Invalid ParmsID, but this should never be reached.");
+        }
+        ParmsID parms_id = plain.parms_id();
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::transform_plain_from_ntt_inplace]", parms_id);
+
+        const EncryptionParameters& parms = context_data->parms();
+        size_t coeff_count = parms.poly_modulus_degree();
+        ConstSlice<NTTTables> ntt_tables = context_data->small_ntt_tables();
+
+        utils::inverse_ntt_negacyclic_harvey_p(plain.poly(), coeff_count, ntt_tables);
+        plain.is_ntt_form() = false;
+    }
+
     void Evaluator::transform_to_ntt_inplace(Ciphertext& encrypted) const {
         check_no_seed("[Evaluator::transform_to_ntt_inplace]", encrypted);
         check_is_not_ntt_form("[Evaluator::transform_to_ntt_inplace]", encrypted);

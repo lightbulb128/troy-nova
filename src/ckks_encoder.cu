@@ -771,6 +771,7 @@ namespace troy {
         destination.is_ntt_form() = true;
         destination.coeff_modulus_size() = coeff_modulus_size;
         destination.poly_modulus_degree() = coeff_count;
+        destination.coeff_count() = coeff_count;
     }
 
     void CKKSEncoder::encode_internal_double_polynomial_slice(utils::ConstSlice<double> values, ParmsID parms_id, double scale, Plaintext& destination, MemoryPoolHandle pool) const {
@@ -844,6 +845,7 @@ namespace troy {
         destination.is_ntt_form() = true;
         destination.coeff_modulus_size() = coeff_modulus_size;
         destination.poly_modulus_degree() = coeff_count;
+        destination.coeff_count() = coeff_count;
     }
 
     __global__ static void kernel_broadcast_double(double d, Slice<double> destination) {
@@ -939,6 +941,7 @@ namespace troy {
         destination.is_ntt_form() = true;
         destination.coeff_modulus_size() = coeff_modulus_size;
         destination.poly_modulus_degree() = coeff_count;
+        destination.coeff_count() = coeff_count;
     }
 
     __global__ static void kernel_reduce_values(
@@ -1037,6 +1040,7 @@ namespace troy {
         destination.is_ntt_form() = true;
         destination.coeff_modulus_size() = coeff_modulus_size;
         destination.poly_modulus_degree() = coeff_count;
+        destination.coeff_count() = coeff_count;
     }
 
     void CKKSEncoder::encode_internal_integer_single(int64_t value, ParmsID parms_id, Plaintext& destination, MemoryPoolHandle pool) const {
@@ -1082,6 +1086,7 @@ namespace troy {
         destination.is_ntt_form() = true;
         destination.coeff_modulus_size() = coeff_modulus_size;
         destination.poly_modulus_degree() = coeff_count;
+        destination.coeff_count() = coeff_count;
     }
 
     __global__ static void kernel_accumulate_complex(

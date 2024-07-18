@@ -1129,4 +1129,88 @@ namespace evaluator {
         utils::MemoryPool::Destroy();
     }
 
+    void test_transform_plain_ntt(const GeneralHeContext& context) {
+        double scale = context.scale();
+        size_t n = context.params_host().poly_modulus_degree();
+        size_t cc = n / 3;
+        SchemeType scheme = context.params_host().scheme();
+
+        {
+            GeneralVector message = context.random_simd_full();
+            Plaintext encoded = context.encoder().encode_simd(message, std::nullopt, scale);
+            if (!encoded.is_ntt_form()) {
+                context.evaluator().transform_plain_to_ntt_inplace(encoded, context.context()->first_parms_id());
+            }
+
+            Plaintext t1 = context.evaluator().transform_plain_from_ntt_new(encoded);
+            Plaintext result = context.evaluator().transform_plain_to_ntt_new(t1, encoded.parms_id());
+            ASSERT_TRUE(encoded.data().to_vector() == result.data().to_vector());
+        }
+
+        {
+            GeneralVector message = context.random_polynomial(cc);
+            Plaintext encoded = context.encoder().encode_polynomial(message, std::nullopt, scale);
+            if (!encoded.is_ntt_form()) {
+                context.evaluator().transform_plain_to_ntt_inplace(encoded, context.context()->first_parms_id());
+            }
+
+            Plaintext t1 = context.evaluator().transform_plain_from_ntt_new(encoded);
+            Plaintext result = context.evaluator().transform_plain_to_ntt_new(t1, encoded.parms_id());
+            ASSERT_TRUE(encoded.data().to_vector() == result.data().to_vector());
+        }
+
+        {
+            // try encrypt and decrypt
+            GeneralVector message = context.random_polynomial(cc);
+            Plaintext encoded = context.encoder().encode_polynomial(message, std::nullopt, scale);
+            if (encoded.is_ntt_form()) {
+                context.evaluator().transform_plain_from_ntt_inplace(encoded);
+            } else {
+                if (scheme == SchemeType:: BFV) {
+                    context.encoder().batch().scale_up_inplace(encoded, std::nullopt);
+                }
+                context.evaluator().transform_plain_to_ntt_inplace(encoded, context.context()->first_parms_id());
+            }
+            Ciphertext encrypted = context.encryptor().encrypt_asymmetric_new(encoded);
+            if (scheme == SchemeType::CKKS) {
+                context.evaluator().transform_to_ntt_inplace(encrypted);
+            } 
+            if (scheme == SchemeType::BFV) {
+                context.evaluator().transform_from_ntt_inplace(encrypted);
+            }
+            Plaintext decrypted = context.decryptor().decrypt_new(encrypted);
+            GeneralVector result = context.encoder().decode_polynomial(decrypted);
+            ASSERT_TRUE(message.near_equal(result, context.tolerance()));
+        }
+
+
+    }
+
+    TEST(EvaluatorTest, HostBFVTransformPlainNTT) {
+        GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_transform_plain_ntt(ghe);
+    }
+    TEST(EvaluatorTest, HostBGVTransformPlainNTT) {
+        GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_transform_plain_ntt(ghe);
+    }
+    TEST(EvaluatorTest, HostCKKSTransformPlainNTT) {
+        GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 40, 40, 40 }, false, 0x123, 10, 1<<20, 1e-2);
+        test_transform_plain_ntt(ghe);
+    }
+    TEST(EvaluatorTest, DeviceBFVTransformPlainNTT) {
+        GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_transform_plain_ntt(ghe);
+        utils::MemoryPool::Destroy();
+    }
+    TEST(EvaluatorTest, DeviceBGVTransformPlainNTT) {
+        GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_transform_plain_ntt(ghe);
+        utils::MemoryPool::Destroy();
+    }
+    TEST(EvaluatorTest, DeviceCKKSTransformPlainNTT) {
+        GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 40, 40, 40 }, false, 0x123, 10, 1<<20, 1e-2);
+        test_transform_plain_ntt(ghe);
+        utils::MemoryPool::Destroy();
+    }
 }

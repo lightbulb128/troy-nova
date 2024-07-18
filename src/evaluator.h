@@ -249,6 +249,17 @@ namespace troy {
             return destination;
         }
 
+        void transform_plain_from_ntt_inplace(Plaintext& plain) const;
+        inline void transform_plain_from_ntt(const Plaintext& plain, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            destination = plain.clone(pool);
+            transform_plain_from_ntt_inplace(destination);
+        }
+        inline Plaintext transform_plain_from_ntt_new(const Plaintext& plain, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            Plaintext destination = plain.clone(pool);
+            transform_plain_from_ntt_inplace(destination);
+            return destination;
+        }
+
         void transform_to_ntt_inplace(Ciphertext& encrypted) const;
         inline void transform_to_ntt(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             destination = encrypted.clone(pool);
