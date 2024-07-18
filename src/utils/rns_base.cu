@@ -574,8 +574,8 @@ namespace troy {namespace utils {
         if (input.size() != count * ibase_size) {
             throw std::invalid_argument("[BaseConverter::exact_convey_array] Input size must be a multiple of input base size.");
         }
-        if (output.size() != count) {
-            throw std::invalid_argument("[BaseConverter::exact_convey_array] Output size must be a multiple of output base size.");
+        if (output.size() < count) {
+            throw std::invalid_argument("[BaseConverter::exact_convey_array] Output size is too small");
         }
         Array<uint64_t> temp(count * ibase_size, input.on_device(), pool);
         Array<double> v(count * ibase_size, input.on_device(), pool);

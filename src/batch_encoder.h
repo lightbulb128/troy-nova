@@ -145,6 +145,14 @@ namespace troy {
             plain = centralize_new(plain, parms_id, pool);
         }
 
+        Plaintext decentralize_new(const Plaintext& plain, uint64_t correction_factor = 1, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        inline void decentralize(const Plaintext& plain, Plaintext& destination, uint64_t correction_factor = 1, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            destination = decentralize_new(plain, correction_factor, pool);
+        }
+        inline void decentralize_inplace(Plaintext& plain, uint64_t correction_factor = 1, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            plain = decentralize_new(plain, correction_factor, pool);
+        }
+
 
     };
 

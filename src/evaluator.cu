@@ -1749,79 +1749,15 @@ namespace troy {
         }
     }
 
-    static void transform_plain_to_ntt_no_fast_plain_lift(
-        size_t plain_coeff_count, size_t coeff_modulus_size,
-        ConstSlice<uint64_t> plain, 
-        Slice<uint64_t> temp, 
-        uint64_t plain_upper_half_threshold,
-        ConstSlice<uint64_t> plain_upper_half_increment
-    ) {
-        scaling_variant::multiply_plain_normal_no_fast_plain_lift(
-            plain_coeff_count, coeff_modulus_size,
-            plain, temp, plain_upper_half_threshold, plain_upper_half_increment
-        );
-    }
-
-    __global__ static void kernel_transform_plain_to_ntt_fast_plain_lift(
-        size_t plain_coeff_count, size_t coeff_count, size_t coeff_modulus_size,
-        Slice<uint64_t> plain, 
-        uint64_t plain_upper_half_threshold,
-        ConstSlice<uint64_t> plain_upper_half_increment
-    ) {
-        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
-        if (global_index >= plain_coeff_count * (coeff_modulus_size - 1)) return;
-        size_t i = (global_index / plain_coeff_count) + 1;
-        size_t j = global_index % plain_coeff_count;
-        size_t plain_index = i * coeff_count + j;
-        plain[plain_index] = (plain[j] >= plain_upper_half_threshold)
-            ? plain[j] + plain_upper_half_increment[i]
-            : plain[j];
-        // sync
-        __syncthreads();
-        if (i == 1) {
-            plain[j] = (plain[j] >= plain_upper_half_threshold)
-                ? plain[j] + plain_upper_half_increment[0]
-                : plain[j];
-        }
-    }
-
-    static void transform_plain_to_ntt_fast_plain_lift(
-        size_t plain_coeff_count, size_t coeff_count, size_t coeff_modulus_size,
-        Slice<uint64_t> plain, 
-        uint64_t plain_upper_half_threshold,
-        ConstSlice<uint64_t> plain_upper_half_increment
-    ) {
-        bool device = plain.on_device();
-        if (!device) {
-            for (size_t i = 0; i < coeff_modulus_size; i++) {
-                for (size_t j = 0; j < plain_coeff_count; j++) {
-                    size_t plain_index = (coeff_modulus_size - 1 - i) * coeff_count + j;
-                    size_t increment_index = coeff_modulus_size - 1 - i;
-                    plain[plain_index] = (plain[j] >= plain_upper_half_threshold)
-                        ? plain[j] + plain_upper_half_increment[increment_index]
-                        : plain[j];
-                }
-            }
-        } else {
-            size_t total = plain_coeff_count * coeff_modulus_size;
-            size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
-            utils::set_device(plain.device_index());
-            kernel_transform_plain_to_ntt_fast_plain_lift<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
-                plain_coeff_count, coeff_count, coeff_modulus_size,
-                plain, plain_upper_half_threshold, plain_upper_half_increment
-            );
-            utils::stream_sync();
-        }
-    }
-
     /// Transforms a plaintext from normal form to NTT form.
     /// 
     /// The input plaintext must be from the BFV scheme, and in this function we do
     /// not scale by Delta = q/t. Two situations:
-    /// 1. The plaintext is modulo t. In this case, it is converted to mod q NTT form, (so that
+    /// 1. The plaintext is modulo t. In this case, it is converted to mod q NTT form by centralize, (so that
     ///    it may be multiplied with a ciphertext.) Note, since we don't scale by Delta,
     ///    one usually cannot directly add this converted plaintext to a ciphertext (which must
-    ///    have already been scaled by Delta.)
+    ///    have already been scaled by Delta.) This equals first calling BatchEncoder.centralize
+    ///    then invoking this (which is hence case 2).
     /// 2. The plaintext is already modulo some q. In this case, it is directly NTT-ed. You
     ///    must ensure the given parms_id is consistent with the plaintext's own parms_id. 
     ///    Usually, this form of plaintext is created with [BatchEncoder::scale_up],
@@ -1839,31 +1775,13 @@ namespace troy {
         ConstSlice<NTTTables> ntt_tables = context_data->small_ntt_tables();
 
         if (plain.parms_id() == parms_id_zero) {
-            size_t plain_coeff_count = plain.coeff_count();
-            plain.resize_rns(*context_, parms_id);
-            size_t plain_upper_half_threshold = context_data->plain_upper_half_threshold();
-            ConstSlice<uint64_t> plain_upper_half_increment = context_data->plain_upper_half_increment();
-
-            if (!context_data->qualifiers().using_fast_plain_lift) {
-                bool device = plain.on_device();
-                Buffer<uint64_t> temp(coeff_modulus_size, coeff_count, device, pool);
-                transform_plain_to_ntt_no_fast_plain_lift(
-                    plain_coeff_count, coeff_modulus_size,
-                    plain.const_poly(), temp.reference(), plain_upper_half_threshold, plain_upper_half_increment
-                );
-                context_data->rns_tool().base_q().decompose_array(temp.reference(), pool);
-                plain.poly().copy_from_slice(temp.const_reference());
-            } else {
-                // Note that in this case plain_upper_half_increment holds its value in RNS form modulo the coeff_modulus
-                // primes.
-                transform_plain_to_ntt_fast_plain_lift(
-                    plain_coeff_count, coeff_count, coeff_modulus_size,
-                    plain.poly(), plain_upper_half_threshold, plain_upper_half_increment
-                );
-            }
+            Plaintext plain_copy; 
+            if (plain.on_device()) plain_copy.to_device_inplace(pool);
+            plain_copy.resize_rns(*context_, parms_id);
+            scaling_variant::centralize(plain, context_data, plain_copy.poly(), coeff_count, pool);
+            plain = std::move(plain_copy);
 
             utils::ntt_negacyclic_harvey_p(plain.poly(), coeff_count, ntt_tables);
-            plain.parms_id() = parms_id;
             plain.is_ntt_form() = true;
             plain.coeff_modulus_size() = coeff_modulus_size;
             plain.poly_modulus_degree() = coeff_count;

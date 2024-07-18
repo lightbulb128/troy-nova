@@ -10,6 +10,9 @@ namespace troy { namespace scaling_variant {
     void scale_up(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, size_t destination_coeff_count, bool add_to_destination, bool subtract);
     void centralize(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, size_t destination_coeff_count, MemoryPoolHandle pool = MemoryPool::GlobalPool());
 
+    void scale_down(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+    void decentralize(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, uint64_t correction_factor = 1, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+
     void multiply_add_plain(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, size_t destination_coeff_count);
     void multiply_sub_plain(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, size_t destination_coeff_count);
 

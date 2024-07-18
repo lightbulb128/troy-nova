@@ -375,16 +375,17 @@ namespace troy {
             throw std::invalid_argument("[BatchEncoder::scale_down_new] Could not find context data.");
         }
         ContextDataPointer context_data = context_data_opt.value();
-        context_data->rns_tool().decrypt_scale_and_round(plain.const_reference(), plain.coeff_count(), destination.reference(), pool);
+        scaling_variant::scale_down(plain, context_data, destination.reference(), pool);
         return destination;
     }
 
     Plaintext BatchEncoder::centralize_new(const Plaintext& plain, std::optional<ParmsID> parms_id, MemoryPoolHandle pool) const {
-        if (this->context_->first_context_data().value()->parms().scheme() != SchemeType::BFV) {
-            throw std::logic_error("[BatchEncoder::scale_up_new] Only BFV scheme is supported.");
+        SchemeType scheme = this->context_->first_context_data().value()->parms().scheme();
+        if (scheme != SchemeType::BFV && scheme != SchemeType::BGV) {
+            throw std::logic_error("[BatchEncoder::centralize_new] Only BFV/BGV scheme is supported.");
         }
         if (plain.parms_id() != parms_id_zero) {
-            throw std::invalid_argument("[BatchEncoder::scale_up_new] Plaintext is already at the desired level.");
+            throw std::invalid_argument("[BatchEncoder::centralize_new] Plaintext is already at the desired level.");
         }
         ParmsID pid = parms_id.value_or(this->context_->first_parms_id());
         ContextDataPointer context_data = this->context_->get_context_data(pid).value();
@@ -397,6 +398,38 @@ namespace troy {
         destination.resize_rns_partial(*this->context_, pid, plain.coeff_count());
         destination.is_ntt_form() = false;
         scaling_variant::centralize(plain, context_data, destination.reference(), plain.coeff_count(), pool);
+        return destination;
+    }
+
+    Plaintext BatchEncoder::decentralize_new(const Plaintext& plain, uint64_t correction_factor, MemoryPoolHandle pool) const {
+        SchemeType scheme = this->context_->first_context_data().value()->parms().scheme();
+        if (scheme != SchemeType::BFV && scheme != SchemeType::BGV) {
+            throw std::logic_error("[BatchEncoder::decentralize_new] Only BFV/BGV scheme is supported.");
+        }
+        if (plain.parms_id() == parms_id_zero) {
+            throw std::invalid_argument("[BatchEncoder::decentralize_new] Plaintext not in RNS form.");
+        }
+        if (plain.is_ntt_form()) {
+            throw std::invalid_argument("[BatchEncoder::decentralize_new] Plaintext is in NTT form.");
+        }
+        Plaintext destination;
+        if (plain.on_device()) {
+            destination.to_device_inplace(pool);
+        } else {
+            destination.to_host_inplace();
+        }
+        destination.coeff_modulus_size() = plain.coeff_modulus_size();
+        destination.poly_modulus_degree() = plain.poly_modulus_degree();
+        destination.coeff_count() = plain.coeff_count();
+        destination.parms_id() = parms_id_zero;
+        destination.resize(plain.coeff_count());
+        destination.is_ntt_form() = false;
+        std::optional<ContextDataPointer> context_data_opt = this->context_->get_context_data(plain.parms_id());
+        if (!context_data_opt.has_value()) {
+            throw std::invalid_argument("[BatchEncoder::decentralize_new] Could not find context data.");
+        }
+        ContextDataPointer context_data = context_data_opt.value();
+        scaling_variant::decentralize(plain, context_data, destination.reference(), correction_factor, pool);
         return destination;
     }
 

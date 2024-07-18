@@ -318,4 +318,36 @@ namespace troy {namespace scaling_variant {
         }
     }
 
+    void scale_down(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, MemoryPoolHandle pool) {
+        if (!utils::device_compatible(*context_data, plain, destination)) {
+            throw std::invalid_argument("[scaling_variant::scale_down] Arguments are not on the same device.");
+        }
+        size_t plain_coeff_count = plain.coeff_count();
+        if (destination.size() < plain_coeff_count) {
+            throw std::invalid_argument("[scaling_variant::scale_down] Destination size should no less than plain_coeff_count.");
+        }
+        context_data->rns_tool().decrypt_scale_and_round(plain.const_reference(), plain_coeff_count, destination, pool);
+    }
+
+    void decentralize(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, uint64_t correction_factor, MemoryPoolHandle pool) {
+        if (!utils::device_compatible(*context_data, plain, destination)) {
+            throw std::invalid_argument("[scaling_variant::decentralize] Arguments are not on the same device.");
+        }
+        size_t plain_coeff_count = plain.coeff_count();
+        if (destination.size() < plain_coeff_count) {
+            throw std::invalid_argument("[scaling_variant::decentralize] Destination size should no less than plain_coeff_count.");
+        }
+        context_data->rns_tool().decrypt_mod_t(plain.const_reference(), destination, pool);
+        if (correction_factor != 1) {
+            uint64_t fix = 1;
+            if (!utils::try_invert_uint64_mod(correction_factor, context_data->parms().plain_modulus_host(), fix)) {
+                throw std::logic_error("[scaling_variant::decentralize] Correction factor is not invertible.");
+            }
+            utils::multiply_scalar_inplace(destination, fix, context_data->parms().plain_modulus());
+        }
+    }
+
+
+
+
 }}

@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 #include <optional>
 #include "test.h"
+#include "test_adv.h"
 #include "../src/batch_encoder.h"
 #include "../src/ckks_encoder.h"
 #include "../src/encryptor.h"
@@ -16,37 +17,12 @@ namespace encryptor {
     using troy::utils::Slice;
     using std::optional;
     using std::complex;
+    using tool::GeneralEncoder;
 
     template<typename T>
     ConstSlice<T> sfv(const vector<T> &vec) {
         return ConstSlice<T>(vec.data(), vec.size(), false);
     }
-
-    class GeneralEncoder {
-    private:
-        optional<BatchEncoder> batch_;
-        optional<CKKSEncoder> ckks_;
-    public: 
-        GeneralEncoder(BatchEncoder&& batch): batch_(std::move(batch)) {}
-        GeneralEncoder(CKKSEncoder&& ckks): ckks_(std::move(ckks)) {}
-        const BatchEncoder& batch() const {
-            return *batch_;
-        }
-        const CKKSEncoder& ckks() const {
-            return *ckks_;
-        }
-        void to_device_inplace() {
-            if (batch_) {
-                batch_->to_device_inplace();
-            }
-            if (ckks_) {
-                ckks_->to_device_inplace();
-            }
-        }
-        size_t slot_count() const {
-            return batch_ ? batch_->slot_count() : ckks_->slot_count();
-        }
-    };
 
     void test_suite(bool device, SchemeType scheme, size_t n, size_t log_t, vector<size_t> log_qi, bool expand_mod_chain, uint64_t seed, double scale) {
         // create enc params

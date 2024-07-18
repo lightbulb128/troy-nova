@@ -1,6 +1,7 @@
 #include "decryptor.h"
 #include "encryption_parameters.h"
 #include "utils/constants.h"
+#include "utils/scaling_variant.h"
 
 namespace troy {
 
@@ -216,7 +217,8 @@ namespace troy {
         bool device = encrypted.on_device();
         if (device) destination.to_device_inplace(pool);
         else destination.to_host_inplace();
-        Array<uint64_t> tmp_dest_modq(coeff_count * coeff_modulus_size, device, pool);
+        Plaintext tmp_dest_modq; if (encrypted.on_device()) tmp_dest_modq.to_device_inplace(pool);
+        tmp_dest_modq.resize_rns(*this->context_, encrypted.parms_id());
 
         this->dot_product_ct_sk_array(encrypted, tmp_dest_modq.reference(), pool);
 
@@ -226,18 +228,7 @@ namespace troy {
 
         utils::inverse_ntt_negacyclic_harvey_p(tmp_dest_modq.reference(), coeff_count, context_data->small_ntt_tables());
 
-        // Divide scaling variant using BEHZ FullRNS techniques
-        context_data->rns_tool().decrypt_mod_t(
-            tmp_dest_modq.const_reference(), destination.poly(), pool
-        );
-        
-        if (encrypted.correction_factor() != 1) {
-            uint64_t fix = 1;
-            if (!utils::try_invert_uint64_mod(encrypted.correction_factor(), parms.plain_modulus_host(), fix)) {
-                throw std::logic_error("[Decryptor::bgv_decrypt] Correction factor is not invertible.");
-            }
-            utils::multiply_scalar_inplace(destination.poly(), fix, parms.plain_modulus());
-        }
+        scaling_variant::decentralize(tmp_dest_modq, context_data, destination.poly(), encrypted.correction_factor(), pool);
 
         destination.is_ntt_form() = false;
         destination.coeff_modulus_size() = coeff_modulus_size;

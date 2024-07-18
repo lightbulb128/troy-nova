@@ -1,4 +1,5 @@
 #pragma once
+#include "encryption_parameters.h"
 #include "key.h"
 #include "he_context.h"
 #include "utils/memory_pool.h"
@@ -16,6 +17,7 @@ namespace troy {
 
         void encrypt_zero_internal(
             const ParmsID& parms_id, 
+            bool is_ntt_form,
             bool is_asymmetric, bool save_seed, 
             utils::RandomGenerator* u_prng, 
             Ciphertext& destination,
@@ -108,7 +110,9 @@ namespace troy {
         }
 
         inline void encrypt_zero_asymmetric(Ciphertext& destination, std::optional<ParmsID> parms_id = std::nullopt, utils::RandomGenerator* u_prng = nullptr, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            encrypt_zero_internal(parms_id.value_or(context_->first_parms_id()), true, false, u_prng, destination, pool);
+            SchemeType scheme = context_->first_context_data_pointer()->parms().scheme();
+            bool is_ntt_form = scheme == SchemeType::CKKS || scheme == SchemeType::BGV;
+            encrypt_zero_internal(parms_id.value_or(context_->first_parms_id()), is_ntt_form, true, false, u_prng, destination, pool);
         }
 
         inline Ciphertext encrypt_zero_asymmetric_new(std::optional<ParmsID> parms_id = std::nullopt, utils::RandomGenerator* u_prng = nullptr, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
@@ -128,7 +132,9 @@ namespace troy {
         }
 
         inline void encrypt_zero_symmetric(bool save_seed, Ciphertext& destination, std::optional<ParmsID> parms_id = std::nullopt, utils::RandomGenerator* u_prng = nullptr, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            encrypt_zero_internal(parms_id.value_or(context_->first_parms_id()), false, save_seed, u_prng, destination, pool);
+            SchemeType scheme = context_->first_context_data_pointer()->parms().scheme();
+            bool is_ntt_form = scheme == SchemeType::CKKS || scheme == SchemeType::BGV;
+            encrypt_zero_internal(parms_id.value_or(context_->first_parms_id()), is_ntt_form, false, save_seed, u_prng, destination, pool);
         }
 
         inline Ciphertext encrypt_zero_symmetric_new(bool save_seed, std::optional<ParmsID> parms_id = std::nullopt, utils::RandomGenerator* u_prng = nullptr, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {

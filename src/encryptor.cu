@@ -1,3 +1,4 @@
+#include "encryption_parameters.h"
 #include "encryptor.h"
 #include "utils/scaling_variant.h"
 
@@ -8,6 +9,7 @@ namespace troy {
 
     void Encryptor::encrypt_zero_internal(
         const ParmsID& parms_id, 
+        bool is_ntt_form,
         bool is_asymmetric, bool save_seed, 
         utils::RandomGenerator* u_prng, 
         Ciphertext& destination,
@@ -34,10 +36,6 @@ namespace troy {
         size_t coeff_modulus_size = coeff_modulus.size();
         size_t coeff_count = parms.poly_modulus_degree();
         size_t poly_element_count = coeff_count * coeff_modulus_size;
-        bool is_ntt_form = false;
-        if (context_data->is_ckks() || context_data->is_bgv()) {
-            is_ntt_form = true;
-        }
         
         // Resize destination and save results
         destination.seed() = 0;
@@ -69,16 +67,20 @@ namespace troy {
                 // Modulus switching
                 for (size_t i = 0; i < temp.polynomial_count(); i++) {
                     switch (parms.scheme()) {
-                        case SchemeType::CKKS: {
-                            rns_tool.divide_and_round_q_last_ntt_inplace(temp.poly(i), prev_context_data->small_ntt_tables(), pool);
-                            break;
-                        }
-                        case SchemeType::BFV: {
-                            rns_tool.divide_and_round_q_last_inplace(temp.poly(i));
+                        case SchemeType::CKKS: case SchemeType::BFV: {
+                            if (is_ntt_form) {
+                                rns_tool.divide_and_round_q_last_ntt_inplace(temp.poly(i), prev_context_data->small_ntt_tables(), pool);
+                            } else {
+                                rns_tool.divide_and_round_q_last_inplace(temp.poly(i));
+                            }
                             break;
                         }
                         case SchemeType::BGV: {
-                            rns_tool.mod_t_and_divide_q_last_ntt_inplace(temp.poly(i), prev_context_data->small_ntt_tables(), pool);
+                            if (is_ntt_form) {
+                                rns_tool.mod_t_and_divide_q_last_ntt_inplace(temp.poly(i), prev_context_data->small_ntt_tables(), pool);
+                            } else {
+                                rns_tool.mod_t_and_divide_q_last_inplace(temp.poly(i), pool);
+                            }
                             break;
                         }
                         default:
@@ -132,11 +134,11 @@ namespace troy {
         SchemeType scheme = this->context()->key_context_data().value()->parms().scheme();
         switch (scheme) {
             case SchemeType::BFV: {
-                if (plain.is_ntt_form()) {
-                    throw std::invalid_argument("[Encryptor::encrypt_internal] BFV - Plaintext is in NTT form.");
-                }
                 if (plain.parms_id() == parms_id_zero) {
-                    this->encrypt_zero_internal(this->context()->first_parms_id(), is_asymmetric, save_seed, u_prng, destination, pool);
+                    if (plain.is_ntt_form()) {
+                        throw std::invalid_argument("[Encryptor::encrypt_internal] BFV - Plaintext is in NTT form.");
+                    }
+                    this->encrypt_zero_internal(this->context()->first_parms_id(), false, is_asymmetric, save_seed, u_prng, destination, pool);
                     // Multiply plain by scalar coeff_div_plaintext and reposition if in upper-half.
                     // Result gets added into the c_0 term of ciphertext (c_0,c_1).
                     scaling_variant::multiply_add_plain(plain, this->context()->first_context_data().value(), destination.poly(0), destination.poly_modulus_degree());
@@ -148,7 +150,7 @@ namespace troy {
                     }
                     ContextDataPointer context_data = context_data_optional.value();
                     const EncryptionParameters& parms = context_data->parms();
-                    this->encrypt_zero_internal(parms_id, is_asymmetric, save_seed, u_prng, destination, pool);
+                    this->encrypt_zero_internal(parms_id, plain.is_ntt_form(), is_asymmetric, save_seed, u_prng, destination, pool);
                     utils::add_partial_inplace_p(
                         destination.poly(0), plain.poly(), parms.poly_modulus_degree(), plain.coeff_count(), parms.coeff_modulus()
                     );
@@ -164,7 +166,7 @@ namespace troy {
                     throw std::invalid_argument("[Encryptor::encrypt_internal] CKKS - Plaintext parms_id is not valid.");
                 }
                 ContextDataPointer context_data = context_data_optional.value();
-                this->encrypt_zero_internal(plain.parms_id(), is_asymmetric, save_seed, u_prng, destination, pool);
+                this->encrypt_zero_internal(plain.parms_id(), plain.is_ntt_form(), is_asymmetric, save_seed, u_prng, destination, pool);
                 const EncryptionParameters& parms = context_data->parms();
                 ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
                 size_t coeff_count = parms.poly_modulus_degree();
@@ -176,10 +178,7 @@ namespace troy {
                 break; 
             }
             case SchemeType::BGV: {
-                if (plain.is_ntt_form()) {
-                    throw std::invalid_argument("[Encryptor::encrypt_internal] BGV - Plaintext is in NTT form.");
-                }
-                this->encrypt_zero_internal(this->context()->first_parms_id(), is_asymmetric, save_seed, u_prng, destination, pool);
+                this->encrypt_zero_internal(this->context()->first_parms_id(), true, is_asymmetric, save_seed, u_prng, destination, pool);
                 
                 ContextDataPointer context_data = this->context()->first_context_data().value();
                 const EncryptionParameters& parms = context_data->parms();
@@ -188,22 +187,29 @@ namespace troy {
                 size_t coeff_count = parms.poly_modulus_degree();
                 ConstSlice<utils::NTTTables> ntt_tables = context_data->small_ntt_tables();
                 
-                // c_{0} = pk_{0}*u + p*e_{0} + M
-                Plaintext plain_copy = plain.clone(pool);
-                // Resize to fit the entire NTT transformed (ciphertext size) polynomial
-                // Note that the new coefficients are automatically set to 0
-                plain_copy.resize(coeff_count * coeff_modulus_size);
-                plain_copy.data().reference().set_zero();
+                if (!plain.is_ntt_form()) {
+                    // c_{0} = pk_{0}*u + p*e_{0} + M
+                    Plaintext plain_copy = plain.clone(pool);
+                    // Resize to fit the entire NTT transformed (ciphertext size) polynomial
+                    // Note that the new coefficients are automatically set to 0
+                    plain_copy.resize(coeff_count * coeff_modulus_size);
+                    plain_copy.data().reference().set_zero();
 
-                scaling_variant::centralize(plain, context_data, plain_copy.reference(), coeff_count, pool);
+                    scaling_variant::centralize(plain, context_data, plain_copy.reference(), coeff_count, pool);
 
-                // Transform to NTT domain
-                utils::ntt_negacyclic_harvey_p(plain_copy.reference(), coeff_count, ntt_tables);
+                    // Transform to NTT domain
+                    utils::ntt_negacyclic_harvey_p(plain_copy.reference(), coeff_count, ntt_tables);
 
-                // The plaintext gets added into the c_0 term of ciphertext (c_0,c_1).
-                utils::add_inplace_p(
-                    destination.poly(0), plain_copy.const_poly(), coeff_count, coeff_modulus
-                );
+                    // The plaintext gets added into the c_0 term of ciphertext (c_0,c_1).
+                    utils::add_inplace_p(
+                        destination.poly(0), plain_copy.const_poly(), coeff_count, coeff_modulus
+                    );
+                } else {
+                    // directly add the plaintext into the c_0 term of ciphertext (c_0,c_1)
+                    utils::add_inplace_p(
+                        destination.poly(0), plain.const_poly(), coeff_count, coeff_modulus
+                    );
+                }
                 break; // case SchemeType::BGV
             }
             default: 
