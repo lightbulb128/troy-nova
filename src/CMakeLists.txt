@@ -1,11 +1,11 @@
-file(GLOB_RECURSE CURRENT_HEADERS *.h *.hpp *.cuh)
-file(GLOB_RECURSE CURRENT_SOURCES *.cpp *.cu *.c)
+file(GLOB_RECURSE TROY_SRC_HEADERS *.h *.hpp *.cuh)
+file(GLOB_RECURSE TROY_SRC_SOURCES *.cpp *.cu *.c)
 
-source_group("Include" FILES ${CURRENT_HEADERS})
-source_group("Source" FILES ${CURRENT_SOURCES})
+source_group("Include" FILES ${TROY_SRC_HEADERS})
+source_group("Source" FILES ${TROY_SRC_SOURCES})
 
-add_library(troy SHARED ${CURRENT_HEADERS} ${CURRENT_SOURCES})
-add_library(troy_static STATIC ${CURRENT_HEADERS} ${CURRENT_SOURCES})
+add_library(troy SHARED ${TROY_SRC_HEADERS} ${TROY_SRC_SOURCES})
+add_library(troy_static STATIC ${TROY_SRC_HEADERS} ${TROY_SRC_SOURCES})
 set_target_properties(troy PROPERTIES CUDA_SEPERABLE_COMPILATION ON)
 
 target_compile_definitions(troy        PRIVATE CUDA_API_PER_THREAD_DEFAULT_STREAM)
