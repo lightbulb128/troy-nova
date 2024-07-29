@@ -6,6 +6,10 @@ void register_ciphertext(pybind11::module& m) {
         .def(py::init<>())
         .def("pool", &Ciphertext::pool)
         .def("device_index", &Ciphertext::device_index)
+        .def("obtain_data", [](const Ciphertext& self){
+            troy::utils::DynamicArray<uint64_t> data = self.data().to_host();
+            return get_buffer_from_slice(data.const_reference());
+        })
         .def("clone", [](const Ciphertext& self, MemoryPoolHandleArgument pool){
             return self.clone(nullopt_default_pool(pool));
         }, MEMORY_POOL_ARGUMENT)

@@ -4,6 +4,10 @@ void register_plaintext(pybind11::module& m) {
 
     py::class_<Plaintext>(m, "Plaintext")
         .def(py::init<>())
+        .def("obtain_data", [](const Plaintext& self){
+            troy::utils::DynamicArray<uint64_t> data = self.data().to_host();
+            return get_buffer_from_slice(data.const_reference());
+        })
         .def("pool", &Plaintext::pool)
         .def("device_index", &Plaintext::device_index)
         .def("clone", [](const Plaintext& self, MemoryPoolHandleArgument pool){
