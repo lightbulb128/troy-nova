@@ -1,4 +1,5 @@
 import pytroy
+import numpy as np
 
 if __name__ == "__main__":
 
@@ -12,8 +13,9 @@ if __name__ == "__main__":
     encoder = pytroy.BatchEncoder(context)
     values = [1, 2, 3, 4]
     plain = encoder.encode_simd_new(values)
-    print(plain.obtain_data())
+    data = plain.obtain_data()
+    assert(data[0] == 738197241)
 
     decoded = encoder.decode_simd_new(plain)
-    print(decoded)
+    assert(np.sum(decoded[:4] == values) == 4)
 
