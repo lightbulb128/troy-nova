@@ -18,7 +18,7 @@ namespace troy {
         size_t coeff_modulus_size_;
         size_t poly_modulus_degree_;
         
-        void resize_rns_internal(size_t poly_modulus_degree, size_t coeff_modulus_size, size_t coeff_count);
+        void resize_rns_internal(size_t poly_modulus_degree, size_t coeff_modulus_size, size_t coeff_count, bool fill_extra_with_zeros);
 
         size_t save_raw(std::ostream& stream) const;
         void load_raw(std::istream& stream, MemoryPoolHandle pool);
@@ -49,6 +49,8 @@ namespace troy {
             *this = assign.clone(assign.pool());
             return *this;
         }
+
+        static Plaintext like(const Plaintext& other, bool fill_zeros, MemoryPoolHandle pool = MemoryPool::GlobalPool());
 
         inline Plaintext clone(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Plaintext result;
@@ -166,12 +168,16 @@ namespace troy {
         inline utils::Slice<uint64_t> reference() noexcept {return this->poly();}
         inline utils::ConstSlice<uint64_t> const_reference() const noexcept {return this->const_poly();}
 
-        inline void resize(size_t coeff_count) {
+        inline void resize(size_t coeff_count, bool fill_extra_with_zeros = true) {
             if (this->parms_id_ != parms_id_zero) {
                 throw std::invalid_argument("[Plaintext::resize] Cannot resize if the plaintext is not mod t. Call resize_rns instead.");
             }
             this->coeff_count_ = coeff_count;
-            this->data_.resize(coeff_count);
+            if (fill_extra_with_zeros) {
+                this->data_.resize(coeff_count);
+            } else {
+                this->data_.resize_uninitialized(coeff_count);
+            }
         }
 
         inline size_t coeff_modulus_size () const noexcept {
@@ -190,8 +196,8 @@ namespace troy {
             return poly_modulus_degree_;
         }
 
-        void resize_rns(const HeContext& context, const ParmsID& parms_id);
-        void resize_rns_partial(const HeContext& context, const ParmsID& parms_id, size_t coeff_count);
+        void resize_rns(const HeContext& context, const ParmsID& parms_id, bool fill_extra_with_zeros = true);
+        void resize_rns_partial(const HeContext& context, const ParmsID& parms_id, size_t coeff_count, bool fill_extra_with_zeros = true);
 
         inline bool is_ntt_form() const {
             return is_ntt_form_;

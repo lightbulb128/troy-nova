@@ -21,7 +21,7 @@ namespace troy {
         uint64_t correction_factor_;
         uint64_t seed_;
 
-        void resize_internal(size_t polynomial_count, size_t coeff_modulus_size, size_t poly_modulus_degree);
+        void resize_internal(size_t polynomial_count, size_t coeff_modulus_size, size_t poly_modulus_degree, bool fill_extra_with_zeros);
 
         size_t save_raw(std::ostream& stream, HeContextPointer context) const;
         void load_raw(std::istream& stream, HeContextPointer context, MemoryPoolHandle pool);
@@ -89,6 +89,11 @@ namespace troy {
             }
             *this = assign.clone(assign.pool());
             return *this;
+        }
+
+        static Ciphertext like(const Ciphertext& other, size_t polynomial_count, bool fill_zeros, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+        inline static Ciphertext like(const Ciphertext& other, bool fill_zeros, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+            return like(other, other.polynomial_count(), fill_zeros, pool);
         }
 
         inline const ParmsID& parms_id() const noexcept {
@@ -185,7 +190,8 @@ namespace troy {
             return data_;
         }
 
-        void resize(HeContextPointer context, const ParmsID& parms_id, size_t polynomial_count);
+        void resize(HeContextPointer context, const ParmsID& parms_id, size_t polynomial_count, bool fill_extra_with_zeros = true);
+        void reconfigure_like(HeContextPointer context, const Ciphertext& other, size_t polynomial_count, bool fill_extra_with_zeros = true);
 
         inline utils::ConstSlice<uint64_t> reference() const noexcept {
             return data_.const_reference();

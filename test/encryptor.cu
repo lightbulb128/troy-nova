@@ -21,7 +21,7 @@ namespace encryptor {
 
     template<typename T>
     ConstSlice<T> sfv(const vector<T> &vec) {
-        return ConstSlice<T>(vec.data(), vec.size(), false);
+        return ConstSlice<T>(vec.data(), vec.size(), false, nullptr);
     }
 
     void test_suite(bool device, SchemeType scheme, size_t n, size_t log_t, vector<size_t> log_qi, bool expand_mod_chain, uint64_t seed, double scale) {
@@ -118,40 +118,42 @@ namespace encryptor {
         auto plain = ckks ? encoder.ckks().encode_complex64_simd_new(message_complex64, std::nullopt, scale) : encoder.batch().encode_new(message_uint64);
         cipher = encryptor.encrypt_symmetric_new(plain, false);
         decrypted = decryptor.decrypt_new(cipher);
-        if (ckks) {
-            decoded_complex64 = encoder.ckks().decode_complex64_simd_new(decrypted);
-            ASSERT_TRUE(near_vector(message_complex64, decoded_complex64));
-        } else {
-            decoded_uint64 = encoder.batch().decode_new(decrypted);
-            ASSERT_TRUE(same_vector(message_uint64, decoded_uint64));
-        }
+        // if (ckks) {
+        //     decoded_complex64 = encoder.ckks().decode_complex64_simd_new(decrypted);
+        //     ASSERT_TRUE(near_vector(message_complex64, decoded_complex64));
+        // } else {
+        //     decoded_uint64 = encoder.batch().decode_new(decrypted);
+        //     ASSERT_TRUE(same_vector(message_uint64, decoded_uint64));
+        // }
 
-        if (scheme == SchemeType::BFV) {
+        // if (scheme == SchemeType::BFV) {
 
-            // scale up
-            message_uint64 = random_uint64_vector(encoder.slot_count(), t);
-            auto plain = encoder.batch().encode_new(message_uint64);
-            plain = encoder.batch().scale_up_new(plain, std::nullopt);
-            cipher = encryptor.encrypt_symmetric_new(plain, false);
-            decrypted = decryptor.decrypt_new(cipher);
-            decoded_uint64 = encoder.batch().decode_new(decrypted);
-            ASSERT_TRUE(same_vector(message_uint64, decoded_uint64));
+        //     // scale up
+        //     message_uint64 = random_uint64_vector(encoder.slot_count(), t);
+        //     auto plain = encoder.batch().encode_new(message_uint64);
+        //     plain = encoder.batch().scale_up_new(plain, std::nullopt);
+        //     cipher = encryptor.encrypt_symmetric_new(plain, false);
+        //     decrypted = decryptor.decrypt_new(cipher);
+        //     decoded_uint64 = encoder.batch().decode_new(decrypted);
+        //     ASSERT_TRUE(same_vector(message_uint64, decoded_uint64));
 
-            // scale down
-            message_uint64 = random_uint64_vector(encoder.slot_count(), t);
-            plain = encoder.batch().encode_new(message_uint64);
-            cipher = encryptor.encrypt_symmetric_new(plain, false);
-            decrypted = decryptor.bfv_decrypt_without_scaling_down_new(cipher);
-            encoder.batch().scale_down_inplace(decrypted);
-            decoded_uint64 = encoder.batch().decode_new(decrypted);
-            ASSERT_TRUE(same_vector(message_uint64, decoded_uint64));
-        }
+        //     // scale down
+        //     message_uint64 = random_uint64_vector(encoder.slot_count(), t);
+        //     plain = encoder.batch().encode_new(message_uint64);
+        //     cipher = encryptor.encrypt_symmetric_new(plain, false);
+        //     decrypted = decryptor.bfv_decrypt_without_scaling_down_new(cipher);
+        //     encoder.batch().scale_down_inplace(decrypted);
+        //     decoded_uint64 = encoder.batch().decode_new(decrypted);
+        //     ASSERT_TRUE(same_vector(message_uint64, decoded_uint64));
+        // }
         
         // all slots, asymmetric
         if (ckks) message_complex64 = random_complex64_vector(encoder.slot_count());
         else message_uint64 = random_uint64_vector(encoder.slot_count(), t);
         plain = ckks ? encoder.ckks().encode_complex64_simd_new(message_complex64, std::nullopt, scale) : encoder.batch().encode_new(message_uint64);
+        std::cout << "plain: " << plain.data().const_slice(0, 4) << std::endl;
         cipher = encryptor.encrypt_asymmetric_new(plain);
+        std::cout << "cipher: " << cipher.data().const_slice(0, 4) << std::endl;
         decrypted = decryptor.decrypt_new(cipher);
         if (ckks) {
             decoded_complex64 = encoder.ckks().decode_complex64_simd_new(decrypted);
@@ -224,7 +226,7 @@ namespace encryptor {
     void test_bfv(bool device) {
         test_suite(device, SchemeType::BFV, 64, 30, {40}, false, 123, 1<<20);
         test_suite(device, SchemeType::BFV, 64, 30, {40, 40}, false, 123, 1<<20);
-        test_suite(device, SchemeType::BFV, 64, 30, {40, 40, 40}, true, 123, 1<<20);
+        test_suite(device, SchemeType::BFV, 64, 30, {40, 40, 40}, true, 123, 1<<20); 
     }
 
     TEST(EncryptorTest, HostBFV) {

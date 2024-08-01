@@ -1,6 +1,21 @@
 #include "plaintext.h"
 
 namespace troy {
+    
+    Plaintext Plaintext::like(const Plaintext& other, bool fill_zeros, MemoryPoolHandle pool) {
+        Plaintext result;
+        result.coeff_count_ = other.coeff_count_;
+        result.parms_id_ = other.parms_id_;
+        result.scale_ = other.scale_;
+        result.is_ntt_form_ = other.is_ntt_form_;
+        result.coeff_modulus_size_ = other.coeff_modulus_size_;
+        result.poly_modulus_degree_ = other.poly_modulus_degree_;
+        result.data_ = utils::DynamicArray<uint64_t>::create_uninitialized(other.data().size(), other.on_device(), pool);
+        if (fill_zeros) {
+            result.reference().set_zero();
+        }
+        return result;
+    }
 
     size_t Plaintext::save_raw(std::ostream& stream) const {
         serialize::save_object(stream, this->parms_id());
@@ -53,15 +68,19 @@ namespace troy {
         return size;
     }
 
-    void Plaintext::resize_rns_internal(size_t poly_modulus_degree, size_t coeff_modulus_size, size_t coeff_count) {
+    void Plaintext::resize_rns_internal(size_t poly_modulus_degree, size_t coeff_modulus_size, size_t coeff_count, bool fill_extra_with_zeros) {
         size_t data_size = coeff_count * coeff_modulus_size;
-        this->data().resize(data_size);
+        if (fill_extra_with_zeros) {
+            this->data().resize(data_size);
+        } else {
+            this->data().resize_uninitialized(data_size);
+        }
         this->poly_modulus_degree_ = poly_modulus_degree;
         this->coeff_modulus_size_ = coeff_modulus_size;
         this->coeff_count_ = coeff_count;
     }
 
-    void Plaintext::resize_rns(const HeContext& context, const ParmsID& parms_id) {
+    void Plaintext::resize_rns(const HeContext& context, const ParmsID& parms_id, bool fill_extra_with_zeros) {
         if (!context.parameters_set()) {
             throw std::invalid_argument("[Plaintext::resize_rns] context is not set");
         }
@@ -72,10 +91,10 @@ namespace troy {
         ContextDataPointer context_data = context_data_optional.value();
         const EncryptionParameters& parms = context_data->parms();
         this->parms_id_ = parms_id;
-        this->resize_rns_internal(parms.poly_modulus_degree(), parms.coeff_modulus().size(), parms.poly_modulus_degree());
+        this->resize_rns_internal(parms.poly_modulus_degree(), parms.coeff_modulus().size(), parms.poly_modulus_degree(), fill_extra_with_zeros);
     }
 
-    void Plaintext::resize_rns_partial(const HeContext& context, const ParmsID& parms_id, size_t coeff_count) {
+    void Plaintext::resize_rns_partial(const HeContext& context, const ParmsID& parms_id, size_t coeff_count, bool fill_extra_with_zeros) {
         if (!context.parameters_set()) {
             throw std::invalid_argument("[Plaintext::resize_rns] context is not set");
         }
@@ -86,7 +105,7 @@ namespace troy {
         ContextDataPointer context_data = context_data_optional.value();
         const EncryptionParameters& parms = context_data->parms();
         this->parms_id_ = parms_id;
-        this->resize_rns_internal(parms.poly_modulus_degree(), parms.coeff_modulus().size(), coeff_count);
+        this->resize_rns_internal(parms.poly_modulus_degree(), parms.coeff_modulus().size(), coeff_count, fill_extra_with_zeros);
     }
 
 

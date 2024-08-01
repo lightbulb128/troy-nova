@@ -296,6 +296,9 @@ namespace troy { namespace utils {
 
     template<class T>
     class Array {
+
+        template <typename DT> friend class DynamicArray;
+
         T* pointer;
         size_t len;
         bool device;
@@ -319,6 +322,26 @@ namespace troy { namespace utils {
                 pointer = reinterpret_cast<T*>(malloc(count * sizeof(T)));
                 memset(pointer, 0, count * sizeof(T));
             }
+        }
+
+        // In contrast to the constructor, this function does not initialize the memory by filling with zeros.
+        // This is useful when the memory will be overwritten immediately.
+        static Array<T> create_uninitialized(size_t count, bool device, MemoryPoolHandle memory_pool_handle = MemoryPool::GlobalPool()) {
+            if (device && !memory_pool_handle) throw std::runtime_error("[Array::create_uninitialized] Memory pool handle is required for device memory");
+            Array<T> array;
+            array.len = count;
+            array.device = device;
+            array.memory_pool_handle_ = device ? memory_pool_handle : nullptr;
+            if (count == 0) {
+                array.pointer = nullptr;
+                return array;
+            }
+            if (device) {
+                array.pointer = kernel_provider::malloc<T>(*memory_pool_handle, count);
+            } else {
+                array.pointer = reinterpret_cast<T*>(malloc(count * sizeof(T)));
+            }
+            return array;
         }
 
         inline void release() {
@@ -387,15 +410,23 @@ namespace troy { namespace utils {
         }
         __host__ __device__ const T& operator[](size_t index) const { return pointer[index]; }
         __host__ __device__ T& operator[](size_t index) { return pointer[index]; }
-        __host__ __device__ Pointer<T> at(size_t index) { return Pointer<T>(pointer + index, device, memory_pool_handle_); }
-        __host__ __device__ ConstPointer<T> const_at(size_t index) const { return ConstPointer<T>(pointer + index, device, memory_pool_handle_); }
+        __host__ Pointer<T> at(size_t index) { return Pointer<T>(pointer + index, device, memory_pool_handle_.get()); }
+        __host__ ConstPointer<T> const_at(size_t index) const { return ConstPointer<T>(pointer + index, device, memory_pool_handle_.get()); }
+        __host__ __device__ Pointer<T> detached_at(size_t index) { return Pointer<T>(pointer + index, device, nullptr); }
+        __host__ __device__ ConstPointer<T> detached_const_at(size_t index) const { return ConstPointer<T>(pointer + index, device, nullptr); }
 
         inline Array clone(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            Array cloned(len, device, device ? pool : nullptr);
+            Array cloned;
+            cloned.len = len;
+            cloned.memory_pool_handle_ = pool;
+            cloned.device = device;
             if (pointer && len > 0) {
                 if (device) {
+                    if (!pool) throw std::runtime_error("[Array::clone] Memory pool handle is required for device memory");
+                    cloned.pointer = kernel_provider::malloc<T>(*pool, len);
                     kernel_provider::copy_device_to_device(*pool, cloned.pointer, pointer, len);
                 } else {
+                    cloned.pointer = reinterpret_cast<T*>(malloc(len * sizeof(T)));
                     memcpy(cloned.pointer, pointer, len * sizeof(T));
                 }
             }
@@ -404,7 +435,11 @@ namespace troy { namespace utils {
 
         inline Array to_host() const {
             if (!device) return this->clone(nullptr);
-            Array cloned(len, false, nullptr);
+            Array cloned;
+            cloned.len = len;
+            cloned.device = false;
+            cloned.memory_pool_handle_ = nullptr;
+            cloned.pointer = reinterpret_cast<T*>(malloc(len * sizeof(T)));
             if (len > 0) {
                 if (!memory_pool_handle_) throw std::runtime_error("[Array::to_host] Memory pool handle is required for device memory");
                 kernel_provider::copy_device_to_host(*memory_pool_handle_, cloned.pointer, pointer, len);
@@ -415,7 +450,11 @@ namespace troy { namespace utils {
         inline Array to_device(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             if (!pool) throw std::runtime_error("[Array::to_device] Memory pool handle is required for device memory");
             if (device) return this->clone(pool);
-            Array cloned(len, true, pool);
+            Array cloned;
+            cloned.len = len;
+            cloned.device = true;
+            cloned.memory_pool_handle_ = pool;
+            cloned.pointer = kernel_provider::malloc<T>(*pool, len);
             if (len > 0) {
                 kernel_provider::copy_host_to_device(*pool, cloned.pointer, pointer, len);
             }

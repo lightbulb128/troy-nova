@@ -16,6 +16,7 @@ namespace troy {
         ContextDataPointer get_context_data(const char* prompt, const ParmsID& encrypted) const;
 
         void translate_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, bool subtract, MemoryPoolHandle pool) const;
+        void translate(const Ciphertext& encrypted1, const Ciphertext& encrypted2, Ciphertext& destination, bool subtract, MemoryPoolHandle pool) const;
         
         void bfv_multiply_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool) const;
         void ckks_multiply_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool) const;
@@ -53,10 +54,10 @@ namespace troy {
         void negate_inplace(Ciphertext& encrypted) const;
         inline void negate(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             destination = encrypted.clone(pool);
-            negate_inplace(destination);
+            negate_inplace(destination); // TODO: remove clone here
         }
         inline Ciphertext negate_new(const Ciphertext& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            Ciphertext destination = encrypted.clone(pool);
+            Ciphertext destination = encrypted.clone(pool);  // TODO: remove clone here
             negate_inplace(destination);
             return destination;
         }
@@ -65,8 +66,7 @@ namespace troy {
             translate_inplace(encrypted1, encrypted2, false, pool);
         }
         inline void add(const Ciphertext& encrypted1, const Ciphertext& encrypted2, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            destination = encrypted1.clone(pool);
-            add_inplace(destination, encrypted2, pool);
+            translate(encrypted1, encrypted2, destination, false, pool);
         }
         inline Ciphertext add_new(const Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;
@@ -78,8 +78,7 @@ namespace troy {
             translate_inplace(encrypted1, encrypted2, true, pool);
         }
         inline void sub(const Ciphertext& encrypted1, const Ciphertext& encrypted2, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            destination = encrypted1.clone(pool);
-            sub_inplace(destination, encrypted2);
+            translate(encrypted1, encrypted2, destination, true, pool);
         }
         inline Ciphertext sub_new(const Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;

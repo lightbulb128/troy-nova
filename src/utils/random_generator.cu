@@ -108,10 +108,8 @@ namespace troy {namespace utils {
             throw std::runtime_error("[RandomGenerator::sample_poly_ternary] destination and modulus must be on the same device");
         }
         if (!device) {
-            Array<uint8_t> buffer(degree, false, nullptr); 
-            this->fill_bytes(buffer.reference());
             for (size_t j = 0; j < degree; j++) {
-                uint8_t r = buffer[j] % 3;
+                uint8_t r = host_generate_uint128(this->seed, this->counter).low % 3;
                 for (size_t i = 0; i < moduli.size(); i++) {
                     size_t index = i * degree + j;
                     if (r == 2) {
@@ -171,10 +169,8 @@ namespace troy {namespace utils {
             throw std::runtime_error("[RandomGenerator::sample_poly_centered_binomial] destination and modulus must be on the same device");
         }
         if (!device) {
-            Array<uint64_t> buffer(degree, false, nullptr);
-            this->fill_uint64s(buffer.reference());
             for (size_t j = 0; j < degree; j++) {
-                int r = uint64_to_cbd(buffer[j]);
+                int r = uint64_to_cbd(host_generate_uint128(this->seed, this->counter).low);
                 for (size_t i = 0; i < moduli.size(); i++) {
                     size_t index = i * degree + j;
                     if (r >= 0) {

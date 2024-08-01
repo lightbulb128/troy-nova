@@ -2,20 +2,44 @@
 
 namespace troy {
 
-    void Ciphertext::resize_internal(size_t polynomial_count, size_t coeff_modulus_size, size_t poly_modulus_degree) {
+    Ciphertext Ciphertext::like(const Ciphertext& other, size_t polynomial_count, bool fill_zeros, MemoryPoolHandle pool) {
+        if (polynomial_count < utils::HE_CIPHERTEXT_SIZE_MIN || polynomial_count > utils::HE_CIPHERTEXT_SIZE_MAX) {
+            throw std::invalid_argument("[Ciphertext::like] Polynomial count is invalid.");
+        }
+        Ciphertext ret;
+        ret.polynomial_count_ = polynomial_count;
+        ret.coeff_modulus_size_ = other.coeff_modulus_size();
+        ret.poly_modulus_degree_ = other.poly_modulus_degree();
+        ret.parms_id_ = other.parms_id();
+        ret.scale_ = other.scale();
+        ret.is_ntt_form_ = other.is_ntt_form();
+        ret.correction_factor_ = other.correction_factor();
+        size_t data_size = polynomial_count * other.coeff_modulus_size() * other.poly_modulus_degree();
+        ret.data_ = utils::DynamicArray<uint64_t>::create_uninitialized(data_size, other.on_device(), pool);
+        if (fill_zeros) {
+            ret.data().reference().set_zero();
+        }
+        return ret;
+    }
+
+    void Ciphertext::resize_internal(size_t polynomial_count, size_t coeff_modulus_size, size_t poly_modulus_degree, bool fill_extra_with_zeros) {
         if (polynomial_count < utils::HE_CIPHERTEXT_SIZE_MIN || polynomial_count > utils::HE_CIPHERTEXT_SIZE_MAX) {
             throw std::invalid_argument("[Ciphertext::resize_internal] Polynomial count is invalid.");
         }
 
         size_t data_size = polynomial_count * coeff_modulus_size * poly_modulus_degree;
-        this->data_.resize(data_size);
+        if (fill_extra_with_zeros) {
+            this->data_.resize(data_size);
+        } else {
+            this->data_.resize_uninitialized(data_size);
+        }
 
         this->polynomial_count_ = polynomial_count;
         this->coeff_modulus_size_ = coeff_modulus_size;
         this->poly_modulus_degree_ = poly_modulus_degree;
     }
     
-    void Ciphertext::resize(HeContextPointer context, const ParmsID& parms_id, size_t polynomial_count) {
+    void Ciphertext::resize(HeContextPointer context, const ParmsID& parms_id, size_t polynomial_count, bool fill_extra_with_zeros) {
         if (!context->parameters_set()) {
             throw std::invalid_argument("[Ciphertext::resize] Context is not set correctly.");
         }
@@ -26,7 +50,24 @@ namespace troy {
         ContextDataPointer context_data = context_data_opt.value();
         const EncryptionParameters &parms = context_data->parms();
         this->parms_id_ = parms_id;
-        this->resize_internal(polynomial_count, parms.coeff_modulus().size(), parms.poly_modulus_degree());
+        this->resize_internal(polynomial_count, parms.coeff_modulus().size(), parms.poly_modulus_degree(), fill_extra_with_zeros);
+    }
+
+    void Ciphertext::reconfigure_like(HeContextPointer context, const Ciphertext& other, size_t polynomial_count, bool fill_extra_with_zeros) {
+        if (!context->parameters_set()) {
+            throw std::invalid_argument("[Ciphertext::resize] Context is not set correctly.");
+        }
+        std::optional<ContextDataPointer> context_data_opt = context->get_context_data(other.parms_id());
+        if (!context_data_opt.has_value()) {
+            throw std::invalid_argument("[Ciphertext::resize] ParmsID is not valid.");
+        }
+        ContextDataPointer context_data = context_data_opt.value();
+        const EncryptionParameters &parms = context_data->parms();
+        this->parms_id_ = other.parms_id();
+        this->resize_internal(polynomial_count, parms.coeff_modulus().size(), parms.poly_modulus_degree(), fill_extra_with_zeros);
+        this->correction_factor_ = other.correction_factor();
+        this->scale_ = other.scale();
+        this->is_ntt_form_ = other.is_ntt_form();
     }
     
     bool Ciphertext::is_transparent() const {

@@ -7,6 +7,27 @@ namespace troy {namespace utils {
     class DynamicArray {
         Array<T> inner;
 
+        void resize_internal(size_t new_size, bool fill_extra_with_zeros) {
+            if (new_size == this->inner.size()) {
+                return;
+            }
+            Array<T> new_inner;
+            new_inner.len = new_size;
+            new_inner.device = this->inner.device;
+            new_inner.memory_pool_handle_ = this->inner.memory_pool_handle_;
+            if (new_size > 0) {
+                if (this->inner.device) {
+                    new_inner.pointer = kernel_provider::malloc<T>(*this->inner.memory_pool_handle_, new_size);
+                } else {
+                    new_inner.pointer = reinterpret_cast<T*>(std::malloc(new_size * sizeof(T)));
+                }
+                size_t copy_length = std::min(this->inner.size(), new_size);
+                new_inner.slice(0, copy_length).copy_from_slice(this->inner.const_slice(0, copy_length));
+                if (fill_extra_with_zeros && new_size > copy_length) new_inner.slice(copy_length, new_size).set_zero();
+            }
+            this->inner = std::move(new_inner);
+        }
+
     public:
 
         MemoryPoolHandle pool() const { return inner.pool(); }
@@ -14,6 +35,13 @@ namespace troy {namespace utils {
 
         DynamicArray() : inner() {}
         DynamicArray(size_t count, bool device, MemoryPoolHandle pool = MemoryPool::GlobalPool()) : inner(count, device, pool) {}
+
+        // In contrast to the constructor, this does not fill the array with zeros
+        static DynamicArray<T> create_uninitialized(size_t count, bool device, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+            DynamicArray<T> result;
+            result.inner = Array<T>::create_uninitialized(count, device, pool);
+            return result;
+        }
 
         // move constructor
         DynamicArray(DynamicArray&& other) : inner(std::move(other.inner)) {}
@@ -153,13 +181,11 @@ namespace troy {namespace utils {
         }
 
         void resize(size_t new_size) {
-            if (new_size == this->inner.size()) {
-                return;
-            }
-            Array<T> new_inner(new_size, this->on_device(), this->inner.pool());
-            size_t copy_length = std::min(this->inner.size(), new_size);
-            new_inner.slice(0, copy_length).copy_from_slice(this->inner.const_slice(0, copy_length));
-            this->inner = std::move(new_inner);
+            resize_internal(new_size, true);
+        }
+
+        void resize_uninitialized(size_t new_size) {
+            resize_internal(new_size, false);
         }
 
         inline T* raw_pointer() {
