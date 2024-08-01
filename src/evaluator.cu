@@ -147,6 +147,17 @@ namespace troy {
         utils::negate_inplace_ps(encrypted.data().reference(), poly_count, poly_degree, coeff_modulus);
     }
 
+    void Evaluator::negate(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool) const {
+        check_ciphertext("[Evaluator::negate]", encrypted);
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::negate]", encrypted.parms_id());
+        const EncryptionParameters& parms = context_data->parms();
+        ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
+        destination = Ciphertext::like(encrypted, false, pool);
+        size_t poly_count = encrypted.polynomial_count();
+        size_t poly_degree = parms.poly_modulus_degree();
+        utils::negate_ps(encrypted.data().const_reference(), poly_count, poly_degree, coeff_modulus, destination.data().reference());
+    }
+
     void Evaluator::translate(const Ciphertext& encrypted1, const Ciphertext& encrypted2, Ciphertext& destination, bool subtract, MemoryPoolHandle pool) const {
         check_ciphertext("[Evaluator::translate_inplace]", encrypted1);
         check_ciphertext("[Evaluator::translate_inplace]", encrypted2);

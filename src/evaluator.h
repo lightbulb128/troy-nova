@@ -52,13 +52,10 @@ namespace troy {
         inline bool on_device() const {return this->context()->on_device();}
 
         void negate_inplace(Ciphertext& encrypted) const;
-        inline void negate(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            destination = encrypted.clone(pool);
-            negate_inplace(destination); // TODO: remove clone here
-        }
+        void negate(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline Ciphertext negate_new(const Ciphertext& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            Ciphertext destination = encrypted.clone(pool);  // TODO: remove clone here
-            negate_inplace(destination);
+            Ciphertext destination;
+            negate(encrypted, destination, pool);
             return destination;
         }
 
