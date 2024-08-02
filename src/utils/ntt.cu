@@ -119,13 +119,23 @@ namespace troy {namespace utils {
     }
 
     void ntt_transfer_to_rev_inplace(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers) {
-        if constexpr (NTT_USE_COOPERATIVE) fgk::ntt_cooperative::ntt(operand, pcount, log_degree, tables, use_inv_root_powers);
+        if constexpr (NTT_USE_COOPERATIVE) fgk::ntt_cooperative::ntt_inplace(operand, pcount, log_degree, tables, use_inv_root_powers);
         else fgk::ntt_grouped::ntt_inplace(operand, pcount, log_degree, tables, use_inv_root_powers);
     }
 
     void ntt_transfer_from_rev_inplace(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers) {
-        if constexpr (NTT_USE_COOPERATIVE) fgk::ntt_cooperative::intt(operand, pcount, log_degree, tables, use_inv_root_powers);
+        if constexpr (NTT_USE_COOPERATIVE) fgk::ntt_cooperative::intt_inplace(operand, pcount, log_degree, tables, use_inv_root_powers);
         else fgk::ntt_grouped::intt_inplace(operand, pcount, log_degree, tables, use_inv_root_powers);
+    }
+
+    void ntt_transfer_to_rev(ConstSlice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers, Slice<uint64_t> result) {
+        if constexpr (NTT_USE_COOPERATIVE) fgk::ntt_cooperative::ntt(operand, pcount, log_degree, tables, use_inv_root_powers, result);
+        else fgk::ntt_grouped::ntt(operand, pcount, log_degree, tables, use_inv_root_powers, result);
+    }
+
+    void ntt_transfer_from_rev(ConstSlice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers, Slice<uint64_t> result) {
+        if constexpr (NTT_USE_COOPERATIVE) fgk::ntt_cooperative::intt(operand, pcount, log_degree, tables, use_inv_root_powers, result);
+        else fgk::ntt_grouped::intt(operand, pcount, log_degree, tables, use_inv_root_powers, result);
     }
 
     void host_ntt_transfer_last_reduce(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables) {

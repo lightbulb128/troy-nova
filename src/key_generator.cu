@@ -48,7 +48,7 @@ namespace troy {
         rng.sample_poly_ternary(sk.poly(), coeff_count, coeff_modulus);
 
         ConstSlice<NTTTables> ntt_tables = context_data->small_ntt_tables();
-        utils::ntt_negacyclic_harvey_p(
+        utils::ntt_inplace_p(
             sk.poly(), coeff_count, ntt_tables
         );
 

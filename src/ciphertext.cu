@@ -246,7 +246,7 @@ namespace troy {
         if (is_ntt_form_) {
             utils::ConstSlice<utils::NTTTables> ntt_tables = context->get_context_data(this->parms_id()).value()->small_ntt_tables();
             temp_buffer = utils::Array<uint64_t>::create_and_copy_from_slice(this->poly(0), pool);
-            utils::inverse_ntt_negacyclic_harvey_p(temp_buffer.reference(), this->poly_modulus_degree(), ntt_tables);
+            utils::intt_inplace_p(temp_buffer.reference(), this->poly_modulus_degree(), ntt_tables);
             temp_buffer.to_host_inplace();
             c0 = temp_buffer.const_reference();
         } else {
@@ -332,7 +332,7 @@ namespace troy {
         if (device) this->data().to_device_inplace(pool);
         if (is_ntt_form_) {
             utils::ConstSlice<utils::NTTTables> ntt_tables = context->get_context_data(this->parms_id()).value()->small_ntt_tables();
-            utils::ntt_negacyclic_harvey_p(this->poly(0), this->poly_modulus_degree(), ntt_tables);
+            utils::ntt_inplace_p(this->poly(0), this->poly_modulus_degree(), ntt_tables);
         }
         // expand seed
         if (contains_seed) this->expand_seed(context);

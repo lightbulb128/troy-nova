@@ -181,7 +181,7 @@ namespace troy {
         if (device != context_data->on_device()) {
             throw std::invalid_argument("[BatchEncoder::encode_slice] Context and destination must reside on same device.");
         }
-        utils::inverse_ntt_negacyclic_harvey(
+        utils::intt_inplace(
             destination.poly(),
             slots,
             context_data->plain_ntt_tables()
@@ -304,7 +304,7 @@ namespace troy {
         if (device != context_data->on_device()) {
             throw std::invalid_argument("[BatchEncoder::decode] Context and destination must reside on same device.");
         }
-        utils::ntt_negacyclic_harvey(
+        utils::ntt_inplace(
             temp_dest.reference(),
             slots,
             context_data->plain_ntt_tables()

@@ -257,10 +257,7 @@ namespace troy {
         }
 
         void transform_to_ntt_inplace(Ciphertext& encrypted) const;
-        inline void transform_to_ntt(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            destination = encrypted.clone(pool);
-            transform_to_ntt_inplace(destination);
-        }
+        void transform_to_ntt(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline Ciphertext transform_to_ntt_new(const Ciphertext& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;
             transform_to_ntt(encrypted, destination, pool);
@@ -268,10 +265,7 @@ namespace troy {
         }
 
         void transform_from_ntt_inplace(Ciphertext& encrypted) const;
-        inline void transform_from_ntt(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            destination = encrypted.clone(pool);
-            transform_from_ntt_inplace(destination);
-        }
+        void transform_from_ntt(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline Ciphertext transform_from_ntt_new(const Ciphertext& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;
             transform_from_ntt(encrypted, destination, pool);

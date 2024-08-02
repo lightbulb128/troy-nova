@@ -60,7 +60,7 @@ namespace troy {namespace rlwe {
         u_prng.sample_poly_ternary(u.reference(), coeff_count, coeff_modulus);
         
         // c[j] = u * public_key[j]
-        utils::ntt_negacyclic_harvey_p(u.reference(), coeff_count, ntt_tables);
+        utils::ntt_inplace_p(u.reference(), coeff_count, ntt_tables);
         for (size_t j = 0; j < encrypted_size; j++) {
             utils::dyadic_product_p(
                 u.const_reference(),
@@ -70,7 +70,7 @@ namespace troy {namespace rlwe {
             );
         }
         if (!is_ntt_form) {
-            utils::inverse_ntt_negacyclic_harvey_ps(destination.data().reference(), encrypted_size, coeff_count, ntt_tables);
+            utils::intt_inplace_ps(destination.data().reference(), encrypted_size, coeff_count, ntt_tables);
         }
 
         // Create e[j] <-- chi
@@ -79,7 +79,7 @@ namespace troy {namespace rlwe {
             // Reuse u as e
             context_prng.sample_poly_centered_binomial(u.reference(), coeff_count, coeff_modulus); 
             if (is_ntt_form) {
-                utils::ntt_negacyclic_harvey_p(u.reference(), coeff_count, ntt_tables);
+                utils::ntt_inplace_p(u.reference(), coeff_count, ntt_tables);
             }
             if (scheme_type == SchemeType::BGV) {
                 utils::multiply_scalar_inplace_p(
@@ -164,7 +164,7 @@ namespace troy {namespace rlwe {
             // Sample non-NTT form and store the seed
             c1_new_prng.sample_poly_uniform(destination.poly(1), coeff_count, coeff_modulus);
             // Transform the c1 into NTT representation
-            utils::ntt_negacyclic_harvey_p(destination.poly(1), coeff_count, ntt_tables);
+            utils::ntt_inplace_p(destination.poly(1), coeff_count, ntt_tables);
         }
         if (save_seed) {
             destination.seed() = seed;
@@ -184,9 +184,9 @@ namespace troy {namespace rlwe {
 
         if (is_ntt_form) {
             // Transform the noise e into NTT representation
-            utils::ntt_negacyclic_harvey_p(noise.reference(), coeff_count, ntt_tables);
+            utils::ntt_inplace_p(noise.reference(), coeff_count, ntt_tables);
         } else {
-            utils::inverse_ntt_negacyclic_harvey_p(destination.poly(0), coeff_count, ntt_tables);
+            utils::intt_inplace_p(destination.poly(0), coeff_count, ntt_tables);
         }
         if (scheme_type == SchemeType::BGV) {
             utils::multiply_scalar_inplace_p(
@@ -204,7 +204,7 @@ namespace troy {namespace rlwe {
 
         if (!is_ntt_form && !save_seed) {
             // Transform the c1 into non-NTT representation
-            utils::inverse_ntt_negacyclic_harvey_p(destination.poly(1), coeff_count, ntt_tables);
+            utils::intt_inplace_p(destination.poly(1), coeff_count, ntt_tables);
         }
     }
 

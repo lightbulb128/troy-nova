@@ -764,7 +764,7 @@ namespace troy {
         set_plaintext_value_array(context_data, coeff_count, real_values.const_reference(), coeff_modulus, destination, pool);
         
         // Transform to NTT domain
-        utils::ntt_negacyclic_harvey_p(destination.poly(), coeff_count, ntt_tables);
+        utils::ntt_inplace_p(destination.poly(), coeff_count, ntt_tables);
 
         destination.parms_id() = parms_id;
         destination.scale() = scale;
@@ -838,7 +838,7 @@ namespace troy {
         set_plaintext_value_array(context_data, coeff_count, real_values.const_reference(), coeff_modulus, destination, pool);
 
         // Transform to NTT domain
-        utils::ntt_negacyclic_harvey_p(destination.poly(), coeff_count, ntt_tables);
+        utils::ntt_inplace_p(destination.poly(), coeff_count, ntt_tables);
 
         destination.parms_id() = parms_id;
         destination.scale() = scale;
@@ -1033,7 +1033,7 @@ namespace troy {
         );
 
         // Transform to NTT domain
-        utils::ntt_negacyclic_harvey_p(destination.poly(), coeff_count, ntt_tables);
+        utils::ntt_inplace_p(destination.poly(), coeff_count, ntt_tables);
 
         destination.parms_id() = parms_id;
         destination.scale() = 1.0;
@@ -1079,7 +1079,7 @@ namespace troy {
         );
 
         // Transform to NTT domain
-        utils::ntt_negacyclic_harvey_p(destination.poly(), coeff_count, ntt_tables);
+        utils::ntt_inplace_p(destination.poly(), coeff_count, ntt_tables);
 
         destination.parms_id() = parms_id;
         destination.scale() = 1.0;
@@ -1201,7 +1201,7 @@ namespace troy {
 
         // Transform each polynomial from NTT domain
         ConstSlice<utils::NTTTables> ntt_tables = context_data->small_ntt_tables();
-        utils::inverse_ntt_negacyclic_harvey_p(plain_copy.reference(), coeff_count, ntt_tables);
+        utils::intt_inplace_p(plain_copy.reference(), coeff_count, ntt_tables);
 
         // CRT-compose the polynomial
         context_data->rns_tool().base_q().compose_array(plain_copy.reference(), pool);
@@ -1273,7 +1273,7 @@ namespace troy {
 
         // Transform each polynomial from NTT domain
         ConstSlice<utils::NTTTables> ntt_tables = context_data->small_ntt_tables();
-        utils::inverse_ntt_negacyclic_harvey_p(plain_copy.reference(), coeff_count, ntt_tables);
+        utils::intt_inplace_p(plain_copy.reference(), coeff_count, ntt_tables);
 
         // CRT-compose the polynomial
         context_data->rns_tool().base_q().compose_array(plain_copy.reference(), pool);

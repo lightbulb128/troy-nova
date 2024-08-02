@@ -56,9 +56,9 @@ namespace troy {
                 utils::add_inplace_p(destination, c0, coeff_count, coeff_modulus);
             } else {
                 destination.copy_from_slice(c1);
-                utils::ntt_negacyclic_harvey_p(destination, coeff_count, ntt_tables);
+                utils::ntt_inplace_p(destination, coeff_count, ntt_tables);
                 utils::dyadic_product_inplace_p(destination, s, coeff_count, coeff_modulus);
-                utils::inverse_ntt_negacyclic_harvey_p(destination, coeff_count, ntt_tables);
+                utils::intt_inplace_p(destination, coeff_count, ntt_tables);
                 utils::add_inplace_p(destination, c0, coeff_count, coeff_modulus);
             }
         } else {
@@ -66,7 +66,7 @@ namespace troy {
             size_t key_poly_coeff_count = coeff_count * key_coeff_modulus_size;
             Array<uint64_t> encrypted_copy = Array<uint64_t>::create_and_copy_from_slice(encrypted.data().const_slice(poly_coeff_count, encrypted_size * poly_coeff_count), pool);
             if (!is_ntt_form) {
-                utils::ntt_negacyclic_harvey_ps(encrypted_copy.reference(), encrypted_size - 1, coeff_count, ntt_tables);
+                utils::ntt_inplace_ps(encrypted_copy.reference(), encrypted_size - 1, coeff_count, ntt_tables);
             }
             for (size_t i = 0; i < encrypted_size - 1; i++) {
                 utils::dyadic_product_inplace_p(
@@ -82,7 +82,7 @@ namespace troy {
                     coeff_count, coeff_modulus);
             }
             if (!is_ntt_form) {
-                utils::inverse_ntt_negacyclic_harvey_p(destination, coeff_count, ntt_tables);
+                utils::intt_inplace_p(destination, coeff_count, ntt_tables);
             }
             utils::add_inplace_p(destination, encrypted.poly(0), coeff_count, coeff_modulus);
         }
@@ -226,7 +226,7 @@ namespace troy {
         destination.parms_id() = parms_id_zero;
         destination.resize(coeff_count);
 
-        utils::inverse_ntt_negacyclic_harvey_p(tmp_dest_modq.reference(), coeff_count, context_data->small_ntt_tables());
+        utils::intt_inplace_p(tmp_dest_modq.reference(), coeff_count, context_data->small_ntt_tables());
 
         scaling_variant::decentralize(tmp_dest_modq, context_data, destination.poly(), encrypted.correction_factor(), pool);
 
@@ -291,7 +291,7 @@ namespace troy {
 
         if (encrypted.is_ntt_form()) {
             // In the case of NTT form, we need to transform the noise to normal form
-            utils::inverse_ntt_negacyclic_harvey_p(noise_poly.reference(), coeff_count, context_data->small_ntt_tables());
+            utils::intt_inplace_p(noise_poly.reference(), coeff_count, context_data->small_ntt_tables());
         }
 
         // Multiply by plain_modulus and reduce mod coeff_modulus to get

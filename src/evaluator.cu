@@ -1,6 +1,7 @@
 #include "encryption_parameters.h"
 #include "evaluator.h"
 #include "utils/dynamic_array.h"
+#include "utils/memory_pool.h"
 #include "utils/polynomial_buffer.h"
 #include <thread>
 
@@ -309,7 +310,7 @@ namespace troy {
         // Make copy of input polynomial (in base q) and convert to NTT form
         encrypted1_q.copy_from_slice(encrypted1.const_polys(0, encrypted1_size));
         // Lazy reduction
-        utils::ntt_negacyclic_harvey_lazy_ps(encrypted1_q.reference(), encrypted1_size, coeff_count, base_q_ntt_tables);
+        utils::ntt_lazy_inplace_ps(encrypted1_q.reference(), encrypted1_size, coeff_count, base_q_ntt_tables);
         // Allocate temporary space for a polynomial in the Bsk U {m_tilde} base
         Buffer<uint64_t> temp(base_Bsk_m_tilde_size, coeff_count, device, pool);
         for (size_t i = 0; i < encrypted1_size; i++) {
@@ -319,18 +320,18 @@ namespace troy {
             rns_tool.sm_mrq(temp.const_reference(), encrypted1_Bsk.poly(i));
         }
         // Transform to NTT form in base Bsk
-        utils::ntt_negacyclic_harvey_lazy_ps(encrypted1_Bsk.reference(), encrypted1_size, coeff_count, base_Bsk_ntt_tables);
+        utils::ntt_lazy_inplace_ps(encrypted1_Bsk.reference(), encrypted1_size, coeff_count, base_Bsk_ntt_tables);
 
         // Repeat for encrypted2
         Buffer<uint64_t> encrypted2_q(encrypted2_size, base_q_size, coeff_count, device, pool);
         Buffer<uint64_t> encrypted2_Bsk(encrypted2_size, base_Bsk_size, coeff_count, device, pool);
         encrypted2_q.copy_from_slice(encrypted2.polys(0, encrypted2_size));
-        utils::ntt_negacyclic_harvey_lazy_ps(encrypted2_q.reference(), encrypted2_size, coeff_count, base_q_ntt_tables);
+        utils::ntt_lazy_inplace_ps(encrypted2_q.reference(), encrypted2_size, coeff_count, base_q_ntt_tables);
         for (size_t i = 0; i < encrypted2_size; i++) {
             rns_tool.fast_b_conv_m_tilde(encrypted2.poly(i), temp.reference(), pool);
             rns_tool.sm_mrq(temp.const_reference(), encrypted2_Bsk.poly(i));
         }
-        utils::ntt_negacyclic_harvey_lazy_ps(encrypted2_Bsk.reference(), encrypted2_size, coeff_count, base_Bsk_ntt_tables);
+        utils::ntt_lazy_inplace_ps(encrypted2_Bsk.reference(), encrypted2_size, coeff_count, base_Bsk_ntt_tables);
 
         // Allocate temporary space for the output of step (4)
         // We allocate space separately for the base q and the base Bsk components
@@ -386,8 +387,8 @@ namespace troy {
 
         // Perform BEHZ step (5): transform data from NTT form
         // Lazy reduction here. The following multiplyPolyScalarCoeffmod will correct the value back to [0, p)
-        utils::inverse_ntt_negacyclic_harvey_ps(temp_dest_q.reference(), dest_size, coeff_count, base_q_ntt_tables);
-        utils::inverse_ntt_negacyclic_harvey_ps(temp_dest_Bsk.reference(), dest_size, coeff_count, base_Bsk_ntt_tables);
+        utils::intt_inplace_ps(temp_dest_q.reference(), dest_size, coeff_count, base_q_ntt_tables);
+        utils::intt_inplace_ps(temp_dest_Bsk.reference(), dest_size, coeff_count, base_Bsk_ntt_tables);
 
         // Perform BEHZ steps (6)-(8)
         Buffer<uint64_t> temp_q_Bsk(base_q_size + base_Bsk_size, coeff_count, device, pool);
@@ -608,7 +609,7 @@ namespace troy {
         // Make copy of input polynomial (in base q) and convert to NTT form
         encrypted_q.copy_from_slice(encrypted.const_polys(0, encrypted_size));
         // Lazy reduction
-        utils::ntt_negacyclic_harvey_lazy_ps(encrypted_q.reference(), encrypted_size, coeff_count, base_q_ntt_tables);
+        utils::ntt_lazy_inplace_ps(encrypted_q.reference(), encrypted_size, coeff_count, base_q_ntt_tables);
         // Allocate temporary space for a polynomial in the Bsk U {m_tilde} base
         Buffer<uint64_t> temp(base_Bsk_m_tilde_size, coeff_count, device, pool);
         for (size_t i = 0; i < encrypted_size; i++) {
@@ -618,7 +619,7 @@ namespace troy {
             rns_tool.sm_mrq(temp.const_reference(), encrypted_Bsk.poly(i));
         }
         // Transform to NTT form in base Bsk
-        utils::ntt_negacyclic_harvey_lazy_ps(encrypted_Bsk.reference(), encrypted_size, coeff_count, base_Bsk_ntt_tables);
+        utils::ntt_lazy_inplace_ps(encrypted_Bsk.reference(), encrypted_size, coeff_count, base_Bsk_ntt_tables);
 
         // Allocate temporary space for the output of step (4)
         // We allocate space separately for the base q and the base Bsk components
@@ -648,8 +649,8 @@ namespace troy {
         
         // Perform BEHZ step (5): transform data from NTT form
         // Lazy reduction here. The following multiplyPolyScalarCoeffmod will correct the value back to [0, p)
-        utils::inverse_ntt_negacyclic_harvey_ps(temp_dest_q.reference(), dest_size, coeff_count, base_q_ntt_tables);
-        utils::inverse_ntt_negacyclic_harvey_ps(temp_dest_Bsk.reference(), dest_size, coeff_count, base_Bsk_ntt_tables);
+        utils::intt_inplace_ps(temp_dest_q.reference(), dest_size, coeff_count, base_q_ntt_tables);
+        utils::intt_inplace_ps(temp_dest_Bsk.reference(), dest_size, coeff_count, base_Bsk_ntt_tables);
 
         // Perform BEHZ steps (6)-(8)
         Buffer<uint64_t> temp_q_Bsk(base_q_size + base_Bsk_size, coeff_count, device, pool);
@@ -1069,7 +1070,7 @@ namespace troy {
                 // delta = c + k * q_k mod q_i
                 // c_{i} = c_{i} - delta mod q_i
                 utils::add_inplace(delta, c_mod_qi.as_const(), key_modulus.at(j));
-                utils::ntt_negacyclic_harvey(delta, coeff_count, key_ntt_tables.at(j));
+                utils::ntt_inplace(delta, coeff_count, key_ntt_tables.at(j));
                 Slice<uint64_t> t_poly_prod_i_comp_j = t_poly_prod_i.slice(j * coeff_count, (j + 1) * coeff_count);
                 utils::sub_inplace(t_poly_prod_i_comp_j, delta.as_const(), key_modulus.at(j));
                 utils::multiply_uint64operand_inplace(t_poly_prod_i_comp_j, modswitch_factors.at(j), key_modulus.at(j));
@@ -1086,7 +1087,7 @@ namespace troy {
                 delta.reference()
             );
             utils::stream_sync();
-            utils::ntt_negacyclic_harvey_p(delta.reference(), coeff_count, key_ntt_tables.const_slice(0, decomp_modulus_size));
+            utils::ntt_inplace_p(delta.reference(), coeff_count, key_ntt_tables.const_slice(0, decomp_modulus_size));
             utils::set_device(t_poly_prod_i.device_index());
             kernel_ski_util5_step2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_poly_prod_i, coeff_count, key_modulus, 
@@ -1255,7 +1256,7 @@ namespace troy {
 
         // If target is in NTT form; switch back to normal form
         if (is_ntt_form) {
-            utils::inverse_ntt_negacyclic_harvey_p(
+            utils::intt_inplace_p(
                 target_copied.reference(), coeff_count, key_ntt_tables.const_slice(0, decomp_modulus_size)
             );
         }
@@ -1288,7 +1289,7 @@ namespace troy {
                     } else {
                         utils::modulo(target_copied.const_slice(j * coeff_count, (j + 1) * coeff_count), key_modulus.at(key_index), temp_ntt.reference());
                     }
-                    utils::ntt_negacyclic_harvey_lazy(temp_ntt.reference(), coeff_count, key_ntt_tables.at(key_index));
+                    utils::ntt_lazy_inplace(temp_ntt.reference(), coeff_count, key_ntt_tables.at(key_index));
                     temp_operand = temp_ntt.const_reference();
                 }
                 
@@ -1345,7 +1346,7 @@ namespace troy {
                 // Lazy reduction; this needs to be then reduced mod qi
                 size_t t_last_offset = coeff_count * rns_modulus_size * i + decomp_modulus_size * coeff_count;
                 Slice<uint64_t> t_last = poly_prod.slice(t_last_offset, t_last_offset + coeff_count);
-                utils::inverse_ntt_negacyclic_harvey(t_last, coeff_count, key_ntt_tables.at(key_modulus_size - 1));
+                utils::intt_inplace(t_last, coeff_count, key_ntt_tables.at(key_modulus_size - 1));
                 ConstPointer<Modulus> plain_modulus = parms.plain_modulus();
 
                 ski_util5(
@@ -1360,7 +1361,7 @@ namespace troy {
                 size_t t_last_offset = coeff_count * rns_modulus_size * i + decomp_modulus_size * coeff_count;
                 Slice<uint64_t> t_last = poly_prod.slice(t_last_offset, t_last_offset + coeff_count);
                 temp_ntt.set_zero();
-                utils::inverse_ntt_negacyclic_harvey(t_last, coeff_count, key_ntt_tables.at(key_modulus_size - 1));
+                utils::intt_inplace(t_last, coeff_count, key_ntt_tables.at(key_modulus_size - 1));
 
                 ski_util6(
                     t_last, coeff_count, key_modulus.at(key_modulus_size - 1),
@@ -1370,9 +1371,9 @@ namespace troy {
                 );
                 
                 if (is_ntt_form) {
-                    utils::ntt_negacyclic_harvey_lazy_p(temp_ntt.reference(), coeff_count, key_ntt_tables.const_slice(0, decomp_modulus_size));
+                    utils::ntt_lazy_inplace_p(temp_ntt.reference(), coeff_count, key_ntt_tables.const_slice(0, decomp_modulus_size));
                 } else {
-                    utils::inverse_ntt_negacyclic_harvey_p(
+                    utils::intt_inplace_p(
                         poly_prod.slice(
                             i * coeff_count * rns_modulus_size, 
                             i * coeff_count * rns_modulus_size + decomp_modulus_size * coeff_count
@@ -1764,12 +1765,12 @@ namespace troy {
 
         // Need to multiply each component in encrypted with temp; first step is to transform to NTT form
         // RNSIter temp_iter(temp.get(), coeff_count);
-        utils::ntt_negacyclic_harvey_p(temp.reference(), coeff_count, ntt_tables);
-        utils::ntt_negacyclic_harvey_lazy_ps(encrypted.polys(0, encrypted_size), encrypted_size, coeff_count, ntt_tables);
+        utils::ntt_inplace_p(temp.reference(), coeff_count, ntt_tables);
+        utils::ntt_lazy_inplace_ps(encrypted.polys(0, encrypted_size), encrypted_size, coeff_count, ntt_tables);
         for (size_t i = 0; i < encrypted_size; i++) {
             utils::dyadic_product_inplace_p(encrypted.poly(i), temp.const_reference(), coeff_count, coeff_modulus);
         }
-        utils::inverse_ntt_negacyclic_harvey_ps(encrypted.polys(0, encrypted_size), encrypted_size, coeff_count, ntt_tables);
+        utils::intt_inplace_ps(encrypted.polys(0, encrypted_size), encrypted_size, coeff_count, ntt_tables);
 
         if (parms.scheme() == SchemeType::CKKS) {
             encrypted.scale() = encrypted.scale() * plain.scale();
@@ -1853,7 +1854,7 @@ namespace troy {
             scaling_variant::centralize(plain, context_data, plain_copy.poly(), coeff_count, pool);
             plain = std::move(plain_copy);
 
-            utils::ntt_negacyclic_harvey_p(plain.poly(), coeff_count, ntt_tables);
+            utils::ntt_inplace_p(plain.poly(), coeff_count, ntt_tables);
             plain.is_ntt_form() = true;
             plain.coeff_modulus_size() = coeff_modulus_size;
             plain.poly_modulus_degree() = coeff_count;
@@ -1866,7 +1867,7 @@ namespace troy {
                 utils::scatter_partial_p(plain.const_poly(), plain.coeff_count(), coeff_count, coeff_modulus_size, cloned.poly());
                 plain = std::move(cloned);
             }
-            utils::ntt_negacyclic_harvey_p(plain.poly(), coeff_count, ntt_tables);
+            utils::ntt_inplace_p(plain.poly(), coeff_count, ntt_tables);
             plain.is_ntt_form() = true;
         }
     }
@@ -1885,7 +1886,7 @@ namespace troy {
         size_t coeff_count = parms.poly_modulus_degree();
         ConstSlice<NTTTables> ntt_tables = context_data->small_ntt_tables();
 
-        utils::inverse_ntt_negacyclic_harvey_p(plain.poly(), coeff_count, ntt_tables);
+        utils::intt_inplace_p(plain.poly(), coeff_count, ntt_tables);
         plain.is_ntt_form() = false;
     }
 
@@ -1896,12 +1897,29 @@ namespace troy {
         const EncryptionParameters& parms = context_data->parms();
         size_t coeff_count = parms.poly_modulus_degree();
         ConstSlice<NTTTables> ntt_tables = context_data->small_ntt_tables();
-        utils::ntt_negacyclic_harvey_ps(
+        utils::ntt_inplace_ps(
             encrypted.polys(0, encrypted.polynomial_count()), 
             encrypted.polynomial_count(), 
             coeff_count, ntt_tables
         );
         encrypted.is_ntt_form() = true;
+    }
+
+    void Evaluator::transform_to_ntt(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool) const {
+        check_no_seed("[Evaluator::transform_to_ntt]", encrypted);
+        check_is_not_ntt_form("[Evaluator::transform_to_ntt]", encrypted);
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::transform_to_ntt]", encrypted.parms_id());
+        const EncryptionParameters& parms = context_data->parms();
+        size_t coeff_count = parms.poly_modulus_degree();
+        destination = Ciphertext::like(encrypted, false, pool);
+        ConstSlice<NTTTables> ntt_tables = context_data->small_ntt_tables();
+        utils::ntt_ps(
+            encrypted.const_reference(),
+            encrypted.polynomial_count(), 
+            coeff_count, ntt_tables,
+            destination.reference()
+        );
+        destination.is_ntt_form() = true;
     }
 
     void Evaluator::transform_from_ntt_inplace(Ciphertext& encrypted) const {
@@ -1911,12 +1929,29 @@ namespace troy {
         const EncryptionParameters& parms = context_data->parms();
         size_t coeff_count = parms.poly_modulus_degree();
         ConstSlice<NTTTables> ntt_tables = context_data->small_ntt_tables();
-        utils::inverse_ntt_negacyclic_harvey_ps(
+        utils::intt_inplace_ps(
             encrypted.polys(0, encrypted.polynomial_count()), 
             encrypted.polynomial_count(), 
             coeff_count, ntt_tables
         );
         encrypted.is_ntt_form() = false;
+    }
+
+    void Evaluator::transform_from_ntt(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool) const {
+        check_no_seed("[Evaluator::transform_to_ntt_inplace]", encrypted);
+        check_is_ntt_form("[Evaluator::transform_to_ntt_inplace]", encrypted);
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::transform_to_ntt_inplace]", encrypted.parms_id());
+        const EncryptionParameters& parms = context_data->parms();
+        size_t coeff_count = parms.poly_modulus_degree();
+        destination = Ciphertext::like(encrypted, false, pool);
+        ConstSlice<NTTTables> ntt_tables = context_data->small_ntt_tables();
+        utils::intt_ps(
+            encrypted.const_reference(),
+            encrypted.polynomial_count(), 
+            coeff_count, ntt_tables,
+            destination.reference()
+        );
+        destination.is_ntt_form() = false;
     }
     
     void Evaluator::apply_galois_inplace(Ciphertext& encrypted, size_t galois_element, const GaloisKeys& galois_keys, MemoryPoolHandle pool) const {

@@ -576,7 +576,7 @@ namespace troy {namespace utils {
         size_t coeff_count = this->coeff_count();
         Slice<uint64_t> input_last = input.slice((base_q_size - 1) * coeff_count, base_q_size * coeff_count);
         
-        utils::inverse_ntt_negacyclic_harvey(input_last, coeff_count, rns_ntt_tables.at(base_q_size - 1));
+        utils::intt_inplace(input_last, coeff_count, rns_ntt_tables.at(base_q_size - 1));
         
         // Add (qi-1)/2 to change from flooring to rounding
         utils::add_scalar_inplace(input_last, this->q_last_half(), this->base_q().base().at(base_q_size - 1));
@@ -584,7 +584,7 @@ namespace troy {namespace utils {
         Array<uint64_t> temp(coeff_count * (base_q_size - 1), device, pool);
         divide_and_round_q_last_ntt_inplace_step1(*this, input, temp.reference());
         
-        utils::ntt_negacyclic_harvey_lazy_p(temp.reference(), coeff_count, rns_ntt_tables.const_slice(0, base_q_size - 1));
+        utils::ntt_lazy_inplace_p(temp.reference(), coeff_count, rns_ntt_tables.const_slice(0, base_q_size - 1));
     
         divide_and_round_q_last_ntt_inplace_step2(*this, input, temp.const_reference());
     }
@@ -1118,7 +1118,7 @@ namespace troy {namespace utils {
                     *modulus
                 );
             }
-            ntt_negacyclic_harvey(delta_mod_q_i.reference(), coeff_count, rns_ntt_tables.at(i));
+            ntt_inplace(delta_mod_q_i.reference(), coeff_count, rns_ntt_tables.at(i));
             //   then subtract them all
             for (size_t j = 0; j < coeff_count; j++) {
                 input[i * coeff_count + j] = sub_uint64_mod(
@@ -1196,7 +1196,7 @@ namespace troy {namespace utils {
                 delta_mod_q_i.reference()
             );
             utils::stream_sync();
-            utils::ntt_negacyclic_harvey_p(delta_mod_q_i.reference(), coeff_count, rns_ntt_tables.const_slice(0, base_q_size - 1));
+            utils::ntt_inplace_p(delta_mod_q_i.reference(), coeff_count, rns_ntt_tables.const_slice(0, base_q_size - 1));
             utils::set_device(input.device_index());
             kernel_mod_t_and_divide_q_last_ntt_inplace_step1_inner2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 self.base_q().base(),
@@ -1221,7 +1221,7 @@ namespace troy {namespace utils {
         size_t coeff_count = this->coeff_count();
 
         Slice<uint64_t> c_last = input.slice((modulus_size - 1) * coeff_count, modulus_size * coeff_count);
-        utils::inverse_ntt_negacyclic_harvey(c_last, coeff_count, rns_ntt_tables.at(modulus_size - 1));
+        utils::intt_inplace(c_last, coeff_count, rns_ntt_tables.at(modulus_size - 1));
         
         // neg_c_last_mod_t = - c_last (mod t)
         Array<uint64_t> neg_c_last_mod_t(coeff_count, device, pool);

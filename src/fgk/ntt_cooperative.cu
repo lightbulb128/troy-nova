@@ -37,7 +37,7 @@ namespace troy::utils::fgk::ntt_cooperative {
         device_properties_initialized = true;
     }
 
-    __global__ void kernel_ntt(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers) {
+    __global__ void kernel_ntt(ConstSlice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers, Slice<uint64_t> result) {
 
         unsigned int global_index = blockIdx.x * blockDim.x + threadIdx.x;
         unsigned int coeff_modulus_size = tables.size();
@@ -112,8 +112,10 @@ namespace troy::utils::fgk::ntt_cooperative {
             if (sdata[to_y_index] >= two_times_modulus) sdata[to_y_index] -= two_times_modulus;
             if (sdata[to_y_index] >= mv) sdata[to_y_index] -= mv;
 
-            operand[from_x_index] = sdata[to_x_index];
-            operand[from_y_index] = sdata[to_y_index];
+            result[from_x_index] = sdata[to_x_index];
+            result[from_y_index] = sdata[to_y_index];
+
+            operand = result.as_const();
 
             // here we need to sync not only threads but blocks
             if (layer_upper < log_degree) {
@@ -124,15 +126,15 @@ namespace troy::utils::fgk::ntt_cooperative {
 
     }
 
-    void ntt(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers) {
+    void ntt(ConstSlice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers, Slice<uint64_t> result) {
         bool device = operand.on_device();
         // same device
-        if (!device_compatible(operand, tables)) {
+        if (!device_compatible(operand, tables, result)) {
             throw std::invalid_argument("[ntt_transfer_to_rev] Operand and tables must be on the same device.");
         }
         if (!device) {
             // directly use ntt_grouped's ntt.
-            ntt_grouped::ntt_inplace(operand, pcount, log_degree, tables, use_inv_root_powers);
+            ntt_grouped::ntt(operand, pcount, log_degree, tables, use_inv_root_powers, result);
         } else {
             size_t degree = static_cast<size_t>(1) << log_degree;
             size_t thread_count = std::min(NTT_KERNEL_THREAD_COUNT, degree / 2);
@@ -146,11 +148,11 @@ namespace troy::utils::fgk::ntt_cooperative {
 
             if (static_cast<int>(block_count) > prop.multiProcessorCount && prop.cooperativeLaunch) {
                 // directly use ntt_grouped's ntt.
-                ntt_grouped::ntt_inplace(operand, pcount, log_degree, tables, use_inv_root_powers);
+                ntt_grouped::ntt(operand, pcount, log_degree, tables, use_inv_root_powers, result);
             } else {
                 utils::set_device(operand.device_index());
                 void* kernel_args[] = {
-                    &operand, &pcount, &log_degree, &tables, &use_inv_root_powers
+                    &operand, &pcount, &log_degree, &tables, &use_inv_root_powers, &result
                 };
                 cudaLaunchCooperativeKernel(
                     (void*)kernel_ntt,
@@ -164,7 +166,7 @@ namespace troy::utils::fgk::ntt_cooperative {
 
 
 
-    __global__ void kernel_intt(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers) {
+    __global__ void kernel_intt(ConstSlice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers, Slice<uint64_t> result) {
         unsigned int global_index = blockIdx.x * blockDim.x + threadIdx.x;
         unsigned int i_upperbound = 1 << (log_degree - 1);
         unsigned int coeff_modulus_size = tables.size();
@@ -251,8 +253,10 @@ namespace troy::utils::fgk::ntt_cooperative {
                 sdata[to_y_index] = multiply_uint64operand_mod_lazy(sdata[to_y_index], scalar, modulus);
             }
 
-            operand[from_x_index] = sdata[to_x_index];
-            operand[from_y_index] = sdata[to_y_index];
+            result[from_x_index] = sdata[to_x_index];
+            result[from_y_index] = sdata[to_y_index];
+
+            operand = result.as_const();
 
             // here we need to sync not only threads but blocks
             if (layer_upper < log_degree) {
@@ -261,14 +265,14 @@ namespace troy::utils::fgk::ntt_cooperative {
         }
     }
 
-    void intt(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers) {
+    void intt(ConstSlice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers, Slice<uint64_t> result) {
         bool device = operand.on_device();
         // same device
-        if (!device_compatible(operand, tables)) {
+        if (!device_compatible(operand, tables, result)) {
             throw std::invalid_argument("[ntt_transfer_from_rev] Operand and tables must be on the same device.");
         }
         if (!device) {
-            ntt_grouped::intt_inplace(operand, pcount, log_degree, tables, use_inv_root_powers);
+            ntt_grouped::intt(operand, pcount, log_degree, tables, use_inv_root_powers, result);
         } else {
             size_t degree = static_cast<size_t>(1) << log_degree;
             size_t thread_count = std::min(NTT_KERNEL_THREAD_COUNT, degree / 2);
@@ -282,11 +286,11 @@ namespace troy::utils::fgk::ntt_cooperative {
 
             if (static_cast<int>(block_count) > prop.multiProcessorCount && prop.cooperativeLaunch) {
                 // directly use ntt_grouped's ntt.
-                ntt_grouped::intt_inplace(operand, pcount, log_degree, tables, use_inv_root_powers);
+                ntt_grouped::intt(operand, pcount, log_degree, tables, use_inv_root_powers, result);
             } else {
                 utils::set_device(operand.device_index());
                 void* kernel_args[] = {
-                    &operand, &pcount, &log_degree, &tables, &use_inv_root_powers
+                    &operand, &pcount, &log_degree, &tables, &use_inv_root_powers, &result
                 };
                 cudaLaunchCooperativeKernel(
                     (void*)kernel_intt,

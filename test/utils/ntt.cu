@@ -59,17 +59,17 @@ namespace ntt {
 
         Array<uint64_t> poly(2, false, nullptr);
         poly[0] = 0; poly[1] = 0;
-        ntt_negacyclic_harvey_p(poly.reference(), poly.size(), table_slice);
+        ntt_inplace_p(poly.reference(), poly.size(), table_slice);
         EXPECT_EQ(poly[0], 0);
         EXPECT_EQ(poly[1], 0);
 
         poly[0] = 1; poly[1] = 0;
-        ntt_negacyclic_harvey_p(poly.reference(), poly.size(), table_slice);
+        ntt_inplace_p(poly.reference(), poly.size(), table_slice);
         EXPECT_EQ(poly[0], 1);
         EXPECT_EQ(poly[1], 1);
 
         poly[0] = 1; poly[1] = 1;
-        ntt_negacyclic_harvey_p(poly.reference(), poly.size(), table_slice);
+        ntt_inplace_p(poly.reference(), poly.size(), table_slice);
         EXPECT_EQ(poly[0], 288794978602139553);
         EXPECT_EQ(poly[1], 864126526004445282);
     }
@@ -87,21 +87,21 @@ namespace ntt {
         Array<uint64_t> poly(2, false, nullptr);
         poly[0] = 0; poly[1] = 0;
         poly.to_device_inplace(MemoryPool::GlobalPool());
-        ntt_negacyclic_harvey_p(poly.reference(), poly.size(), table_slice);
+        ntt_inplace_p(poly.reference(), poly.size(), table_slice);
         poly.to_host_inplace();
         EXPECT_EQ(poly[0], 0);
         EXPECT_EQ(poly[1], 0);
 
         // poly[0] = 1; poly[1] = 0;
         // poly.to_device_inplace();
-        // ntt_negacyclic_harvey_p(poly.reference(), poly.size(), table_slice);
+        // ntt_inplace_p(poly.reference(), poly.size(), table_slice);
         // poly.to_host_inplace();
         // EXPECT_EQ(poly[0], 1);
         // EXPECT_EQ(poly[1], 1);
 
         // poly[0] = 1; poly[1] = 1;
         // poly.to_device_inplace();
-        // ntt_negacyclic_harvey_p(poly.reference(), poly.size(), table_slice);
+        // ntt_inplace_p(poly.reference(), poly.size(), table_slice);
         // poly.to_host_inplace();
         // EXPECT_EQ(poly[0], 288794978602139553);
         // EXPECT_EQ(poly[1], 864126526004445282);
@@ -118,7 +118,7 @@ namespace ntt {
 
         Array<uint64_t> poly(n, false, nullptr);
         set_zero_uint(poly.reference());
-        inverse_ntt_negacyclic_harvey_p(poly.reference(), poly.size(), table_slice);
+        intt_inplace_p(poly.reference(), poly.size(), table_slice);
         for (size_t i = 0; i < n; i++) {
             EXPECT_EQ(poly[i], 0);
         }
@@ -128,8 +128,8 @@ namespace ntt {
             original[i] = i;
         }
         poly = original.clone(MemoryPool::GlobalPool());
-        ntt_negacyclic_harvey_p(poly.reference(), n, table_slice);
-        inverse_ntt_negacyclic_harvey_p(poly.reference(), n, table_slice);
+        ntt_inplace_p(poly.reference(), n, table_slice);
+        intt_inplace_p(poly.reference(), n, table_slice);
         for (size_t i = 0; i < n; i++) {
             EXPECT_EQ(poly[i], original[i]);
         }
@@ -150,7 +150,7 @@ namespace ntt {
         Array<uint64_t> poly(n, false, nullptr);
         set_zero_uint(poly.reference());
         poly.to_device_inplace(MemoryPool::GlobalPool());
-        inverse_ntt_negacyclic_harvey_p(poly.reference(), poly.size(), table_slice);
+        intt_inplace_p(poly.reference(), poly.size(), table_slice);
         poly.to_host_inplace();
         for (size_t i = 0; i < n; i++) {
             EXPECT_EQ(poly[i], 0);
@@ -162,8 +162,8 @@ namespace ntt {
         }
         poly = original.clone(MemoryPool::GlobalPool());
         poly.to_device_inplace(MemoryPool::GlobalPool());
-        ntt_negacyclic_harvey_p(poly.reference(), n, table_slice);
-        inverse_ntt_negacyclic_harvey_p(poly.reference(), n, table_slice);
+        ntt_inplace_p(poly.reference(), n, table_slice);
+        intt_inplace_p(poly.reference(), n, table_slice);
         poly.to_host_inplace();
         for (size_t i = 0; i < n; i++) {
             EXPECT_EQ(poly[i], original[i]);

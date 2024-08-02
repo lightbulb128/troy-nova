@@ -43,18 +43,18 @@ int main(int argc, char** argv) {
 
     constexpr size_t warm_up = 10;
     for (size_t i = 0; i < warm_up; i++) {
-        troy::utils::ntt_negacyclic_harvey(a.reference(), n, table.as_const_pointer());
-        troy::utils::inverse_ntt_negacyclic_harvey(a.reference(), n, table.as_const_pointer());
+        troy::utils::ntt(a.reference(), n, table.as_const_pointer());
+        troy::utils::intt(a.reference(), n, table.as_const_pointer());
     }
 
     for (size_t i = 0; i < repeat; i++) {
     
         timer.tick(timer_ntt);
-        troy::utils::ntt_negacyclic_harvey(a.reference(), n, table.as_const_pointer());
+        troy::utils::ntt(a.reference(), n, table.as_const_pointer());
         timer.tock(timer_ntt);
 
         timer.tick(timer_intt);
-        troy::utils::inverse_ntt_negacyclic_harvey(a.reference(), n, table.as_const_pointer());
+        troy::utils::intt(a.reference(), n, table.as_const_pointer());
         timer.tock(timer_intt);
 
     }

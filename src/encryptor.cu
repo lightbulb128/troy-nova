@@ -195,7 +195,7 @@ namespace troy {
                     scaling_variant::centralize(plain, context_data, plain_copy.reference(), coeff_count, pool);
 
                     // Transform to NTT domain
-                    utils::ntt_negacyclic_harvey_p(plain_copy.reference(), coeff_count, ntt_tables);
+                    utils::ntt_inplace_p(plain_copy.reference(), coeff_count, ntt_tables);
 
                     // The plaintext gets added into the c_0 term of ciphertext (c_0,c_1).
                     utils::add_inplace_p(

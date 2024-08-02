@@ -85,33 +85,33 @@ namespace troy {namespace utils {
     };
 
     void ntt_transfer_to_rev_inplace(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers);
-
     void ntt_transfer_from_rev_inplace(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers);
+    void ntt_transfer_to_rev(ConstSlice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers, Slice<uint64_t> result);
+    void ntt_transfer_from_rev(ConstSlice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers, Slice<uint64_t> result);
 
     void ntt_transfer_last_reduce(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables);
 
     void ntt_multiply_inv_degree(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables);
 
-    inline void ntt_negacyclic_harvey_lazy_ps(Slice<uint64_t> operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables) {
+    /*
+        Note: originally the implementations of ntt_lazy and ntt were different, where the lazy does not execute the last 4m to m reduction. (ntt_transfer_last_reduce)
+        but for GPU this difference would make a new kernel launch which might be slower than just doing the last reduction.
+    */
+
+    inline void ntt_lazy_inplace_ps(Slice<uint64_t> operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables) {
         int logd = utils::get_power_of_two(degree);
         if (logd < 0) {
-            throw std::invalid_argument("[ntt_negacyclic_harvey_lazy_ps] degree is invalid");
+            throw std::invalid_argument("[ntt_lazy_inplace_ps] degree is invalid");
         }
         size_t log_degree = static_cast<size_t>(logd);
         ntt_transfer_to_rev_inplace(operand, pcount, log_degree, tables, false);
     }
 
-    inline void ntt_negacyclic_harvey_ps(Slice<uint64_t> operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables) {
-        int logd = utils::get_power_of_two(degree);
-        if (logd < 0) {
-            throw std::invalid_argument("[ntt_negacyclic_harvey_ps] degree is invalid");
-        }
-        // size_t log_degree = static_cast<size_t>(logd);
-        ntt_negacyclic_harvey_lazy_ps(operand, pcount, degree, tables);
-        // ntt_transfer_last_reduce(operand, pcount, log_degree, tables);
+    inline void ntt_inplace_ps(Slice<uint64_t> operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables) {
+        ntt_lazy_inplace_ps(operand, pcount, degree, tables);
     }
 
-    inline void inverse_ntt_negacyclic_harvey_lazy_ps(Slice<uint64_t> operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables) {
+    inline void intt_lazy_inplace_ps(Slice<uint64_t> operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables) {
         int logd = utils::get_power_of_two(degree);
         if (logd < 0) {
             throw std::invalid_argument("[inverse_ntt_negacyclic_harvey_lazy_ps] degree is invalid");
@@ -120,46 +120,69 @@ namespace troy {namespace utils {
         ntt_transfer_from_rev_inplace(operand, pcount, log_degree, tables, true);
     }
 
-    inline void inverse_ntt_negacyclic_harvey_ps(Slice<uint64_t> operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables) {
+    inline void intt_inplace_ps(Slice<uint64_t> operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables) {
+        intt_lazy_inplace_ps(operand, pcount, degree, tables);
+    }
+
+    inline void ntt_lazy_inplace_p(Slice<uint64_t> operand, size_t degree, ConstSlice<NTTTables> tables) {
+        ntt_lazy_inplace_ps(operand, 1, degree, tables);
+    }
+
+    inline void ntt_inplace_p(Slice<uint64_t> operand, size_t degree, ConstSlice<NTTTables> tables) {
+        ntt_inplace_ps(operand, 1, degree, tables);
+    }
+
+    inline void intt_lazy_inplace_p(Slice<uint64_t> operand, size_t degree, ConstSlice<NTTTables> tables) {
+        intt_lazy_inplace_ps(operand, 1, degree, tables);
+    }
+
+    inline void intt_inplace_p(Slice<uint64_t> operand, size_t degree, ConstSlice<NTTTables> tables) {
+        intt_inplace_ps(operand, 1, degree, tables);
+    }
+
+    inline void ntt_lazy_inplace(Slice<uint64_t> operand, size_t degree, ConstPointer<NTTTables> tables) {
+        ntt_lazy_inplace_ps(operand, 1, degree, ConstSlice<NTTTables>::from_pointer(tables));
+    }
+
+    inline void ntt_inplace(Slice<uint64_t> operand, size_t degree, ConstPointer<NTTTables> tables) {
+        ntt_inplace_ps(operand, 1, degree, ConstSlice<NTTTables>::from_pointer(tables));
+    }
+
+    inline void intt_lazy_inplace(Slice<uint64_t> operand, size_t degree, ConstPointer<NTTTables> tables) {
+        intt_lazy_inplace_ps(operand, 1, degree, ConstSlice<NTTTables>::from_pointer(tables));
+    }
+
+    inline void intt_inplace(Slice<uint64_t> operand, size_t degree, ConstPointer<NTTTables> tables) {
+        intt_inplace_ps(operand, 1, degree, ConstSlice<NTTTables>::from_pointer(tables));
+    }
+
+    inline void ntt_ps(ConstSlice<uint64_t> operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables, Slice<uint64_t> result) {
         int logd = utils::get_power_of_two(degree);
         if (logd < 0) {
-            throw std::invalid_argument("[inverse_ntt_negacyclic_harvey_ps] degree is invalid");
+            throw std::invalid_argument("[inverse_ntt_negacyclic_harvey_lazy_ps] degree is invalid");
         }
-        // size_t log_degree = static_cast<size_t>(logd);
-        inverse_ntt_negacyclic_harvey_lazy_ps(operand, pcount, degree, tables);
-        // ntt_transfer_last_reduce(operand, pcount, log_degree, tables);
+        size_t log_degree = static_cast<size_t>(logd);
+        ntt_transfer_to_rev(operand, pcount, log_degree, tables, false, result);
     }
-
-    inline void ntt_negacyclic_harvey_lazy_p(Slice<uint64_t> operand, size_t degree, ConstSlice<NTTTables> tables) {
-        ntt_negacyclic_harvey_lazy_ps(operand, 1, degree, tables);
+    inline void ntt_p(ConstSlice<uint64_t> operand, size_t degree, ConstSlice<NTTTables> tables, Slice<uint64_t> result) {
+        ntt_ps(operand, 1, degree, tables, result);
     }
-
-    inline void ntt_negacyclic_harvey_p(Slice<uint64_t> operand, size_t degree, ConstSlice<NTTTables> tables) {
-        ntt_negacyclic_harvey_ps(operand, 1, degree, tables);
+    inline void ntt(ConstSlice<uint64_t> operand, size_t degree, ConstPointer<NTTTables> tables, Slice<uint64_t> result) {
+        ntt_ps(operand, 1, degree, ConstSlice<NTTTables>::from_pointer(tables), result);
     }
-
-    inline void inverse_ntt_negacyclic_harvey_lazy_p(Slice<uint64_t> operand, size_t degree, ConstSlice<NTTTables> tables) {
-        inverse_ntt_negacyclic_harvey_lazy_ps(operand, 1, degree, tables);
+    inline void intt_ps(ConstSlice<uint64_t> operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables, Slice<uint64_t> result) {
+        int logd = utils::get_power_of_two(degree);
+        if (logd < 0) {
+            throw std::invalid_argument("[inverse_ntt_negacyclic_harvey_lazy_ps] degree is invalid");
+        }
+        size_t log_degree = static_cast<size_t>(logd);
+        ntt_transfer_from_rev(operand, pcount, log_degree, tables, true, result);
     }
-
-    inline void inverse_ntt_negacyclic_harvey_p(Slice<uint64_t> operand, size_t degree, ConstSlice<NTTTables> tables) {
-        inverse_ntt_negacyclic_harvey_ps(operand, 1, degree, tables);
+    inline void intt_p(ConstSlice<uint64_t> operand, size_t degree, ConstSlice<NTTTables> tables, Slice<uint64_t> result) {
+        intt_ps(operand, 1, degree, tables, result);
     }
-
-    inline void ntt_negacyclic_harvey_lazy(Slice<uint64_t> operand, size_t degree, ConstPointer<NTTTables> tables) {
-        ntt_negacyclic_harvey_lazy_ps(operand, 1, degree, ConstSlice<NTTTables>::from_pointer(tables));
-    }
-
-    inline void ntt_negacyclic_harvey(Slice<uint64_t> operand, size_t degree, ConstPointer<NTTTables> tables) {
-        ntt_negacyclic_harvey_ps(operand, 1, degree, ConstSlice<NTTTables>::from_pointer(tables));
-    }
-
-    inline void inverse_ntt_negacyclic_harvey_lazy(Slice<uint64_t> operand, size_t degree, ConstPointer<NTTTables> tables) {
-        inverse_ntt_negacyclic_harvey_lazy_ps(operand, 1, degree, ConstSlice<NTTTables>::from_pointer(tables));
-    }
-
-    inline void inverse_ntt_negacyclic_harvey(Slice<uint64_t> operand, size_t degree, ConstPointer<NTTTables> tables) {
-        inverse_ntt_negacyclic_harvey_ps(operand, 1, degree, ConstSlice<NTTTables>::from_pointer(tables));
+    inline void intt(ConstSlice<uint64_t> operand, size_t degree, ConstPointer<NTTTables> tables, Slice<uint64_t> result) {
+        intt_ps(operand, 1, degree, ConstSlice<NTTTables>::from_pointer(tables), result);
     }
 
 }}

@@ -152,9 +152,9 @@ namespace rns_tool {
         {
             Array<uint64_t> input = Array<uint64_t>::from_vector({1, 2, 1, 2});
             if (device) input.to_device_inplace();
-            ntt_negacyclic_harvey_p(input.reference(), poly_modulus_degree, ntt.const_reference());
+            ntt_inplace_p(input.reference(), poly_modulus_degree, ntt.const_reference());
             rns_tool.divide_and_round_q_last_ntt_inplace(input.reference(), ntt.const_reference());
-            inverse_ntt_negacyclic_harvey_p(input.reference(), poly_modulus_degree, ntt.const_reference());
+            intt_inplace_p(input.reference(), poly_modulus_degree, ntt.const_reference());
             if (device) input.to_host_inplace();
             if (!same_array_vector(input.const_slice(0, 2), {0, 0})) return false;
         }
@@ -162,9 +162,9 @@ namespace rns_tool {
         {
             Array<uint64_t> input = Array<uint64_t>::from_vector({4, 12, 4, 12});
             if (device) input.to_device_inplace();
-            ntt_negacyclic_harvey_p(input.reference(), poly_modulus_degree, ntt.const_reference());
+            ntt_inplace_p(input.reference(), poly_modulus_degree, ntt.const_reference());
             rns_tool.divide_and_round_q_last_ntt_inplace(input.reference(), ntt.const_reference());
-            inverse_ntt_negacyclic_harvey_p(input.reference(), poly_modulus_degree, ntt.const_reference());
+            intt_inplace_p(input.reference(), poly_modulus_degree, ntt.const_reference());
             if (device) input.to_host_inplace();
             if ((53 + 1 - input[0]) % 53 > 1) return false;
             if ((53 + 2 - input[1]) % 53 > 1) return false;
@@ -173,9 +173,9 @@ namespace rns_tool {
         {
             Array<uint64_t> input = Array<uint64_t>::from_vector({25, 35, 12, 9});
             if (device) input.to_device_inplace();
-            ntt_negacyclic_harvey_p(input.reference(), poly_modulus_degree, ntt.const_reference());
+            ntt_inplace_p(input.reference(), poly_modulus_degree, ntt.const_reference());
             rns_tool.divide_and_round_q_last_ntt_inplace(input.reference(), ntt.const_reference());
-            inverse_ntt_negacyclic_harvey_p(input.reference(), poly_modulus_degree, ntt.const_reference());
+            intt_inplace_p(input.reference(), poly_modulus_degree, ntt.const_reference());
             if (device) input.to_host_inplace();
             if ((53 + 2 - input[0]) % 53 > 1) return false;
             if ((53 + 3 - input[1]) % 53 > 1) return false;
