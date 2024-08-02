@@ -14,7 +14,7 @@ namespace troy {namespace utils {
 
         Buffer(size_t poly_count, size_t coeff_modulus_size, size_t coeff_count, bool device, MemoryPoolHandle pool) :
             poly_count_(poly_count), coeff_modulus_size_(coeff_modulus_size), coeff_count_(coeff_count),
-            data_(poly_count * coeff_modulus_size * coeff_count, device, pool) {}
+            data_(Array<T>::create_uninitialized(poly_count * coeff_modulus_size * coeff_count, device, pool)) {}
         Buffer(size_t coeff_modulus_size, size_t coeff_count, bool device, MemoryPoolHandle pool): 
             Buffer(1, coeff_modulus_size, coeff_count, device, pool) {}
         Buffer(size_t coeff_count, bool device, MemoryPoolHandle pool): Buffer(1, 1, coeff_count, device, pool) {}
@@ -134,6 +134,8 @@ namespace troy {namespace utils {
 
         const uint64_t& operator[](size_t idx) const {return data_[idx];}
         uint64_t& operator[](size_t idx) {return data_[idx];}
+
+        void set_zero() {data_.set_zero();}
         
     };
 

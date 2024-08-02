@@ -19,7 +19,7 @@ int main(int argc, char** argv) {
     int logn = atoi(argv[1]);
     int logt = atoi(argv[2]);
 
-    int repeat = 10;
+    size_t repeat = 10;
     if (argc >= 4) {
         repeat = atoi(argv[3]);
     }
@@ -40,6 +40,12 @@ int main(int argc, char** argv) {
     Timer timer;
     size_t timer_ntt = timer.register_timer("NTT");
     size_t timer_intt = timer.register_timer("INTT");
+
+    constexpr size_t warm_up = 10;
+    for (size_t i = 0; i < warm_up; i++) {
+        troy::utils::ntt_negacyclic_harvey(a.reference(), n, table.as_const_pointer());
+        troy::utils::inverse_ntt_negacyclic_harvey(a.reference(), n, table.as_const_pointer());
+    }
 
     for (size_t i = 0; i < repeat; i++) {
     

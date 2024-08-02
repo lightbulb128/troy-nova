@@ -92,7 +92,7 @@ void test1(size_t n, size_t repeat) {
     std::cout << "n: " << n << std::endl;
     std::cout << "repeat: " << repeat << std::endl;
     
-    // auto th_host = timer.register_timer("host");
+    auto th_host = timer.register_timer("host");
     auto th_device = timer.register_timer("device");
     
     EncryptionParameters params(SchemeType::BFV);
@@ -102,36 +102,60 @@ void test1(size_t n, size_t repeat) {
     HeContextPointer context = HeContext::create(params, true, SecurityLevel::Nil);
     BatchEncoder encoder(context);
 
-    // {
-    //     KeyGenerator keygen(context);
-    //     Encryptor encryptor(context); encryptor.set_public_key(keygen.create_public_key(false));
-    //     Evaluator evaluator(context);
-    //     Ciphertext c = encryptor.encrypt_asymmetric_new(encoder.encode_new({ 1, 2, 3, 4, 5 }));
-    //     Ciphertext r = c.clone();
-    //     for (size_t i = 0; i < repeat; i++) {
-    //         timer.tick(th_host);
-    //         evaluator.add_inplace(c, r);
-    //         timer.tock(th_host);
-    //     }
-    // }
-
-    context->to_device_inplace();
-    encoder.to_device_inplace();
-
     {
+        auto th = th_host;
         KeyGenerator keygen(context);
         Encryptor encryptor(context); encryptor.set_public_key(keygen.create_public_key(false));
         Evaluator evaluator(context);
         Ciphertext c = encryptor.encrypt_asymmetric_new(encoder.encode_new({ 1, 2, 3, 4, 5 }));
         Ciphertext r = c.clone();
-        for (size_t i = 0; i < repeat; i++) {
-            timer.tick(th_device);
-            evaluator.add(c, c, r);
-            timer.tock(th_device);
+
+        std::cout << "running host ...\n";
+        const size_t warm_up = 10;
+        
+        for (size_t i = 0; i < repeat + warm_up; i++) {
+            if (i == warm_up) {
+                timer.tick(th);
+            }
+            evaluator.transform_to_ntt(c, r);
+            if (i == repeat + warm_up - 1) {
+                timer.tock(th);
+            }
+        }
+    }
+
+    context->to_device_inplace();
+    encoder.to_device_inplace();
+
+    {
+        auto th = th_device;
+        KeyGenerator keygen(context);
+        Encryptor encryptor(context); encryptor.set_public_key(keygen.create_public_key(false));
+        Evaluator evaluator(context);
+        Ciphertext c = encryptor.encrypt_asymmetric_new(encoder.encode_new({ 1, 2, 3, 4, 5 }));
+        Ciphertext r = c.clone();
+
+        std::cout << "running device ...\n";
+        const size_t warm_up = 10;
+        
+        for (size_t i = 0; i < repeat + warm_up; i++) {
+            if (i == warm_up) {
+                cudaStreamSynchronize(0);
+                timer.tick(th);
+            }
+            evaluator.transform_to_ntt(c, r);
+            if (i == repeat + warm_up - 1) {
+                cudaStreamSynchronize(0);
+                timer.tock(th);
+            }
         }
     }
     
     timer.print_divided(repeat);
+
+    auto durations = timer.get();
+    float acc = static_cast<double>(durations[th_host].count()) / static_cast<double>(durations[th_device].count());
+    std::cout << "host/device: " << acc << std::endl;
 
 }
 

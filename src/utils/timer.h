@@ -125,6 +125,10 @@ namespace troy { namespace bench {
             Duration duration = end - start;
             print_duration(prompt, tabs, duration, 1);
         }
+        inline Duration get_finish() {
+            Instant end = std::chrono::high_resolution_clock::now();
+            return end - start;
+        }
         inline void restart() {
             start = std::chrono::high_resolution_clock::now();
         }
@@ -163,6 +167,9 @@ namespace troy { namespace bench {
         inline void print_divided(const string& prompt, size_t divide_override = 0) const {
             size_t divide = divide_override == 0 ? count : divide_override;
             print_duration(prompt, tabs, accumulated, divide);
+        }
+        inline Duration get() const {
+            return accumulated;
         }
         inline void reset() {
             accumulated = Duration(0);
@@ -208,6 +215,13 @@ namespace troy { namespace bench {
             for (size_t i = 0; i < timers.size(); i++) {
                 timers[i].print_divided(prompts[i], divide_override);
             }
+        }
+        inline vector<Duration> get() const {
+            vector<Duration> durations;
+            for (size_t i = 0; i < timers.size(); i++) {
+                durations.push_back(timers[i].get());
+            }
+            return durations;
         }
         inline void clear() {
             timers.clear();

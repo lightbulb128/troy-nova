@@ -335,7 +335,9 @@ namespace troy {
         // Allocate temporary space for the output of step (4)
         // We allocate space separately for the base q and the base Bsk components
         Buffer<uint64_t> temp_dest_q(dest_size, base_q_size, coeff_count, device, pool);
+        temp_dest_q.set_zero();
         Buffer<uint64_t> temp_dest_Bsk(dest_size, base_Bsk_size, coeff_count, device, pool);
+        temp_dest_Bsk.set_zero();
 
         // Perform BEHZ step (4): dyadic multiplication on arbitrary size ciphertexts
         Buffer<uint64_t> temp1(base_q_size, coeff_count, device, pool);
@@ -435,6 +437,7 @@ namespace troy {
         if (device) encrypted1.to_device_inplace(pool);
         encrypted1.resize(this->context(), context_data->parms_id(), dest_size);
         Buffer<uint64_t> temp(dest_size, coeff_modulus_size, coeff_count, device, pool);
+        temp.set_zero();
 
         Buffer<uint64_t> prod(coeff_modulus_size, coeff_count, device, pool);
         for (size_t i = 0; i < dest_size; i++) {
@@ -492,6 +495,7 @@ namespace troy {
         encrypted1.resize(this->context(), context_data->parms_id(), dest_size);
 
         Buffer<uint64_t> temp(dest_size, coeff_modulus_size, coeff_count, device, pool);
+        temp.set_zero();
 
         Buffer<uint64_t> prod(coeff_modulus_size, coeff_count, device, pool);
         for (size_t i = 0; i < dest_size; i++) {
@@ -619,7 +623,9 @@ namespace troy {
         // Allocate temporary space for the output of step (4)
         // We allocate space separately for the base q and the base Bsk components
         Buffer<uint64_t> temp_dest_q(dest_size, base_q_size, coeff_count, device, pool);
+        temp_dest_q.set_zero();
         Buffer<uint64_t> temp_dest_Bsk(dest_size, base_Bsk_size, coeff_count, device, pool);
+        temp_dest_Bsk.set_zero();
 
         // Perform the BEHZ ciphertext square both for base q and base Bsk
 

@@ -85,6 +85,8 @@ if(TROY_BENCH)
 
 endif()
 
+# TODO: remove me
+
 add_executable(custom)
 target_sources(custom PRIVATE 
     main.cu
