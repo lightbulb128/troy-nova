@@ -1,4 +1,5 @@
 #pragma once
+#include "encryption_parameters.h"
 #include "he_context.h"
 #include "plaintext.h"
 #include "ciphertext.h"
@@ -18,13 +19,13 @@ namespace troy {
         void translate_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, bool subtract, MemoryPoolHandle pool) const;
         void translate(const Ciphertext& encrypted1, const Ciphertext& encrypted2, Ciphertext& destination, bool subtract, MemoryPoolHandle pool) const;
         
-        void bfv_multiply_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool) const;
-        void ckks_multiply_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool) const;
-        void bgv_multiply_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool) const;
+        void bfv_multiply(const Ciphertext& encrypted1, const Ciphertext& encrypted2, Ciphertext& destination, MemoryPoolHandle pool) const;
+        void ckks_multiply(const Ciphertext& encrypted1, const Ciphertext& encrypted2, Ciphertext& destination, MemoryPoolHandle pool) const;
+        void bgv_multiply(const Ciphertext& encrypted1, const Ciphertext& encrypted2, Ciphertext& destination, MemoryPoolHandle pool) const;
 
-        void bfv_square_inplace(Ciphertext& encrypted, MemoryPoolHandle pool) const;
-        void ckks_square_inplace(Ciphertext& encrypted, MemoryPoolHandle pool) const;
-        void bgv_square_inplace(Ciphertext& encrypted, MemoryPoolHandle pool) const;
+        void bfv_square(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool) const;
+        void ckks_square(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool) const;
+        void bgv_square(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool) const;
 
         /// Suppose kswitch_keys[kswitch_kes_index] is generated with s' on a KeyGenerator of secret key s.
         /// Then the semantic of this function is as follows: `target` is supposed to multiply with s' to contribute to the
@@ -83,10 +84,10 @@ namespace troy {
             return destination;
         }
 
-        void multiply_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
-        inline void multiply(const Ciphertext& encrypted1, const Ciphertext& encrypted2, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            destination = encrypted1.clone(pool);
-            multiply_inplace(destination, encrypted2, pool);
+        void multiply(const Ciphertext& encrypted1, const Ciphertext& encrypted2, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        inline void multiply_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            Ciphertext destination; multiply(encrypted1, encrypted2, destination, pool);
+            encrypted1 = std::move(destination);
         }
         inline Ciphertext multiply_new(const Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;
@@ -94,10 +95,10 @@ namespace troy {
             return destination;
         }
 
-        void square_inplace(Ciphertext& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
-        inline void square(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            destination = encrypted.clone(pool);
-            square_inplace(destination, pool);
+        void square(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        inline void square_inplace(Ciphertext& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            Ciphertext destination; square(encrypted, destination, pool);
+            encrypted = std::move(destination);
         }
         inline Ciphertext square_new(const Ciphertext& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;

@@ -119,7 +119,12 @@ namespace troy {namespace utils {
 
         void fast_floor(ConstSlice<uint64_t> input, Slice<uint64_t> destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
 
+        void fast_floor_fast_b_conv_sk(ConstSlice<uint64_t> input_q, ConstSlice<uint64_t> input_Bsk, Slice<uint64_t> destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+
         void fast_b_conv_m_tilde(ConstSlice<uint64_t> input, Slice<uint64_t> destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+
+        // = fast_b_conv_m_tilde + sm_mrq, the output to the former is the input to the latter
+        void fast_b_conv_m_tilde_sm_mrq(ConstSlice<uint64_t> input, Slice<uint64_t> destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
 
         void decrypt_scale_and_round(ConstSlice<uint64_t> phase, size_t phase_coeff_count, Slice<uint64_t> destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
 

@@ -1,5 +1,8 @@
 #include "rns_tool.h"
 #include "uint_small_mod.h"
+#include "polynomial_buffer.h"
+
+#include "../fgk/rns_tool.h"
 
 namespace troy {namespace utils {
 
@@ -674,7 +677,7 @@ namespace troy {namespace utils {
         // Fast convert B -> {m_sk}; input is in Bsk but we only use B
         Array<uint64_t> temp(coeff_count, device, pool);
         this->base_B_to_m_sk_conv().fast_convert_array(input.const_slice(0, base_B_size * coeff_count), temp.reference(), pool);
-
+        
         if (device) {
             size_t base_q_size = this->base_q().size();
             size_t block_count = utils::ceil_div(coeff_count * base_q_size, utils::KERNEL_THREAD_COUNT);
@@ -746,31 +749,32 @@ namespace troy {namespace utils {
     ) {
         size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
         size_t base_Bsk_size = base_Bsk.size();
-        if (global_index >= coeff_count * base_Bsk_size) return;
-        size_t i = global_index / coeff_count;
+        if (global_index >= coeff_count) return;
         size_t j = global_index % coeff_count;
-        const Modulus& modulus = *base_Bsk.at(i);
-        uint64_t m_tilde_div_2 = m_tilde->value() >> 1;
-        uint64_t r_m_tilde = utils::multiply_uint64operand_mod(
-            input[base_Bsk_size * coeff_count + j], 
-            neg_inv_prod_q_mod_m_tilde,
-            *m_tilde
-        );
-        uint64_t temp = r_m_tilde;
-        if (temp >= m_tilde_div_2) {
-            temp += modulus.value() - m_tilde->value();
-        }
-        uint64_t& dest = destination[i * coeff_count + j];
-        dest = utils::multiply_uint64operand_mod(
-            utils::multiply_uint64operand_add_uint64_mod(
-                temp,
-                MultiplyUint64Operand(prod_q_mod_Bsk[i], modulus),
-                input[i * coeff_count + j],
+        for (size_t i = 0; i < base_Bsk_size; i++) {
+            const Modulus& modulus = *base_Bsk.at(i);
+            uint64_t m_tilde_div_2 = m_tilde->value() >> 1;
+            uint64_t r_m_tilde = utils::multiply_uint64operand_mod(
+                input[base_Bsk_size * coeff_count + j], 
+                neg_inv_prod_q_mod_m_tilde,
+                *m_tilde
+            );
+            uint64_t temp = r_m_tilde;
+            if (temp >= m_tilde_div_2) {
+                temp += modulus.value() - m_tilde->value();
+            }
+            uint64_t& dest = destination[i * coeff_count + j];
+            dest = utils::multiply_uint64operand_mod(
+                utils::multiply_uint64operand_add_uint64_mod(
+                    temp,
+                    MultiplyUint64Operand(prod_q_mod_Bsk[i], modulus),
+                    input[i * coeff_count + j],
+                    modulus
+                ),
+                inv_m_tilde_mod_Bsk[i],
                 modulus
-            ),
-            inv_m_tilde_mod_Bsk[i],
-            modulus
-        );
+            );
+        }
     }
     
     void RNSTool::sm_mrq(ConstSlice<uint64_t> input, Slice<uint64_t> destination) const {
@@ -780,10 +784,8 @@ namespace troy {namespace utils {
         }
         size_t coeff_count = this->coeff_count();
         const RNSBase& base_Bsk = this->base_Bsk();
-        size_t base_Bsk_size = base_Bsk.size();
-
         if (device) {
-            size_t block_count = utils::ceil_div(coeff_count * base_Bsk_size, utils::KERNEL_THREAD_COUNT);
+            size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
             utils::set_device(input.device_index());
             kernel_sm_mrq<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 base_Bsk.base(),
@@ -866,17 +868,84 @@ namespace troy {namespace utils {
 
     }
     
+    void RNSTool::fast_floor_fast_b_conv_sk(ConstSlice<uint64_t> input_q, ConstSlice<uint64_t> input_Bsk, Slice<uint64_t> destination, MemoryPoolHandle pool) const {
+        if (!utils::device_compatible(*this, input_q, input_Bsk, destination)) {
+            throw std::invalid_argument("[RNSTool::fast_floor_fast_b_conv_sk] RNSTool, input_q, input_Bsk and destination must be on the same device.");
+        }
+        bool device = this->on_device();
+        size_t base_q_size = this->base_q().size();
+        size_t base_Bsk_size = this->base_Bsk().size();
+        size_t coeff_count = this->coeff_count();
+        ConstSlice<Modulus> base_q = this->base_q().base();
+        ConstSlice<Modulus> base_Bsk = this->base_Bsk().base();
+        size_t dest_size = input_q.size() / base_q_size / coeff_count;
+        if (!device) {
+            Buffer<uint64_t> temp_q_Bsk(base_q_size + base_Bsk_size, coeff_count, device, pool);
+            Buffer<uint64_t> temp_Bsk(base_Bsk_size, coeff_count, device, pool);
+            uint64_t plain_modulus_value = this->t()->value();
+            for (size_t i = 0; i < dest_size; i++) {
+                // Bring together the base q and base Bsk components into a single allocation
+                // Step (6): multiply base q components by t (plain_modulus)
+                utils::multiply_scalar_p(
+                    input_q.const_slice(i*coeff_count*base_q_size, (i+1)*coeff_count*base_q_size),
+                    plain_modulus_value,
+                    coeff_count,
+                    base_q,
+                    temp_q_Bsk.components(0, base_q_size)
+                );
+                utils::multiply_scalar_p(
+                    input_Bsk.const_slice(i*coeff_count*base_Bsk_size, (i+1)*coeff_count*base_Bsk_size),
+                    plain_modulus_value,
+                    coeff_count,
+                    base_Bsk,
+                    temp_q_Bsk.components(base_q_size, base_q_size + base_Bsk_size)
+                );
+                // Step (7): divide by q and floor, producing a result in base Bsk
+                this->fast_floor(temp_q_Bsk.const_reference(), temp_Bsk.reference(), pool);
+                // Step (8): use Shenoy-Kumaresan method to convert the result to base q and write to encrypted1
+                this->fast_b_conv_sk(temp_Bsk.const_reference(), destination.slice(i*coeff_count*base_q_size, (i+1)*coeff_count*base_q_size), pool);
+            }
+        } else {
+            fgk::rns_tool::fast_floor_fast_b_conv_sk(
+                input_q, input_Bsk, *this, dest_size, destination, pool
+            );
+        }
+        
+    }
+    
     void RNSTool::fast_b_conv_m_tilde(ConstSlice<uint64_t> input, Slice<uint64_t> destination, MemoryPoolHandle pool) const {
         bool device = this->on_device();
         size_t base_q_size = this->base_q().size();
         size_t base_Bsk_size = this->base_Bsk().size();
         size_t coeff_count = this->coeff_count();
-        Array<uint64_t> temp(coeff_count * base_q_size, device, pool);
+        Buffer<uint64_t> temp(base_q_size, coeff_count, device, pool);
         utils::multiply_scalar_p(input, this->m_tilde_value(), coeff_count, this->base_q().base(), temp.reference());
         this->base_q_to_Bsk_conv().fast_convert_array(temp.const_reference(),
             destination.slice(0, base_Bsk_size * coeff_count), pool);
         this->base_q_to_m_tilde_conv().fast_convert_array(temp.const_reference(),
             destination.slice(base_Bsk_size * coeff_count, (base_Bsk_size + 1) * coeff_count), pool);
+    }
+
+    void RNSTool::fast_b_conv_m_tilde_sm_mrq(ConstSlice<uint64_t> input, Slice<uint64_t> destination, MemoryPoolHandle pool) const {
+        bool device = this->on_device();
+        size_t base_Bsk_size = this->base_Bsk().size();
+        size_t coeff_count = this->coeff_count();
+        if (!input.on_device()) {
+            Buffer<uint64_t> temp(base_Bsk_size + 1, coeff_count, device, pool);
+            this->fast_b_conv_m_tilde(input, temp.reference(), pool);
+            this->sm_mrq(temp.const_reference(), destination);
+        } else {
+            fgk::rns_tool::fast_b_conv_m_tilde_sm_mrq(
+                input, coeff_count, this->m_tilde_value(), this->base_q().base(),
+                this->base_q_to_Bsk_conv(), 
+                this->base_q_to_m_tilde_conv(),
+                this->neg_inv_prod_q_mod_m_tilde(),
+                this->prod_q_mod_Bsk(),
+                this->inv_m_tilde_mod_Bsk(),
+                destination,
+                pool
+            );
+        }
     }
 
     static void host_decrypt_scale_and_round_step1(const RNSTool& self, Slice<uint64_t> destination, size_t coeff_count, ConstSlice<uint64_t> temp_t_gamma) {

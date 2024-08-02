@@ -1,4 +1,5 @@
 #include "rns_base.h"
+#include "polynomial_buffer.h"
 
 namespace troy {namespace utils {
 
@@ -298,117 +299,67 @@ namespace troy {namespace utils {
         rnsbase_compose_array(*this, cloned.const_reference(), value, temp_mpi.reference());
     }
 
-    void host_fast_convert_array_step1(const RNSBase& ibase, ConstSlice<uint64_t> input, Slice<uint64_t> temp) {
-        size_t count = input.size() / ibase.size();
+    void host_fast_convert_array(
+        const RNSBase& ibase, const RNSBase& obase, 
+        ConstSlice<uint64_t> base_change_matrix,
+        ConstSlice<uint64_t> input, Slice<uint64_t> temp, Slice<uint64_t> output
+    ) {
+        size_t ibase_size = ibase.size();
+        size_t count = input.size() / ibase_size;
         for (size_t i = 0; i < ibase.size(); i++) {
             const MultiplyUint64Operand& op = ibase.inv_punctured_product_mod_base()[i];
             const Modulus& base = ibase.base()[i];
             if (op.operand == 1) {
                 for (size_t j = 0; j < count; j++) {
-                    temp[j * ibase.size() + i] = utils::barrett_reduce_uint64(input[i * count + j], base);
+                    temp[j * ibase_size + i] = utils::barrett_reduce_uint64(input[i * count + j], base);
                 }
             } else {
                 for (size_t j = 0; j < count; j++) {
-                    temp[j * ibase.size() + i] = utils::multiply_uint64operand_mod(input[i * count + j], op, base);
+                    temp[j * ibase_size + i] = utils::multiply_uint64operand_mod(input[i * count + j], op, base);
                 }
             }
         }
-    }
-
-    __global__ void kernel_fast_convert_array_step1(
-        ConstSlice<Modulus> ibase, 
-        ConstSlice<MultiplyUint64Operand> ibase_inv_punctured_product_mod_base,
-        ConstSlice<uint64_t> input, Slice<uint64_t> temp
-    ) {
-        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
-        if (global_index >= input.size()) {
-            return;
-        }
-        size_t n = ibase.size();
-        size_t ibase_size = ibase.size();
-        size_t count = input.size() / ibase_size;
-        size_t i = global_index / count;
-        size_t j = global_index % count;
-        const MultiplyUint64Operand& op = ibase_inv_punctured_product_mod_base[i];
-        const Modulus& base = ibase[i];
-        if (op.operand == 1) {
-            temp[j * ibase_size + i] = utils::barrett_reduce_uint64(input[global_index], base);
-        } else {
-            temp[j * ibase_size + i] = utils::multiply_uint64operand_mod(input[global_index], op, base);
-        }
-    }
-
-    void fast_convert_array_step1(const BaseConverter& self, ConstSlice<uint64_t> input, Slice<uint64_t> temp) {
-        if (!utils::device_compatible(self, input, temp)) {
-            throw std::invalid_argument("[fast_convert_array_step1] RNSBase and value must be on the same memory.");
-        }
-        bool device = self.on_device();
-        if (device) {
-            size_t block_count = ceil_div<size_t>(input.size(), KERNEL_THREAD_COUNT);
-            utils::set_device(input.device_index());
-            kernel_fast_convert_array_step1<<<block_count, KERNEL_THREAD_COUNT>>>(
-                self.input_base().base(), self.input_base().inv_punctured_product_mod_base(),
-                input, temp
-            );
-            utils::stream_sync();
-        } else {
-            host_fast_convert_array_step1(self.input_base(), input, temp);
-        }
-    }
-
-    void host_fast_convert_array_step2(const BaseConverter& self, ConstSlice<uint64_t> temp, Slice<uint64_t> output) {
-        size_t ibase_size = self.input_base().size();
-        size_t obase_size = self.output_base().size();
-        size_t count = temp.size() / ibase_size;
+        size_t obase_size = obase.size();
         for (size_t i = 0; i < obase_size; i++) {
             for (size_t j = 0; j < count; j++) {
                 output[i * count + j] = utils::dot_product_mod(
                     temp.const_slice(j * ibase_size, (j + 1) * ibase_size),
-                    self.base_change_matrix().const_slice(i * ibase_size, (i + 1) * ibase_size),
-                    self.output_base().base()[i]
+                    base_change_matrix.const_slice(i * ibase_size, (i + 1) * ibase_size),
+                    obase.base()[i]
                 );
             }
         }
     }
 
-    __global__ void kernel_fast_convert_array_step2(
-        size_t ibase_size,
+    __global__ void kernel_fast_convert_array(
+        ConstSlice<Modulus> ibase, 
         ConstSlice<Modulus> obase,
+        ConstSlice<MultiplyUint64Operand> ibase_inv_punctured_product_mod_base,
         ConstSlice<uint64_t> base_change_matrix,
-        ConstSlice<uint64_t> temp, Slice<uint64_t> output
+        ConstSlice<uint64_t> input, Slice<uint64_t> temp, Slice<uint64_t> output
     ) {
-        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
-        if (global_index >= output.size()) {
+        size_t j = blockIdx.x * blockDim.x + threadIdx.x;
+        size_t ibase_size = ibase.size();
+        size_t obase_size = obase.size();
+        size_t count = input.size() / ibase_size;
+        if (j >= count) {
             return;
         }
-        size_t obase_size = obase.size();
-        size_t count = temp.size() / ibase_size;
-        size_t i = global_index / count;
-        size_t j = global_index % count;
-        output[global_index] = utils::dot_product_mod(
-            temp.const_slice(j * ibase_size, (j + 1) * ibase_size),
-            base_change_matrix.const_slice(i * ibase_size, (i + 1) * ibase_size),
-            obase[i]
-        );
-    }
-
-    void fast_convert_array_step2(const BaseConverter& self, ConstSlice<uint64_t> temp, Slice<uint64_t> output) {
-        if (!utils::device_compatible(self, temp, output)) {
-            throw std::invalid_argument("[fast_convert_array_step2] RNSBase and value must be on the same memory.");
+        for (size_t i = 0; i < ibase_size; i++) {
+            const MultiplyUint64Operand& op = ibase_inv_punctured_product_mod_base[i];
+            const Modulus& base = ibase[i];
+            if (op.operand == 1) {
+                temp[j * ibase_size + i] = utils::barrett_reduce_uint64(input[i * count + j], base);
+            } else {
+                temp[j * ibase_size + i] = utils::multiply_uint64operand_mod(input[i * count + j], op, base);
+            }
         }
-        bool device = self.on_device();
-        if (device) {
-            size_t block_count = ceil_div<size_t>(output.size(), KERNEL_THREAD_COUNT);
-            utils::set_device(output.device_index());
-            kernel_fast_convert_array_step2<<<block_count, KERNEL_THREAD_COUNT>>>(
-                self.input_base().size(),
-                self.output_base().base(),
-                self.base_change_matrix(),
-                temp, output
+        for (size_t i = 0; i < obase_size; i++) {
+            output[i * count + j] = utils::dot_product_mod(
+                temp.const_slice(j * ibase_size, (j + 1) * ibase_size),
+                base_change_matrix.const_slice(i * ibase_size, (i + 1) * ibase_size),
+                obase[i]
             );
-            utils::stream_sync();
-        } else {
-            host_fast_convert_array_step2(self, temp, output);
         }
     }
 
@@ -422,11 +373,26 @@ namespace troy {namespace utils {
         if (output.size() != count * obase_size) {
             throw std::invalid_argument("[BaseConverter::fast_convert_array] Output size must be a multiple of output base size.");
         }
-        Array<uint64_t> temp(count * ibase_size, input.on_device(), pool);
-        fast_convert_array_step1(*this, input, temp.reference());
-        fast_convert_array_step2(*this, temp.const_reference(), output);        
+        Buffer<uint64_t> temp(ibase_size, count, input.on_device(), pool);
+        
+        if (!utils::device_compatible(*this, input, temp)) {
+            throw std::invalid_argument("[fast_convert_array_step1] RNSBase and value must be on the same memory.");
+        }
+        bool device = this->on_device();
+        if (device) {
+            size_t count = input.size() / this->input_base().size();
+            size_t block_count = ceil_div<size_t>(count, KERNEL_THREAD_COUNT);
+            utils::set_device(input.device_index());
+            kernel_fast_convert_array<<<block_count, KERNEL_THREAD_COUNT>>>(
+                this->input_base().base(), this->output_base().base(), this->input_base().inv_punctured_product_mod_base(),
+                this->base_change_matrix(),
+                input, temp.reference(), output
+            );
+            utils::stream_sync();
+        } else {
+            host_fast_convert_array(this->input_base(), this->output_base(), this->base_change_matrix(), input, temp.reference(), output);
+        }
     }
-
 
     void host_exact_convey_array_step1(const RNSBase& ibase, ConstSlice<uint64_t> input, Slice<uint64_t> temp, Slice<double> v) {
         size_t count = input.size() / ibase.size();

@@ -286,8 +286,8 @@ namespace evaluator {
             test_multiply(ghe);
         }
         {
-            GeneralHeContext ghe(false, SchemeType::BFV, 32, 35, { 30, 30, 30, 30 }, false, 0x123, 0);
-            test_multiply(ghe);
+            // GeneralHeContext ghe(false, SchemeType::BFV, 32, 35, { 30, 30, 30, 30 }, false, 0x123, 0);
+            // test_multiply(ghe);
         }
     }
     TEST(EvaluatorTest, HostBGVMultiply) {

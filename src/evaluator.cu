@@ -1,8 +1,10 @@
+#include "ciphertext.h"
 #include "encryption_parameters.h"
 #include "evaluator.h"
 #include "utils/dynamic_array.h"
 #include "utils/memory_pool.h"
 #include "utils/polynomial_buffer.h"
+#include "fgk/dyadic_convolute.h"
 #include <thread>
 
 namespace troy {
@@ -263,10 +265,10 @@ namespace troy {
         }
     }
 
-    void Evaluator::bfv_multiply_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool) const {
+    void Evaluator::bfv_multiply(const Ciphertext& encrypted1, const Ciphertext& encrypted2, Ciphertext& destination, MemoryPoolHandle pool) const {
         check_is_not_ntt_form("[Evaluator::bfv_multiply_inplace]", encrypted1);
         check_is_not_ntt_form("[Evaluator::bfv_multiply_inplace]", encrypted2);
-        
+
         // Extract encryption parameters.
         ContextDataPointer context_data = this->get_context_data("[Evaluator::bfv_multiply_inplace]", encrypted1.parms_id());
         const EncryptionParameters& parms = context_data->parms();
@@ -278,8 +280,6 @@ namespace troy {
         const RNSTool& rns_tool = context_data->rns_tool();
         ConstSlice<Modulus> base_Bsk = rns_tool.base_Bsk().base();
         size_t base_Bsk_size = base_Bsk.size();
-        ConstSlice<Modulus> base_Bsk_m_tilde = rns_tool.base_Bsk_m_tilde().base();
-        size_t base_Bsk_m_tilde_size = base_Bsk_m_tilde.size();
         
         // Determine destination.size()
         size_t dest_size = encrypted1_size + encrypted2_size - 1;
@@ -299,8 +299,7 @@ namespace troy {
         // (8) Use Shenoy-Kumaresan method to convert the result to base q
 
         bool device = encrypted1.on_device();
-        if (device) encrypted1.to_device_inplace(pool);
-        encrypted1.resize(this->context(), context_data->parms_id(), dest_size);
+        destination = Ciphertext::like(encrypted1, dest_size, false, pool);
         // Allocate space for a base q output of behz_extend_base_convertToNtt for encrypted1
         Buffer<uint64_t> encrypted1_q(encrypted1_size, base_q_size, coeff_count, device, pool);
         // Allocate space for a base Bsk output of behz_extend_base_convertToNtt for encrypted1
@@ -308,16 +307,11 @@ namespace troy {
 
         // Perform BEHZ steps (1)-(3) for encrypted1
         // Make copy of input polynomial (in base q) and convert to NTT form
-        encrypted1_q.copy_from_slice(encrypted1.const_polys(0, encrypted1_size));
-        // Lazy reduction
-        utils::ntt_lazy_inplace_ps(encrypted1_q.reference(), encrypted1_size, coeff_count, base_q_ntt_tables);
+        utils::ntt_ps(encrypted1.const_reference(), encrypted1_size, coeff_count, base_q_ntt_tables, encrypted1_q.reference());
         // Allocate temporary space for a polynomial in the Bsk U {m_tilde} base
-        Buffer<uint64_t> temp(base_Bsk_m_tilde_size, coeff_count, device, pool);
         for (size_t i = 0; i < encrypted1_size; i++) {
             // (1) Convert from base q to base Bsk U {m_tilde}
-            rns_tool.fast_b_conv_m_tilde(encrypted1.const_poly(i), temp.reference(), pool);
-            // (2) Reduce q-overflows in with Montgomery reduction, switching base to Bsk
-            rns_tool.sm_mrq(temp.const_reference(), encrypted1_Bsk.poly(i));
+            rns_tool.fast_b_conv_m_tilde_sm_mrq(encrypted1.const_poly(i), encrypted1_Bsk.poly(i), pool);
         }
         // Transform to NTT form in base Bsk
         utils::ntt_lazy_inplace_ps(encrypted1_Bsk.reference(), encrypted1_size, coeff_count, base_Bsk_ntt_tables);
@@ -325,65 +319,28 @@ namespace troy {
         // Repeat for encrypted2
         Buffer<uint64_t> encrypted2_q(encrypted2_size, base_q_size, coeff_count, device, pool);
         Buffer<uint64_t> encrypted2_Bsk(encrypted2_size, base_Bsk_size, coeff_count, device, pool);
-        encrypted2_q.copy_from_slice(encrypted2.polys(0, encrypted2_size));
-        utils::ntt_lazy_inplace_ps(encrypted2_q.reference(), encrypted2_size, coeff_count, base_q_ntt_tables);
+        utils::ntt_ps(encrypted2.const_reference(), encrypted2_size, coeff_count, base_q_ntt_tables, encrypted2_q.reference());
         for (size_t i = 0; i < encrypted2_size; i++) {
-            rns_tool.fast_b_conv_m_tilde(encrypted2.poly(i), temp.reference(), pool);
-            rns_tool.sm_mrq(temp.const_reference(), encrypted2_Bsk.poly(i));
+            rns_tool.fast_b_conv_m_tilde_sm_mrq(encrypted2.poly(i), encrypted2_Bsk.poly(i), pool);
         }
         utils::ntt_lazy_inplace_ps(encrypted2_Bsk.reference(), encrypted2_size, coeff_count, base_Bsk_ntt_tables);
 
         // Allocate temporary space for the output of step (4)
         // We allocate space separately for the base q and the base Bsk components
         Buffer<uint64_t> temp_dest_q(dest_size, base_q_size, coeff_count, device, pool);
-        temp_dest_q.set_zero();
         Buffer<uint64_t> temp_dest_Bsk(dest_size, base_Bsk_size, coeff_count, device, pool);
-        temp_dest_Bsk.set_zero();
 
         // Perform BEHZ step (4): dyadic multiplication on arbitrary size ciphertexts
-        Buffer<uint64_t> temp1(base_q_size, coeff_count, device, pool);
-        Buffer<uint64_t> temp2(base_Bsk_size, coeff_count, device, pool);
-        for (size_t i = 0; i < dest_size; i++) {
-            // We iterate over relevant components of encrypted1 and encrypted2 in increasing order for
-            // encrypted1 and reversed (decreasing) order for encrypted2. The bounds for the indices of
-            // the relevant terms are obtained as follows.
-            size_t curr_encrypted1_last = std::min(i, encrypted1_size - 1);
-            size_t curr_encrypted2_first = std::min(i, encrypted2_size - 1);
-            size_t curr_encrypted1_first = i - curr_encrypted2_first;
-            size_t steps = curr_encrypted1_last - curr_encrypted1_first + 1;
-
-            // Perform the BEHZ ciphertext product both for base q and base Bsk
-            for (size_t j = 0; j < steps; j++) {
-                utils::dyadic_product_p(
-                    encrypted1_q.const_poly(curr_encrypted1_first + j),
-                    encrypted2_q.const_poly(curr_encrypted2_first - j),
-                    coeff_count,
-                    base_q,
-                    temp1.reference()
-                );
-                utils::add_inplace_p(
-                    temp_dest_q.poly(i),
-                    temp1.const_reference(),
-                    coeff_count,
-                    base_q
-                );
-            }
-            for (size_t j = 0; j < steps; j++) {
-                utils::dyadic_product_p(
-                    encrypted1_Bsk.const_poly(curr_encrypted1_first + j),
-                    encrypted2_Bsk.const_poly(curr_encrypted2_first - j),
-                    coeff_count,
-                    base_Bsk,
-                    temp2.reference()
-                );
-                utils::add_inplace_p(
-                    temp_dest_Bsk.poly(i),
-                    temp2.const_reference(),
-                    coeff_count,
-                    base_Bsk
-                );
-            }
-        }
+        utils::fgk::dyadic_convolute::dyadic_convolute(
+            encrypted1_q.const_reference(), encrypted2_q.const_reference(),
+            encrypted1_size, encrypted2_size, base_q, coeff_count,
+            temp_dest_q.reference(), pool
+        );
+        utils::fgk::dyadic_convolute::dyadic_convolute(
+            encrypted1_Bsk.const_reference(), encrypted2_Bsk.const_reference(),
+            encrypted1_size, encrypted2_size, base_Bsk, coeff_count,
+            temp_dest_Bsk.reference(), pool
+        );
 
         // Perform BEHZ step (5): transform data from NTT form
         // Lazy reduction here. The following multiplyPolyScalarCoeffmod will correct the value back to [0, p)
@@ -391,34 +348,13 @@ namespace troy {
         utils::intt_inplace_ps(temp_dest_Bsk.reference(), dest_size, coeff_count, base_Bsk_ntt_tables);
 
         // Perform BEHZ steps (6)-(8)
-        Buffer<uint64_t> temp_q_Bsk(base_q_size + base_Bsk_size, coeff_count, device, pool);
-        Buffer<uint64_t> temp_Bsk(base_Bsk_size, coeff_count, device, pool);
-        uint64_t plain_modulus_value = parms.plain_modulus_host().value();
-        for (size_t i = 0; i < dest_size; i++) {
-            // Bring together the base q and base Bsk components into a single allocation
-            // Step (6): multiply base q components by t (plain_modulus)
-            utils::multiply_scalar_p(
-                temp_dest_q.const_slice(i*coeff_count*base_q_size, (i+1)*coeff_count*base_q_size),
-                plain_modulus_value,
-                coeff_count,
-                base_q,
-                temp_q_Bsk.components(0, base_q_size)
-            );
-            utils::multiply_scalar_p(
-                temp_dest_Bsk.const_slice(i*coeff_count*base_Bsk_size, (i+1)*coeff_count*base_Bsk_size),
-                plain_modulus_value,
-                coeff_count,
-                base_Bsk,
-                temp_q_Bsk.components(base_q_size, base_q_size + base_Bsk_size)
-            );
-            // Step (7): divide by q and floor, producing a result in base Bsk
-            rns_tool.fast_floor(temp_q_Bsk.const_reference(), temp_Bsk.reference(), pool);
-            // Step (8): use Shenoy-Kumaresan method to convert the result to base q and write to encrypted1
-            rns_tool.fast_b_conv_sk(temp_Bsk.const_reference(), encrypted1.poly(i), pool);
-        }
+        rns_tool.fast_floor_fast_b_conv_sk(
+            temp_dest_q.const_reference(), temp_dest_Bsk.const_reference(),
+            destination.reference(), pool
+        );
     }
-    
-    void Evaluator::ckks_multiply_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool) const {
+
+    void Evaluator::ckks_multiply(const Ciphertext& encrypted1, const Ciphertext& encrypted2, Ciphertext& destination, MemoryPoolHandle pool) const {
         check_is_ntt_form("[Evaluator::ckks_multiply_inplace]", encrypted1);
         check_is_ntt_form("[Evaluator::ckks_multiply_inplace]", encrypted2);
         
@@ -427,138 +363,79 @@ namespace troy {
         const EncryptionParameters& parms = context_data->parms();
         size_t coeff_count = parms.poly_modulus_degree();
         ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
-        size_t coeff_modulus_size = coeff_modulus.size();
         size_t encrypted1_size = encrypted1.polynomial_count();
         size_t encrypted2_size = encrypted2.polynomial_count();
         
         // Determine destination.size()
         size_t dest_size = encrypted1_size + encrypted2_size - 1;
+        destination = Ciphertext::like(encrypted1, dest_size, false, pool);
 
-        bool device = encrypted1.on_device();
-        if (device) encrypted1.to_device_inplace(pool);
-        encrypted1.resize(this->context(), context_data->parms_id(), dest_size);
-        Buffer<uint64_t> temp(dest_size, coeff_modulus_size, coeff_count, device, pool);
-        temp.set_zero();
+        utils::fgk::dyadic_convolute::dyadic_convolute(
+            encrypted1.const_reference(), encrypted2.const_reference(),
+            encrypted1_size, encrypted2_size, coeff_modulus, coeff_count,
+            destination.data().reference(), pool
+        );
 
-        Buffer<uint64_t> prod(coeff_modulus_size, coeff_count, device, pool);
-        for (size_t i = 0; i < dest_size; i++) {
-            // We iterate over relevant components of encrypted1 and encrypted2 in increasing order for
-            // encrypted1 and reversed (decreasing) order for encrypted2. The bounds for the indices of
-            // the relevant terms are obtained as follows.
-            size_t curr_encrypted1_last = std::min(i, encrypted1_size - 1);
-            size_t curr_encrypted2_first = std::min(i, encrypted2_size - 1);
-            size_t curr_encrypted1_first = i - curr_encrypted2_first;
-            // let curr_encrypted2_last = i - curr_encrypted1_last;
-            size_t steps = curr_encrypted1_last - curr_encrypted1_first + 1;
-
-            for (size_t j = 0; j < steps; j++) {
-                utils::dyadic_product_p(
-                    encrypted1.const_poly(curr_encrypted1_first + j),
-                    encrypted2.const_poly(curr_encrypted2_first - j),
-                    coeff_count,
-                    coeff_modulus,
-                    prod.reference()
-                );
-                utils::add_inplace_p(
-                    temp.poly(i),
-                    prod.const_reference(),
-                    coeff_count,
-                    coeff_modulus
-                );
-            }
-        }
-
-        encrypted1.polys(0, dest_size).copy_from_slice(temp.const_reference());
-        encrypted1.scale() = encrypted1.scale() * encrypted2.scale();
-        if (!is_scale_within_bounds(encrypted1.scale(), context_data)) {
-            throw std::invalid_argument("[Evaluator::ckks_multiply_inplace] Scale out of bounds");
+        destination.scale() = encrypted1.scale() * encrypted2.scale();
+        if (!is_scale_within_bounds(destination.scale(), context_data)) {
+            throw std::invalid_argument("[Evaluator::ckks_multiply] Scale out of bounds");
         }
     }
     
-    void Evaluator::bgv_multiply_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool) const {
-        check_is_ntt_form("[Evaluator::bgv_multiply_inplace]", encrypted1);
-        check_is_ntt_form("[Evaluator::bgv_multiply_inplace]", encrypted2);
+    void Evaluator::bgv_multiply(const Ciphertext& encrypted1, const Ciphertext& encrypted2, Ciphertext& destination, MemoryPoolHandle pool) const {
+        check_is_ntt_form("[Evaluator::bgv_multiply]", encrypted1);
+        check_is_ntt_form("[Evaluator::bgv_multiply]", encrypted2);
         
         // Extract encryption parameters.
         ContextDataPointer context_data = this->get_context_data("[Evaluator::bgv_multiply_inplace]", encrypted1.parms_id());
         const EncryptionParameters& parms = context_data->parms();
         size_t coeff_count = parms.poly_modulus_degree();
         ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
-        size_t coeff_modulus_size = coeff_modulus.size();
         size_t encrypted1_size = encrypted1.polynomial_count();
         size_t encrypted2_size = encrypted2.polynomial_count();
         
         // Determine destination.size()
         size_t dest_size = encrypted1_size + encrypted2_size - 1;
+        destination = Ciphertext::like(encrypted1, dest_size, false, pool);
 
-        bool device = encrypted1.on_device();
-        if (device) encrypted1.to_device_inplace(pool);
-        encrypted1.resize(this->context(), context_data->parms_id(), dest_size);
+        utils::fgk::dyadic_convolute::dyadic_convolute(
+            encrypted1.const_reference(), encrypted2.const_reference(),
+            encrypted1_size, encrypted2_size, coeff_modulus, coeff_count,
+            destination.data().reference(), pool
+        );
 
-        Buffer<uint64_t> temp(dest_size, coeff_modulus_size, coeff_count, device, pool);
-        temp.set_zero();
-
-        Buffer<uint64_t> prod(coeff_modulus_size, coeff_count, device, pool);
-        for (size_t i = 0; i < dest_size; i++) {
-            // We iterate over relevant components of encrypted1 and encrypted2 in increasing order for
-            // encrypted1 and reversed (decreasing) order for encrypted2. The bounds for the indices of
-            // the relevant terms are obtained as follows.
-            size_t curr_encrypted1_last = std::min(i, encrypted1_size - 1);
-            size_t curr_encrypted2_first = std::min(i, encrypted2_size - 1);
-            size_t curr_encrypted1_first = i - curr_encrypted2_first;
-            // let curr_encrypted2_last = i - curr_encrypted1_last;
-            size_t steps = curr_encrypted1_last - curr_encrypted1_first + 1;
-
-            for (size_t j = 0; j < steps; j++) {
-                utils::dyadic_product_p(
-                    encrypted1.const_poly(curr_encrypted1_first + j),
-                    encrypted2.const_poly(curr_encrypted2_first - j),
-                    coeff_count,
-                    coeff_modulus,
-                    prod.reference()
-                );
-                utils::add_inplace_p(
-                    temp.poly(i),
-                    prod.const_reference(),
-                    coeff_count,
-                    coeff_modulus
-                );
-            }
-        }
-        
-        encrypted1.polys(0, dest_size).copy_from_slice(temp.const_reference());
-        encrypted1.correction_factor() = utils::multiply_uint64_mod(
+        destination.correction_factor() = utils::multiply_uint64_mod(
             encrypted1.correction_factor(),
             encrypted2.correction_factor(),
             parms.plain_modulus_host()
         );
     }
-
-    void Evaluator::multiply_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool) const {
-        check_no_seed("[Evaluator::multiply_inplace]", encrypted1);
-        check_no_seed("[Evaluator::multiply_inplace]", encrypted2);
-        check_same_parms_id("[Evaluator::multiply_inplace]", encrypted1, encrypted2);
-        SchemeType scheme = this->context()->first_context_data().value()->parms().scheme();
+    
+    void Evaluator::multiply(const Ciphertext& encrypted1, const Ciphertext& encrypted2, Ciphertext& destination, MemoryPoolHandle pool) const {
+        check_no_seed("[Evaluator::multiply]", encrypted1);
+        check_no_seed("[Evaluator::multiply]", encrypted2);
+        check_same_parms_id("[Evaluator::multiply]", encrypted1, encrypted2);
+        SchemeType scheme = this->context()->key_context_data().value()->parms().scheme();
         switch (scheme) {
             case SchemeType::BFV: {
-                this->bfv_multiply_inplace(encrypted1, encrypted2, pool);
+                this->bfv_multiply(encrypted1, encrypted2, destination, pool);
                 break;
             }
             case SchemeType::CKKS: {
-                this->ckks_multiply_inplace(encrypted1, encrypted2, pool);
+                this->ckks_multiply(encrypted1, encrypted2, destination, pool);
                 break;
             }
             case SchemeType::BGV: {
-                this->bgv_multiply_inplace(encrypted1, encrypted2, pool);
+                this->bgv_multiply(encrypted1, encrypted2, destination, pool);
                 break;
             }
             default: {
-                throw std::logic_error("[Evaluator::multiply_inplace] Scheme not implemented.");
+                throw std::logic_error("[Evaluator::multiply] Scheme not implemented.");
             }
         }
     }
 
-    void Evaluator::bfv_square_inplace(Ciphertext& encrypted, MemoryPoolHandle pool) const {
+    void Evaluator::bfv_square(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool) const {
         check_is_not_ntt_form("[Evaluator::bfv_square_inplace]", encrypted);
         
         // Extract encryption parameters.
@@ -570,7 +447,7 @@ namespace troy {
         size_t encrypted_size = encrypted.polynomial_count();
 
         if (encrypted_size != 2) {
-            this->bfv_multiply_inplace(encrypted, encrypted, pool);
+            this->multiply(encrypted, encrypted, destination, pool);
             return;
         }
         
@@ -598,8 +475,7 @@ namespace troy {
         // (8) Use Shenoy-Kumaresan method to convert the result to base q
 
         bool device = encrypted.on_device();
-        if (device) encrypted.to_device_inplace(pool);
-        encrypted.resize(this->context(), context_data->parms_id(), dest_size);
+        destination = Ciphertext::like(encrypted, dest_size, false, pool);
         // Allocate space for a base q output of behz_extend_base_convertToNtt for encrypted1
         Buffer<uint64_t> encrypted_q(encrypted_size, base_q_size, coeff_count, device, pool);
         // Allocate space for a base Bsk output of behz_extend_base_convertToNtt for encrypted1
@@ -607,16 +483,12 @@ namespace troy {
 
         // Perform BEHZ steps (1)-(3) for encrypted1
         // Make copy of input polynomial (in base q) and convert to NTT form
-        encrypted_q.copy_from_slice(encrypted.const_polys(0, encrypted_size));
-        // Lazy reduction
-        utils::ntt_lazy_inplace_ps(encrypted_q.reference(), encrypted_size, coeff_count, base_q_ntt_tables);
+        utils::ntt_ps(encrypted.const_reference(), encrypted_size, coeff_count, base_q_ntt_tables, encrypted_q.reference());
         // Allocate temporary space for a polynomial in the Bsk U {m_tilde} base
         Buffer<uint64_t> temp(base_Bsk_m_tilde_size, coeff_count, device, pool);
         for (size_t i = 0; i < encrypted_size; i++) {
             // (1) Convert from base q to base Bsk U {m_tilde}
-            rns_tool.fast_b_conv_m_tilde(encrypted.const_poly(i), temp.reference(), pool);
-            // (2) Reduce q-overflows in with Montgomery reduction, switching base to Bsk
-            rns_tool.sm_mrq(temp.const_reference(), encrypted_Bsk.poly(i));
+            rns_tool.fast_b_conv_m_tilde_sm_mrq(encrypted.const_poly(i), encrypted_Bsk.poly(i), pool);
         }
         // Transform to NTT form in base Bsk
         utils::ntt_lazy_inplace_ps(encrypted_Bsk.reference(), encrypted_size, coeff_count, base_Bsk_ntt_tables);
@@ -624,28 +496,17 @@ namespace troy {
         // Allocate temporary space for the output of step (4)
         // We allocate space separately for the base q and the base Bsk components
         Buffer<uint64_t> temp_dest_q(dest_size, base_q_size, coeff_count, device, pool);
-        temp_dest_q.set_zero();
         Buffer<uint64_t> temp_dest_Bsk(dest_size, base_Bsk_size, coeff_count, device, pool);
-        temp_dest_Bsk.set_zero();
 
         // Perform the BEHZ ciphertext square both for base q and base Bsk
-
-        // Compute c0^2
-        Slice<uint64_t> eq0 = encrypted_q.poly(0);
-        Slice<uint64_t> eq1 = encrypted_q.poly(1);
-        utils::dyadic_product_p(eq0.as_const(), eq0.as_const(), coeff_count, base_q, temp_dest_q.poly(0));
-        // Compute 2*c0*c1
-        utils::dyadic_product_p(eq0.as_const(), eq1.as_const(), coeff_count, base_q, temp_dest_q.poly(1));
-        utils::add_inplace_p(temp_dest_q.poly(1), temp_dest_q.const_poly(1), coeff_count, base_q);
-        // Compute c1^2
-        utils::dyadic_product_p(eq1.as_const(), eq1.as_const(), coeff_count, base_q, temp_dest_q.poly(2));
-
-        Slice<uint64_t> eb0 = encrypted_Bsk.poly(0);
-        Slice<uint64_t> eb1 = encrypted_Bsk.poly(1);
-        utils::dyadic_product_p(eb0.as_const(), eb0.as_const(), coeff_count, base_Bsk, temp_dest_Bsk.poly(0));
-        utils::dyadic_product_p(eb0.as_const(), eb1.as_const(), coeff_count, base_Bsk, temp_dest_Bsk.poly(1));
-        utils::add_inplace_p(temp_dest_Bsk.poly(1), temp_dest_Bsk.const_poly(1), coeff_count, base_Bsk);
-        utils::dyadic_product_p(eb1.as_const(), eb1.as_const(), coeff_count, base_Bsk, temp_dest_Bsk.poly(2));
+        utils::fgk::dyadic_convolute::dyadic_square(
+            encrypted_q.const_reference(), base_q, coeff_count,
+            temp_dest_q.reference()
+        );
+        utils::fgk::dyadic_convolute::dyadic_square(
+            encrypted_Bsk.const_reference(), base_Bsk, coeff_count,
+            temp_dest_Bsk.reference()
+        );
         
         // Perform BEHZ step (5): transform data from NTT form
         // Lazy reduction here. The following multiplyPolyScalarCoeffmod will correct the value back to [0, p)
@@ -653,34 +514,13 @@ namespace troy {
         utils::intt_inplace_ps(temp_dest_Bsk.reference(), dest_size, coeff_count, base_Bsk_ntt_tables);
 
         // Perform BEHZ steps (6)-(8)
-        Buffer<uint64_t> temp_q_Bsk(base_q_size + base_Bsk_size, coeff_count, device, pool);
-        Buffer<uint64_t> temp_Bsk(base_Bsk_size, coeff_count, device, pool);
-        uint64_t plain_modulus_value = parms.plain_modulus_host().value();
-        for (size_t i = 0; i < dest_size; i++) {
-            // Bring together the base q and base Bsk components into a single allocation
-            // Step (6): multiply base q components by t (plain_modulus)
-            utils::multiply_scalar_p(
-                temp_dest_q.const_slice(i*coeff_count*base_q_size, (i+1)*coeff_count*base_q_size),
-                plain_modulus_value,
-                coeff_count,
-                base_q,
-                temp_q_Bsk.components(0, base_q_size)
-            );
-            utils::multiply_scalar_p(
-                temp_dest_Bsk.const_slice(i*coeff_count*base_Bsk_size, (i+1)*coeff_count*base_Bsk_size),
-                plain_modulus_value,
-                coeff_count,
-                base_Bsk,
-                temp_q_Bsk.components(base_q_size, base_q_size + base_Bsk_size)
-            );
-            // Step (7): divide by q and floor, producing a result in base Bsk
-            rns_tool.fast_floor(temp_q_Bsk.const_reference(), temp_Bsk.reference(), pool);
-            // Step (8): use Shenoy-Kumaresan method to convert the result to base q and write to encrypted1
-            rns_tool.fast_b_conv_sk(temp_Bsk.const_reference(), encrypted.poly(i), pool);
-        }
+        rns_tool.fast_floor_fast_b_conv_sk(
+            temp_dest_q.const_reference(), temp_dest_Bsk.const_reference(),
+            destination.reference(), pool
+        );
     }
 
-    void Evaluator::ckks_square_inplace(Ciphertext& encrypted, MemoryPoolHandle pool) const {
+    void Evaluator::ckks_square(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool) const {
         check_is_ntt_form("[Evaluator::ckks_square_inplace]", encrypted);
         
         // Extract encryption parameters.
@@ -691,33 +531,26 @@ namespace troy {
         size_t encrypted_size = encrypted.polynomial_count();
 
         if (encrypted_size != 2) {
-            this->ckks_multiply_inplace(encrypted, encrypted, pool);
+            this->multiply(encrypted, encrypted, destination, pool);
             return;
         }
         
         // Determine destination.size()
         size_t dest_size = 2 * encrypted_size - 1;
-
-        bool device = encrypted.on_device();
-        if (device) encrypted.to_device_inplace(pool);
-        encrypted.resize(this->context(), context_data->parms_id(), dest_size);
+        destination = Ciphertext::like(encrypted, dest_size, false, pool);
         
-        Slice<uint64_t> c0 = encrypted.poly(0);
-        Slice<uint64_t> c1 = encrypted.poly(1);
-        Slice<uint64_t> c2 = encrypted.poly(2);
-        
-        utils::dyadic_product_p(c1.as_const(), c1.as_const(), coeff_count, coeff_modulus, c2);
-        utils::dyadic_product_p(c0.as_const(), c1.as_const(), coeff_count, coeff_modulus, c1);
-        utils::add_inplace_p(   c1,            c1.as_const(), coeff_count, coeff_modulus);
-        utils::dyadic_product_p(c0.as_const(), c0.as_const(), coeff_count, coeff_modulus, c0);
+        utils::fgk::dyadic_convolute::dyadic_square(
+            encrypted.const_reference(), coeff_modulus, coeff_count,
+            destination.data().reference()
+        );
 
-        encrypted.scale() = encrypted.scale() * encrypted.scale();
-        if (!is_scale_within_bounds(encrypted.scale(), context_data)) {
+        destination.scale() = encrypted.scale() * encrypted.scale();
+        if (!is_scale_within_bounds(destination.scale(), context_data)) {
             throw std::invalid_argument("[Evaluator::ckks_multiply_inplace] Scale out of bounds");
         }
     }
     
-    void Evaluator::bgv_square_inplace(Ciphertext& encrypted, MemoryPoolHandle pool) const {
+    void Evaluator::bgv_square(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool) const {
         check_is_ntt_form("[Evaluator::bgv_square_inplace]", encrypted);
         
         // Extract encryption parameters.
@@ -725,57 +558,43 @@ namespace troy {
         const EncryptionParameters& parms = context_data->parms();
         size_t coeff_count = parms.poly_modulus_degree();
         ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
-        size_t coeff_modulus_size = coeff_modulus.size();
         size_t encrypted_size = encrypted.polynomial_count();
 
         if (encrypted_size != 2) {
-            this->bgv_multiply_inplace(encrypted, encrypted, pool);
+            this->multiply(encrypted, encrypted, destination, pool);
             return;
         }
         
         // Determine destination.size()
         size_t dest_size = 2 * encrypted_size - 1;
-        bool device = encrypted.on_device();
-        if (device) encrypted.to_device_inplace(pool);
-        encrypted.resize(this->context(), context_data->parms_id(), dest_size);
+        destination = Ciphertext::like(encrypted, dest_size, false, pool);
 
-        Buffer<uint64_t> temp(dest_size, coeff_modulus_size, coeff_count, device, pool);
+        utils::fgk::dyadic_convolute::dyadic_square(
+            encrypted.const_reference(), coeff_modulus, coeff_count,
+            destination.data().reference()
+        );
 
-        ConstSlice<uint64_t> eq0 = encrypted.const_poly(0);
-        ConstSlice<uint64_t> eq1 = encrypted.const_poly(1);
-        Slice<uint64_t> tq0 = temp.poly(0);
-        Slice<uint64_t> tq1 = temp.poly(1);
-        Slice<uint64_t> tq2 = temp.poly(2);
-        
-        utils::dyadic_product_p(eq0, eq0, coeff_count, coeff_modulus, tq0);
-        // Compute 2*c0*c1
-        utils::dyadic_product_p(eq0, eq1, coeff_count, coeff_modulus, tq1);
-        utils::add_inplace_p(tq1, tq1.as_const(), coeff_count, coeff_modulus);
-        // Compute c1^2
-        utils::dyadic_product_p(eq1, eq1, coeff_count, coeff_modulus, tq2);
-
-        encrypted.polys(0, dest_size).copy_from_slice(temp.const_reference());
-        encrypted.correction_factor() = utils::multiply_uint64_mod(
+        destination.correction_factor() = utils::multiply_uint64_mod(
             encrypted.correction_factor(),
             encrypted.correction_factor(),
             parms.plain_modulus_host()
         );
     }
 
-    void Evaluator::square_inplace(Ciphertext& encrypted, MemoryPoolHandle pool) const {
+    void Evaluator::square(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool) const {
         check_no_seed("[Evaluator::square_inplace]", encrypted);
         SchemeType scheme = this->context()->first_context_data().value()->parms().scheme();
         switch (scheme) {
             case SchemeType::BFV: {
-                this->bfv_square_inplace(encrypted, pool);
+                this->bfv_square(encrypted, destination, pool);
                 break;
             }
             case SchemeType::CKKS: {
-                this->ckks_square_inplace(encrypted, pool);
+                this->ckks_square(encrypted, destination, pool);
                 break;
             }
             case SchemeType::BGV: {
-                this->bgv_square_inplace(encrypted, pool);
+                this->bgv_square(encrypted, destination, pool);
                 break;
             }
             default: {
