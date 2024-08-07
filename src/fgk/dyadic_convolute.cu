@@ -81,9 +81,11 @@ namespace troy::utils::fgk::dyadic_convolute {
         } else {
             size_t total_count = m * degree * (op1_pcount + op2_pcount - 1);
             size_t block_count = ceil_div(total_count, KERNEL_THREAD_COUNT);
+            utils::set_device(op1.device_index());
             kernel_dyadic_convolute<<<block_count, KERNEL_THREAD_COUNT>>>(
                 op1, op2, op1_pcount, op2_pcount, moduli, degree, result
             );
+            utils::stream_sync();
         }
     }
 
@@ -139,9 +141,44 @@ namespace troy::utils::fgk::dyadic_convolute {
         } else {
             size_t total_count = m * degree;
             size_t block_count = ceil_div(total_count, KERNEL_THREAD_COUNT);
+            utils::set_device(op.device_index());
             kernel_dyadic_square<<<block_count, KERNEL_THREAD_COUNT>>>(
                 op, moduli, degree, result
             );
+            utils::stream_sync();
+        }
+    }
+    
+    __global__ static void kernel_dyadic_broadcast_product_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> poly2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
+        size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < pcount * moduli.size() * degree) {
+            size_t j = (idx / degree) % moduli.size();
+            size_t poly2_idx = idx % (moduli.size() * degree);
+            result[idx] = multiply_uint64_mod(polys1[idx], poly2[poly2_idx], moduli[j]);
+        }
+    }
+
+    void dyadic_broadcast_product_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> poly2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
+        bool device = result.on_device();
+        if (!device_compatible(polys1, poly2, moduli, result)) {
+            throw std::runtime_error("[dyadic_product_ps] All inputs must be on the same device");
+        }
+        if (device) {
+            size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
+            utils::set_device(result.device_index());
+            kernel_dyadic_broadcast_product_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys1, poly2, pcount, degree, moduli, result);
+            utils::stream_sync();
+        } else {
+            size_t c = moduli.size() * degree;
+            for (size_t i = 0; i < pcount; i++) {
+                dyadic_product_p(
+                    polys1.const_slice(c * i, c * (i + 1)),
+                    poly2,
+                    degree,
+                    moduli,
+                    result.slice(c * i, c * (i + 1))
+                );
+            }
         }
     }
 

@@ -1545,9 +1545,9 @@ namespace troy {
         }
     }
 
-    void Evaluator::multiply_plain_normal_inplace(Ciphertext& encrypted, const Plaintext& plain, MemoryPoolHandle pool) const {
-        check_no_seed("[Evaluator::multiply_plain_normal_inplace]", encrypted);
-        ContextDataPointer context_data = this->get_context_data("[Evaluator::multiply_plain_normal_inplace]", encrypted.parms_id());
+    void Evaluator::multiply_plain_normal(const Ciphertext& encrypted, const Plaintext& plain, Ciphertext& destination, MemoryPoolHandle pool) const {
+        check_no_seed("[Evaluator::multiply_plain_normal]", encrypted);
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::multiply_plain_normal]", encrypted.parms_id());
         const EncryptionParameters& parms = context_data->parms();
         ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
         size_t coeff_count = parms.poly_modulus_degree();
@@ -1582,62 +1582,63 @@ namespace troy {
             
         }
 
+        destination = Ciphertext::like(encrypted, false, pool);
+
         // Need to multiply each component in encrypted with temp; first step is to transform to NTT form
         // RNSIter temp_iter(temp.get(), coeff_count);
         utils::ntt_inplace_p(temp.reference(), coeff_count, ntt_tables);
-        utils::ntt_lazy_inplace_ps(encrypted.polys(0, encrypted_size), encrypted_size, coeff_count, ntt_tables);
-        for (size_t i = 0; i < encrypted_size; i++) {
-            utils::dyadic_product_inplace_p(encrypted.poly(i), temp.const_reference(), coeff_count, coeff_modulus);
-        }
-        utils::intt_inplace_ps(encrypted.polys(0, encrypted_size), encrypted_size, coeff_count, ntt_tables);
+        utils::ntt_ps(encrypted.const_reference(), encrypted_size, coeff_count, ntt_tables, destination.reference());
+        utils::fgk::dyadic_convolute::dyadic_broadcast_product_inplace_ps(destination.reference(), temp.const_reference(), encrypted_size, coeff_count, coeff_modulus);
+        utils::intt_inplace_ps(destination.reference(), encrypted_size, coeff_count, ntt_tables);
 
         if (parms.scheme() == SchemeType::CKKS) {
-            encrypted.scale() = encrypted.scale() * plain.scale();
-            if (!is_scale_within_bounds(encrypted.scale(), context_data)) {
-                throw std::invalid_argument("[Evaluator::multiply_plain_normal_inplace] Scale out of bounds.");
+            destination.scale() = encrypted.scale() * plain.scale();
+            if (!is_scale_within_bounds(destination.scale(), context_data)) {
+                throw std::invalid_argument("[Evaluator::multiply_plain_normal] Scale out of bounds.");
             }
         }
     }
 
-    void Evaluator::multiply_plain_ntt_inplace(Ciphertext& encrypted, const Plaintext& plain) const {
-        check_no_seed("[Evaluator::multiply_plain_ntt_inplace]", encrypted);
+    void Evaluator::multiply_plain_ntt(const Ciphertext& encrypted, const Plaintext& plain, Ciphertext& destination, MemoryPoolHandle pool) const {
+        check_no_seed("[Evaluator::multiply_plain_ntt]", encrypted);
         if (encrypted.parms_id() != plain.parms_id()) {
-            throw std::invalid_argument("[Evaluator::multiply_plain_ntt_inplace] Plaintext and ciphertext parameters do not match.");
+            throw std::invalid_argument("[Evaluator::multiply_plain_ntt] Plaintext and ciphertext parameters do not match.");
         }
 
-        ContextDataPointer context_data = this->get_context_data("[Evaluator::multiply_plain_ntt_inplace]", encrypted.parms_id());
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::multiply_plain_ntt]", encrypted.parms_id());
         const EncryptionParameters& parms = context_data->parms();
         ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
         size_t coeff_count = parms.poly_modulus_degree();
         size_t encrypted_size = encrypted.polynomial_count();
 
-        for (size_t i = 0; i < encrypted_size; i++) {
-            utils::dyadic_product_inplace_p(encrypted.poly(i), plain.poly(), coeff_count, coeff_modulus);
-        }
+        destination = Ciphertext::like(encrypted, false, pool);
+
+        utils::fgk::dyadic_convolute::dyadic_broadcast_product_ps(encrypted.const_reference(), plain.poly(), encrypted_size, coeff_count, coeff_modulus, destination.reference());
 
         if (parms.scheme() == SchemeType::CKKS) {
-            encrypted.scale() = encrypted.scale() * plain.scale();
-            if (!is_scale_within_bounds(encrypted.scale(), context_data)) {
+            destination.scale() = encrypted.scale() * plain.scale();
+            if (!is_scale_within_bounds(destination.scale(), context_data)) {
                 throw std::invalid_argument("[Evaluator::multiply_plain_normal_inplace] Scale out of bounds.");
             }
         }
     }
 
-    void Evaluator::multiply_plain_inplace(Ciphertext& encrypted, const Plaintext& plain, MemoryPoolHandle pool) const {
+    void Evaluator::multiply_plain(const Ciphertext& encrypted, const Plaintext& plain, Ciphertext& destination, MemoryPoolHandle pool) const {
         bool encrypted_ntt = encrypted.is_ntt_form();
         bool plain_ntt = plain.is_ntt_form();
         if (encrypted_ntt && plain_ntt) {
-            this->multiply_plain_ntt_inplace(encrypted, plain);
+            this->multiply_plain_ntt(encrypted, plain, destination, pool);
         } else if (!encrypted_ntt && !plain_ntt) {
-            this->multiply_plain_normal_inplace(encrypted, plain, pool);
+            this->multiply_plain_normal(encrypted, plain, destination, pool);
         } else if (encrypted_ntt && !plain_ntt) {
-            Plaintext plain_copy = plain.clone(pool);
-            this->transform_plain_to_ntt_inplace(plain_copy, encrypted.parms_id(), pool);
-            this->multiply_plain_ntt_inplace(encrypted, plain_copy);
+            Plaintext plain_ntt;
+            this->transform_plain_to_ntt(plain, encrypted.parms_id(), plain_ntt, pool);
+            this->multiply_plain_ntt(encrypted, plain_ntt, destination, pool);
         } else { // !encrypted_ntt && plain_ntt
-            this->transform_to_ntt_inplace(encrypted);
-            this->multiply_plain_ntt_inplace(encrypted, plain);
-            this->transform_from_ntt_inplace(encrypted);
+            Ciphertext encrypted_ntt;
+            this->transform_to_ntt(encrypted, encrypted_ntt, pool);
+            this->multiply_plain_ntt(encrypted_ntt, plain, destination, pool);
+            this->transform_from_ntt_inplace(destination);
         }
     }
 

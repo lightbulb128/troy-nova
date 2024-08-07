@@ -41,7 +41,8 @@ namespace troy {
 
         void translate_plain_inplace(Ciphertext& encrypted, const Plaintext& plain, bool subtract, MemoryPoolHandle pool) const;
 
-        void multiply_plain_normal_inplace(Ciphertext& encrypted, const Plaintext& plain, MemoryPoolHandle pool) const;
+        void multiply_plain_normal(const Ciphertext& encrypted, const Plaintext& plain, Ciphertext& destination, MemoryPoolHandle pool) const;
+        void multiply_plain_ntt(const Ciphertext& encrypted, const Plaintext& plain, Ciphertext& destination, MemoryPoolHandle pool) const;
         void multiply_plain_ntt_inplace(Ciphertext& encrypted, const Plaintext& plain) const;
 
         void rotate_inplace_internal(Ciphertext& encrypted, int steps, const GaloisKeys& galois_keys, MemoryPoolHandle pool) const;
@@ -224,10 +225,10 @@ namespace troy {
             return destination;
         }
 
-        void multiply_plain_inplace(Ciphertext& encrypted, const Plaintext& plain, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
-        inline void multiply_plain(const Ciphertext& encrypted, const Plaintext& plain, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            destination = encrypted.clone(pool);
-            multiply_plain_inplace(destination, plain, pool);
+        void multiply_plain(const Ciphertext& encrypted, const Plaintext& plain, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        inline void multiply_plain_inplace(Ciphertext& encrypted, const Plaintext& plain, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            Ciphertext c; multiply_plain(encrypted, plain, c, pool);
+            encrypted = std::move(c);
         }
         inline Ciphertext multiply_plain_new(const Ciphertext& encrypted, const Plaintext& plain, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;

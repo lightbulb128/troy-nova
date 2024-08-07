@@ -197,24 +197,33 @@ namespace troy {namespace scaling_variant {
     }
 
     __global__ static void kernel_multiply_plain_normal_no_fast_plain_lift(
-        size_t plain_coeff_count, size_t coeff_modulus_size,
+        size_t plain_coeff_count, size_t temp_coeff_count, size_t coeff_modulus_size,
         ConstSlice<uint64_t> plain, 
         Slice<uint64_t> temp, 
         uint64_t plain_upper_half_threshold,
         ConstSlice<uint64_t> plain_upper_half_increment
     ) {
         size_t i = blockIdx.x * blockDim.x + threadIdx.x;
-        if (i >= plain_coeff_count) return;
-        size_t plain_value = plain[i];
-        if (plain_value >= plain_upper_half_threshold) {
-            utils::add_uint_uint64(plain_upper_half_increment, plain_value, temp.slice(i * coeff_modulus_size, (i + 1) * coeff_modulus_size));
+        if (i >= temp_coeff_count) return;
+        if (i < plain_coeff_count) {
+            size_t plain_value = plain[i];
+            if (plain_value >= plain_upper_half_threshold) {
+                utils::add_uint_uint64(plain_upper_half_increment, plain_value, temp.slice(i * coeff_modulus_size, (i + 1) * coeff_modulus_size));
+            } else {
+                temp[coeff_modulus_size * i] = plain_value;
+                for (size_t j = 1; j < coeff_modulus_size; j++) {
+                    temp[coeff_modulus_size * i + j] = 0;
+                }
+            }
         } else {
-            temp[coeff_modulus_size * i] = plain_value;
+            for (size_t j = 0; j < coeff_modulus_size; j++) {
+                temp[coeff_modulus_size * i + j] = 0;
+            }
         }
     }
 
     void multiply_plain_normal_no_fast_plain_lift(
-        size_t plain_coeff_count, size_t coeff_modulus_size,
+        size_t plain_coeff_count, size_t temp_coeff_count, size_t coeff_modulus_size,
         ConstSlice<uint64_t> plain, 
         Slice<uint64_t> temp,
         uint64_t plain_upper_half_threshold,
@@ -228,13 +237,21 @@ namespace troy {namespace scaling_variant {
                     utils::add_uint_uint64(plain_upper_half_increment, plain_value, temp.slice(i * coeff_modulus_size, (i + 1) * coeff_modulus_size));
                 } else {
                     temp[coeff_modulus_size * i] = plain_value;
+                    for (size_t j = 1; j < coeff_modulus_size; j++) {
+                        temp[coeff_modulus_size * i + j] = 0;
+                    }
                 }
-            } 
+            }
+            for (size_t i = plain_coeff_count; i < temp_coeff_count; i++) {
+                for (size_t j = 0; j < coeff_modulus_size; j++) {
+                    temp[coeff_modulus_size * i + j] = 0;
+                }
+            }
         } else {
-            size_t block_count = utils::ceil_div(plain_coeff_count, utils::KERNEL_THREAD_COUNT);
+            size_t block_count = utils::ceil_div(temp_coeff_count, utils::KERNEL_THREAD_COUNT);
             utils::set_device(temp.device_index());
             kernel_multiply_plain_normal_no_fast_plain_lift<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
-                plain_coeff_count, coeff_modulus_size,
+                plain_coeff_count, temp_coeff_count, coeff_modulus_size,
                 plain, temp, plain_upper_half_threshold, plain_upper_half_increment
             );
             utils::stream_sync();
@@ -249,12 +266,16 @@ namespace troy {namespace scaling_variant {
         ConstSlice<uint64_t> plain_upper_half_increment
     ) {
         size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
-        if (global_index >= plain_coeff_count * coeff_modulus_size) return;
-        size_t i = global_index / plain_coeff_count;
-        size_t j = global_index % plain_coeff_count;
-        temp[i * coeff_count + j] = (plain[j] >= plain_upper_half_threshold)
-            ? plain[j] + plain_upper_half_increment[i]
-            : plain[j];
+        if (global_index >= coeff_count * coeff_modulus_size) return;
+        size_t i = global_index / coeff_count;
+        size_t j = global_index % coeff_count;
+        if (j < plain_coeff_count) {
+            temp[i * coeff_count + j] = (plain[j] >= plain_upper_half_threshold)
+                ? plain[j] + plain_upper_half_increment[i]
+                : plain[j];
+        } else {
+            temp[i * coeff_count + j] = 0;
+        }
     }
 
     static void multiply_plain_normal_fast_plain_lift(
@@ -267,14 +288,18 @@ namespace troy {namespace scaling_variant {
         bool device = temp.on_device();
         if (!device) {
             for (size_t i = 0; i < coeff_modulus_size; i++) {
-                for (size_t j = 0; j < plain_coeff_count; j++) {
-                    temp[i * temp_coeff_count + j] = (plain[j] >= plain_upper_half_threshold)
-                        ? plain[j] + plain_upper_half_increment[i]
-                        : plain[j];
+                for (size_t j = 0; j < temp_coeff_count; j++) {
+                    if (j < plain_coeff_count) {
+                        temp[i * temp_coeff_count + j] = (plain[j] >= plain_upper_half_threshold)
+                            ? plain[j] + plain_upper_half_increment[i]
+                            : plain[j];
+                    } else {
+                        temp[i * temp_coeff_count + j] = 0;
+                    }
                 }
             }
         } else {
-            size_t total = plain_coeff_count * coeff_modulus_size;
+            size_t total = temp_coeff_count * coeff_modulus_size;
             size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
             utils::set_device(temp.device_index());
             kernel_multiply_plain_normal_fast_plain_lift<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
@@ -301,10 +326,10 @@ namespace troy {namespace scaling_variant {
         if (destination.size() < coeff_modulus_size * plain_coeff_count) {
             throw std::invalid_argument("[scaling_variant::centralize] Destination has incorrect size.");
         }
-        destination.set_zero();
+        // destination.set_zero();
         if (!context_data->qualifiers().using_fast_plain_lift) {
             multiply_plain_normal_no_fast_plain_lift(
-                plain_coeff_count, coeff_modulus_size,
+                plain_coeff_count, destination_coeff_count, coeff_modulus_size,
                 plain.poly(), destination, plain_upper_half_threshold, plain_upper_half_increment
             );
             context_data->rns_tool().base_q().decompose_array(destination, pool);

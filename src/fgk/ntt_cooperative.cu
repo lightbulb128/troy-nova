@@ -150,10 +150,10 @@ namespace troy::utils::fgk::ntt_cooperative {
                 // directly use ntt_grouped's ntt.
                 ntt_grouped::ntt(operand, pcount, log_degree, tables, use_inv_root_powers, result);
             } else {
-                utils::set_device(operand.device_index());
                 void* kernel_args[] = {
                     &operand, &pcount, &log_degree, &tables, &use_inv_root_powers, &result
                 };
+                utils::set_device(operand.device_index());
                 cudaLaunchCooperativeKernel(
                     (void*)kernel_ntt,
                     block_count, thread_count,
@@ -288,10 +288,10 @@ namespace troy::utils::fgk::ntt_cooperative {
                 // directly use ntt_grouped's ntt.
                 ntt_grouped::intt(operand, pcount, log_degree, tables, use_inv_root_powers, result);
             } else {
-                utils::set_device(operand.device_index());
                 void* kernel_args[] = {
                     &operand, &pcount, &log_degree, &tables, &use_inv_root_powers, &result
                 };
+                utils::set_device(operand.device_index());
                 cudaLaunchCooperativeKernel(
                     (void*)kernel_intt,
                     block_count, thread_count,

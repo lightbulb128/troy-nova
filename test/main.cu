@@ -108,6 +108,7 @@ void test1(size_t n, size_t repeat) {
         Encryptor encryptor(context); encryptor.set_public_key(keygen.create_public_key(false));
         Evaluator evaluator(context);
         Ciphertext c = encryptor.encrypt_asymmetric_new(encoder.encode_new({ 1, 2, 3, 4, 5 }));
+        Plaintext p = encoder.encode_new({ 1, 2, 3, 4, 5 });
         Ciphertext r;
 
         std::cout << "running host ...\n";
@@ -117,7 +118,7 @@ void test1(size_t n, size_t repeat) {
             if (i == warm_up) {
                 timer.tick(th);
             }
-            evaluator.multiply(c, c, r);
+            evaluator.multiply_plain(c, p, r);
             if (i == repeat + warm_up - 1) {
                 timer.tock(th);
             }
@@ -133,6 +134,7 @@ void test1(size_t n, size_t repeat) {
         Encryptor encryptor(context); encryptor.set_public_key(keygen.create_public_key(false));
         Evaluator evaluator(context);
         Ciphertext c = encryptor.encrypt_asymmetric_new(encoder.encode_new({ 1, 2, 3, 4, 5 }));
+        Plaintext p = encoder.encode_new({ 1, 2, 3, 4, 5 });
         Ciphertext r = c.clone();
 
         std::cout << "running device ...\n";
@@ -143,7 +145,7 @@ void test1(size_t n, size_t repeat) {
                 cudaStreamSynchronize(0);
                 timer.tick(th);
             }
-            evaluator.multiply(c, c, r);
+            evaluator.multiply_plain(c, p, r);
             if (i == repeat + warm_up - 1) {
                 cudaStreamSynchronize(0);
                 timer.tock(th);

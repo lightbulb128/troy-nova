@@ -122,6 +122,7 @@ namespace troy::utils::fgk::rns_tool {
         Buffer<uint64_t> temp_base_c1c2(base_q_to_Bsk_conv.output_base().size() + base_q_to_m_tilde_conv.output_base().size(), coeff_count, true, pool);
 
         size_t block_count = ceil_div(coeff_count, KERNEL_THREAD_COUNT);
+        utils::set_device(output.device_index());
         kernel_fast_b_conv_m_tilde_sm_mrq<<<block_count, KERNEL_THREAD_COUNT>>>(
             input, coeff_count, m_tilde_value, base_q,
             base_q_to_Bsk_conv.input_base().inv_punctured_product_mod_base(), 
@@ -140,6 +141,7 @@ namespace troy::utils::fgk::rns_tool {
             temp_base_c1c2.reference(),
             output
         );
+        utils::stream_sync();
     }
 
     __global__ static void kernel_fast_floor_fast_b_conv_sk(
@@ -313,6 +315,7 @@ namespace troy::utils::fgk::rns_tool {
         const BaseConverter& B_to_q_conv = rns_tool.base_B_to_q_conv();
         const BaseConverter& B_to_m_sk_conv = rns_tool.base_B_to_m_sk_conv();
 
+        utils::set_device(destination.device_index());
         kernel_fast_floor_fast_b_conv_sk<<<block_count, KERNEL_THREAD_COUNT>>>(
             input_q, input_Bsk, count, dest_size,
             q_to_Bsk_conv.input_base().base(),
@@ -335,6 +338,7 @@ namespace troy::utils::fgk::rns_tool {
             temp_m_sk.reference(),
             destination
         );
+        utils::stream_sync();
         
     }
 
