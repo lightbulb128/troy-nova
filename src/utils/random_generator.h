@@ -34,6 +34,9 @@ namespace troy { namespace utils {
             uint64_t low = this->low + value;
             return ruint128_t(low, this->high + (low < this->low));
         }
+        __host__ __device__ inline uint8_t byte_at(size_t index) const {
+            return (index < 8) ? static_cast<uint8_t>(this->low >> (index * 8)) : static_cast<uint8_t>(this->high >> ((index - 8) * 8));
+        }
     };
 
     class RandomGenerator {

@@ -208,6 +208,55 @@ namespace random_generator {
             ASSERT_EQ(buffer1[i], buffer2[i]);
         }
 
+        size_t moduli_count = 3;
+        Array<Modulus> moduli(moduli_count, false);
+        moduli[0] = Modulus(12345);
+        moduli[1] = Modulus(23456);
+        moduli[2] = Modulus(56789);
+        Array<Modulus> modulus_device = moduli.to_device();
+
+        size_t n = 123;
+
+        { // ternary
+            Array<uint64_t> buffer_host(n * moduli_count, false);
+            Array<uint64_t> buffer_device(n * moduli_count, true);
+
+            rng1.sample_poly_ternary(buffer_host.reference(), n, moduli.const_reference());
+            rng2.sample_poly_ternary(buffer_device.reference(), n, modulus_device.const_reference());
+
+            buffer_device.to_host_inplace();
+            for (size_t i = 0; i < n * moduli_count; i++) {
+                ASSERT_EQ(buffer_host[i], buffer_device[i]);
+            }
+        }
+
+        { // centered binomial
+            Array<uint64_t> buffer_host(n * moduli_count, false);
+            Array<uint64_t> buffer_device(n * moduli_count, true);
+
+            rng1.sample_poly_centered_binomial(buffer_host.reference(), n, moduli.const_reference());
+            rng2.sample_poly_centered_binomial(buffer_device.reference(), n, modulus_device.const_reference());
+
+            buffer_device.to_host_inplace();
+            for (size_t i = 0; i < n * moduli_count; i++) {
+                ASSERT_EQ(buffer_host[i], buffer_device[i]);
+            }
+        }
+
+        { // uniform
+            Array<uint64_t> buffer_host(n * moduli_count, false);
+            Array<uint64_t> buffer_device(n * moduli_count, true);
+
+            rng1.sample_poly_uniform(buffer_host.reference(), n, moduli.const_reference());
+            rng2.sample_poly_uniform(buffer_device.reference(), n, modulus_device.const_reference());
+
+            buffer_device.to_host_inplace();
+            for (size_t i = 0; i < n * moduli_count; i++) {
+                ASSERT_EQ(buffer_host[i], buffer_device[i]);
+            }
+
+        }
+
     }
 
 

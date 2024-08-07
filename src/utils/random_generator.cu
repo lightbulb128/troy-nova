@@ -89,7 +89,8 @@ namespace troy {namespace utils {
     ) {
         size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
         if (idx < degree) {
-            uint8_t r = device_generate_uint128(seed, counter.add(idx)).low % 3;
+            size_t counter_offset = idx / 16;
+            uint8_t r = device_generate_uint128(seed, counter.add(counter_offset)).byte_at(idx & 15) % 3;
             size_t i = 0;
             for (size_t index = idx; index < destination.size(); index += degree) {
                 if (r == 2) {
@@ -108,8 +109,14 @@ namespace troy {namespace utils {
             throw std::runtime_error("[RandomGenerator::sample_poly_ternary] destination and modulus must be on the same device");
         }
         if (!device) {
+            size_t byte_at = 0;
+            ruint128_t full_word;
             for (size_t j = 0; j < degree; j++) {
-                uint8_t r = host_generate_uint128(this->seed, this->counter).low % 3;
+                if (byte_at == 0) {
+                    full_word = host_generate_uint128(this->seed, this->counter);
+                }
+                uint8_t r = full_word.byte_at(byte_at) % 3;
+                byte_at = (byte_at + 1) & 15;
                 for (size_t i = 0; i < moduli.size(); i++) {
                     size_t index = i * degree + j;
                     if (r == 2) {
@@ -127,7 +134,7 @@ namespace troy {namespace utils {
                 this->seed, this->counter
             );
             utils::stream_sync();
-            this->counter = this->counter.add(degree);
+            this->counter = this->counter.add(utils::ceil_div(degree, 16ul));
         }
     }
 
@@ -150,7 +157,9 @@ namespace troy {namespace utils {
     ) {
         size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
         if (idx < degree) {
-            int r = uint64_to_cbd(device_generate_uint128(seed, counter.add(idx)).low);
+            size_t counter_offset = idx / 2;
+            ruint128_t rf = device_generate_uint128(seed, counter.add(counter_offset));
+            int r = uint64_to_cbd((idx & 1) ? (rf.high) : (rf.low));
             size_t i = 0;
             for (size_t index = idx; index < destination.size(); index += degree) {
                 if (r >= 0) {
@@ -169,8 +178,12 @@ namespace troy {namespace utils {
             throw std::runtime_error("[RandomGenerator::sample_poly_centered_binomial] destination and modulus must be on the same device");
         }
         if (!device) {
+            ruint128_t full_word;
             for (size_t j = 0; j < degree; j++) {
-                int r = uint64_to_cbd(host_generate_uint128(this->seed, this->counter).low);
+                if (!(j & 1)) {
+                    full_word = host_generate_uint128(this->seed, this->counter);
+                }
+                int r = uint64_to_cbd((j & 1) ? (full_word.high) : (full_word.low));
                 for (size_t i = 0; i < moduli.size(); i++) {
                     size_t index = i * degree + j;
                     if (r >= 0) {
@@ -187,7 +200,7 @@ namespace troy {namespace utils {
                 destination, degree, moduli, this->seed, this->counter
             );
             utils::stream_sync();
-            this->counter = this->counter.add(degree);
+            this->counter = this->counter.add(utils::ceil_div(degree, 2ul));
         }
     }
 

@@ -508,20 +508,20 @@ namespace troy { namespace utils {
         }
 
         inline static Array<T> create_and_copy_from_slice(ConstSlice<T> slice, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
-            Array<T> array(slice.size(), slice.on_device(), pool);
+            Array<T> array = Array::create_uninitialized(slice.size(), slice.on_device(), pool);
             array.copy_from_slice(slice);
             return array;
         }
 
         inline static Array<T> create_and_copy_from_slice(ConstSlice<T> slice, bool device, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
             if (device && !pool) throw std::runtime_error("[Array::create_and_copy_from_slice] Memory pool handle is required for device memory");
-            Array<T> array(slice.size(), device, pool);
+            Array<T> array = Array::create_uninitialized(slice.size(), device, pool);
             array.copy_from_slice(slice);
             return array;
         }
 
         inline static Array<T> from_vector(std::vector<T>&& vector) {
-            Array<T> array(vector.size(), false, nullptr);
+            Array<T> array = Array::create_uninitialized(vector.size(), false, nullptr);
             if (vector.size() > 0) {
                 memcpy(array.pointer, vector.data(), vector.size() * sizeof(T));
             }
