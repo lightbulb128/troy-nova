@@ -84,105 +84,164 @@ namespace troy {namespace utils {
 
     };
 
-    void ntt_transfer_to_rev_inplace(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers);
-    void ntt_transfer_from_rev_inplace(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers);
-    void ntt_transfer_to_rev(ConstSlice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers, Slice<uint64_t> result);
-    void ntt_transfer_from_rev(ConstSlice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers, Slice<uint64_t> result);
+    class NTTTableIndexer {
+    public:
+        inline bool on_device() const { return tables_.on_device(); }
+        inline size_t device_index() const { return tables_.device_index(); }
+        enum NTTTableIndexerType {
+            Componentwise,
+            KeySwitchingSetProducts,
+            KeySwitchingSkipFinals
+        };
+        inline explicit NTTTableIndexer(ConstSlice<NTTTables> tables): type_(Componentwise), tables_(tables) {}
+        inline static NTTTableIndexer key_switching_set_products(ConstSlice<NTTTables> tables, size_t decomp_modulus_size) {
+            return NTTTableIndexer(NTTTableIndexerType::KeySwitchingSetProducts, decomp_modulus_size, tables);
+        }
+        inline static NTTTableIndexer key_switching_skip_finals(ConstSlice<NTTTables> tables, size_t decomp_modulus_size) {
+            return NTTTableIndexer(NTTTableIndexerType::KeySwitchingSkipFinals, decomp_modulus_size, tables);
+        }
+        inline const NTTTables& __host__ __device__ get(size_t poly_index, size_t component_index) const {
+            switch (type_) {
+                case NTTTableIndexerType::Componentwise:
+                    return tables_[component_index];
+                case NTTTableIndexerType::KeySwitchingSetProducts:
+                    if (poly_index == decomp_modulus_size_) {
+                        return tables_[tables_.size() - 1];
+                    } else {
+                        return tables_[poly_index];
+                    }
+                case NTTTableIndexerType::KeySwitchingSkipFinals:
+                    if (component_index == decomp_modulus_size_) {
+                        return tables_[tables_.size() - 1];
+                    } else {
+                        return tables_[component_index];
+                    }
+                default:
+                    return tables_[component_index];
+            }
+        }
+    private:
+        inline NTTTableIndexer(NTTTableIndexerType type, size_t decomp_modulus_size, ConstSlice<NTTTables> tables): type_(type), decomp_modulus_size_(decomp_modulus_size), tables_(tables) {}
+        NTTTableIndexerType type_;
+        size_t decomp_modulus_size_;
+        ConstSlice<NTTTables> tables_;
+    };
 
-    void ntt_transfer_last_reduce(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables);
+    void ntt_transfer_to_rev_inplace(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, NTTTableIndexer tables);
+    void ntt_transfer_from_rev_inplace(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, NTTTableIndexer tables);
+    void ntt_transfer_to_rev(ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, Slice<uint64_t> result, NTTTableIndexer tables);
+    void ntt_transfer_from_rev(ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, Slice<uint64_t> result, NTTTableIndexer tables);
 
-    void ntt_multiply_inv_degree(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables);
+    void ntt_transfer_last_reduce(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, NTTTableIndexer tables);
+    void ntt_multiply_inv_degree(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, NTTTableIndexer tables);
+
+    inline void ntt_transfer_last_reduce(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables) {
+        ntt_transfer_last_reduce(operand, pcount, tables.size(), log_degree, NTTTableIndexer(tables));
+    }
+    inline void ntt_multiply_inv_degree(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables) {
+        ntt_multiply_inv_degree(operand, pcount, tables.size(), log_degree, NTTTableIndexer(tables));
+    }
 
     /*
         Note: originally the implementations of ntt_lazy and ntt were different, where the lazy does not execute the last 4m to m reduction. (ntt_transfer_last_reduce)
         but for GPU this difference would make a new kernel launch which might be slower than just doing the last reduction.
     */
 
-    inline void ntt_lazy_inplace_ps(Slice<uint64_t> operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables) {
+    inline void ntt_inplace_ps(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t degree, NTTTableIndexer tables) {
         int logd = utils::get_power_of_two(degree);
         if (logd < 0) {
-            throw std::invalid_argument("[ntt_lazy_inplace_ps] degree is invalid");
+            throw std::invalid_argument("[ntt_inplace_ps] degree is invalid");
         }
         size_t log_degree = static_cast<size_t>(logd);
-        ntt_transfer_to_rev_inplace(operand, pcount, log_degree, tables, false);
+        ntt_transfer_to_rev_inplace(operand, pcount, component_count, log_degree, false, tables);
     }
 
-    inline void ntt_inplace_ps(Slice<uint64_t> operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables) {
-        ntt_lazy_inplace_ps(operand, pcount, degree, tables);
-    }
-
-    inline void intt_lazy_inplace_ps(Slice<uint64_t> operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables) {
+    inline void intt_inplace_ps(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t degree, NTTTableIndexer tables) {
         int logd = utils::get_power_of_two(degree);
         if (logd < 0) {
             throw std::invalid_argument("[inverse_ntt_negacyclic_harvey_lazy_ps] degree is invalid");
         }
         size_t log_degree = static_cast<size_t>(logd);
-        ntt_transfer_from_rev_inplace(operand, pcount, log_degree, tables, true);
+        ntt_transfer_from_rev_inplace(operand, pcount, component_count, log_degree, true, tables);
     }
 
-    inline void intt_inplace_ps(Slice<uint64_t> operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables) {
-        intt_lazy_inplace_ps(operand, pcount, degree, tables);
+    inline void ntt_inplace_p(Slice<uint64_t> operand, size_t component_count, size_t degree, NTTTableIndexer tables) {
+        ntt_inplace_ps(operand, 1, component_count, degree, tables);
     }
 
-    inline void ntt_lazy_inplace_p(Slice<uint64_t> operand, size_t degree, ConstSlice<NTTTables> tables) {
-        ntt_lazy_inplace_ps(operand, 1, degree, tables);
-    }
-
-    inline void ntt_inplace_p(Slice<uint64_t> operand, size_t degree, ConstSlice<NTTTables> tables) {
-        ntt_inplace_ps(operand, 1, degree, tables);
-    }
-
-    inline void intt_lazy_inplace_p(Slice<uint64_t> operand, size_t degree, ConstSlice<NTTTables> tables) {
-        intt_lazy_inplace_ps(operand, 1, degree, tables);
-    }
-
-    inline void intt_inplace_p(Slice<uint64_t> operand, size_t degree, ConstSlice<NTTTables> tables) {
-        intt_inplace_ps(operand, 1, degree, tables);
-    }
-
-    inline void ntt_lazy_inplace(Slice<uint64_t> operand, size_t degree, ConstPointer<NTTTables> tables) {
-        ntt_lazy_inplace_ps(operand, 1, degree, ConstSlice<NTTTables>::from_pointer(tables));
+    inline void intt_inplace_p(Slice<uint64_t> operand, size_t component_count, size_t degree, NTTTableIndexer tables) {
+        intt_inplace_ps(operand, 1, component_count, degree, tables);
     }
 
     inline void ntt_inplace(Slice<uint64_t> operand, size_t degree, ConstPointer<NTTTables> tables) {
-        ntt_inplace_ps(operand, 1, degree, ConstSlice<NTTTables>::from_pointer(tables));
-    }
-
-    inline void intt_lazy_inplace(Slice<uint64_t> operand, size_t degree, ConstPointer<NTTTables> tables) {
-        intt_lazy_inplace_ps(operand, 1, degree, ConstSlice<NTTTables>::from_pointer(tables));
+        ConstSlice<NTTTables> table_one_slice(tables);
+        NTTTableIndexer indexer(table_one_slice);
+        ntt_inplace_ps(operand, 1, 1, degree, indexer);
     }
 
     inline void intt_inplace(Slice<uint64_t> operand, size_t degree, ConstPointer<NTTTables> tables) {
-        intt_inplace_ps(operand, 1, degree, ConstSlice<NTTTables>::from_pointer(tables));
+        ConstSlice<NTTTables> table_one_slice(tables);
+        NTTTableIndexer indexer(table_one_slice);
+        intt_inplace_ps(operand, 1, 1, degree, indexer);
     }
 
-    inline void ntt_ps(ConstSlice<uint64_t> operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables, Slice<uint64_t> result) {
+    inline void ntt_ps(ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t degree, Slice<uint64_t> result, NTTTableIndexer tables) {
         int logd = utils::get_power_of_two(degree);
         if (logd < 0) {
             throw std::invalid_argument("[inverse_ntt_negacyclic_harvey_lazy_ps] degree is invalid");
         }
         size_t log_degree = static_cast<size_t>(logd);
-        ntt_transfer_to_rev(operand, pcount, log_degree, tables, false, result);
+        ntt_transfer_to_rev(operand, pcount, component_count, log_degree, false, result, tables);
     }
-    inline void ntt_p(ConstSlice<uint64_t> operand, size_t degree, ConstSlice<NTTTables> tables, Slice<uint64_t> result) {
-        ntt_ps(operand, 1, degree, tables, result);
+    inline void ntt_p(ConstSlice<uint64_t> operand, size_t component_count, size_t degree, Slice<uint64_t> result, NTTTableIndexer tables) {
+        ntt_ps(operand, 1, component_count, degree, result, tables);
     }
     inline void ntt(ConstSlice<uint64_t> operand, size_t degree, ConstPointer<NTTTables> tables, Slice<uint64_t> result) {
-        ntt_ps(operand, 1, degree, ConstSlice<NTTTables>::from_pointer(tables), result);
+        ConstSlice<NTTTables> table_one_slice(tables);
+        NTTTableIndexer indexer(table_one_slice);
+        ntt_ps(operand, 1, 1, degree, result, indexer);
     }
-    inline void intt_ps(ConstSlice<uint64_t> operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables, Slice<uint64_t> result) {
+    inline void intt_ps(ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t degree, Slice<uint64_t> result, NTTTableIndexer tables) {
         int logd = utils::get_power_of_two(degree);
         if (logd < 0) {
             throw std::invalid_argument("[inverse_ntt_negacyclic_harvey_lazy_ps] degree is invalid");
         }
         size_t log_degree = static_cast<size_t>(logd);
-        ntt_transfer_from_rev(operand, pcount, log_degree, tables, true, result);
+        ntt_transfer_from_rev(operand, pcount, component_count, log_degree, true, result, tables);
     }
-    inline void intt_p(ConstSlice<uint64_t> operand, size_t degree, ConstSlice<NTTTables> tables, Slice<uint64_t> result) {
-        intt_ps(operand, 1, degree, tables, result);
+    inline void intt_p(ConstSlice<uint64_t> operand, size_t component_count, size_t degree, Slice<uint64_t> result, NTTTableIndexer tables) {
+        intt_ps(operand, 1, component_count, degree, result, tables);
     }
     inline void intt(ConstSlice<uint64_t> operand, size_t degree, ConstPointer<NTTTables> tables, Slice<uint64_t> result) {
-        intt_ps(operand, 1, degree, ConstSlice<NTTTables>::from_pointer(tables), result);
+        ConstSlice<NTTTables> table_one_slice(tables);
+        NTTTableIndexer indexer(table_one_slice);
+        intt_ps(operand, 1, 1, degree, result, indexer);
+    }
+
+
+    inline void ntt_inplace_ps(Slice<uint64_t> operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables) {
+        ntt_inplace_ps(operand, pcount, tables.size(), degree, NTTTableIndexer(tables));
+    }
+    inline void ntt_inplace_p(Slice<uint64_t> operand, size_t degree, ConstSlice<NTTTables> tables) {
+        ntt_inplace_ps(operand, 1, tables.size(), degree, NTTTableIndexer(tables));
+    }
+    inline void intt_inplace_ps(Slice<uint64_t> operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables) {
+        intt_inplace_ps(operand, pcount, tables.size(), degree, NTTTableIndexer(tables));
+    }
+    inline void intt_inplace_p(Slice<uint64_t> operand, size_t degree, ConstSlice<NTTTables> tables) {
+        intt_inplace_ps(operand, 1, tables.size(), degree, NTTTableIndexer(tables));
+    }
+    inline void ntt_ps(ConstSlice<uint64_t> operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables, Slice<uint64_t> result) {
+        ntt_ps(operand, pcount, tables.size(), degree, result, NTTTableIndexer(tables));
+    }
+    inline void ntt_p(ConstSlice<uint64_t> operand, size_t degree, ConstSlice<NTTTables> tables, Slice<uint64_t> result) {
+        ntt_ps(operand, 1, tables.size(), degree, result, NTTTableIndexer(tables));
+    }
+    inline void intt_ps(ConstSlice<uint64_t> operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables, Slice<uint64_t> result) {
+        intt_ps(operand, pcount, tables.size(), degree, result, NTTTableIndexer(tables));
+    }
+    inline void intt_p(ConstSlice<uint64_t> operand, size_t degree, ConstSlice<NTTTables> tables, Slice<uint64_t> result) {
+        intt_ps(operand, 1, tables.size(), degree, result, NTTTableIndexer(tables));
     }
 
 }}

@@ -3,8 +3,10 @@
 #include "evaluator.h"
 #include "utils/dynamic_array.h"
 #include "utils/memory_pool.h"
+#include "utils/ntt.h"
 #include "utils/polynomial_buffer.h"
 #include "fgk/dyadic_convolute.h"
+#include "fgk/switch_key.h"
 #include <thread>
 
 namespace troy {
@@ -314,7 +316,7 @@ namespace troy {
             rns_tool.fast_b_conv_m_tilde_sm_mrq(encrypted1.const_poly(i), encrypted1_Bsk.poly(i), pool);
         }
         // Transform to NTT form in base Bsk
-        utils::ntt_lazy_inplace_ps(encrypted1_Bsk.reference(), encrypted1_size, coeff_count, base_Bsk_ntt_tables);
+        utils::ntt_inplace_ps(encrypted1_Bsk.reference(), encrypted1_size, coeff_count, base_Bsk_ntt_tables);
 
         // Repeat for encrypted2
         Buffer<uint64_t> encrypted2_q(encrypted2_size, base_q_size, coeff_count, device, pool);
@@ -323,7 +325,7 @@ namespace troy {
         for (size_t i = 0; i < encrypted2_size; i++) {
             rns_tool.fast_b_conv_m_tilde_sm_mrq(encrypted2.poly(i), encrypted2_Bsk.poly(i), pool);
         }
-        utils::ntt_lazy_inplace_ps(encrypted2_Bsk.reference(), encrypted2_size, coeff_count, base_Bsk_ntt_tables);
+        utils::ntt_inplace_ps(encrypted2_Bsk.reference(), encrypted2_size, coeff_count, base_Bsk_ntt_tables);
 
         // Allocate temporary space for the output of step (4)
         // We allocate space separately for the base q and the base Bsk components
@@ -491,7 +493,7 @@ namespace troy {
             rns_tool.fast_b_conv_m_tilde_sm_mrq(encrypted.const_poly(i), encrypted_Bsk.poly(i), pool);
         }
         // Transform to NTT form in base Bsk
-        utils::ntt_lazy_inplace_ps(encrypted_Bsk.reference(), encrypted_size, coeff_count, base_Bsk_ntt_tables);
+        utils::ntt_inplace_ps(encrypted_Bsk.reference(), encrypted_size, coeff_count, base_Bsk_ntt_tables);
 
         // Allocate temporary space for the output of step (4)
         // We allocate space separately for the base q and the base Bsk components
@@ -975,6 +977,165 @@ namespace troy {
         }
     }
 
+    
+    void kernel_ski_util6_merged(
+        Slice<uint64_t> t_last,
+        size_t coeff_count,
+        ConstPointer<Modulus> qk,
+        ConstSlice<Modulus> key_modulus,
+        size_t decomp_modulus_size,
+        Slice<uint64_t> t_ntt
+    ) {
+        bool device = t_last.on_device();
+        if (!device) {
+            uint64_t qk_half = qk->value() >> 1;
+            for (size_t i = 0; i < coeff_count; i++) {
+                t_last[i] = utils::barrett_reduce_uint64(t_last[i] + qk_half, *qk);
+                for (size_t j = 0; j < decomp_modulus_size; j++) {
+                    const Modulus& qi = key_modulus[j];
+                    if (qk->value() > qi.value()) {
+                        t_ntt[j * coeff_count + i] = utils::barrett_reduce_uint64(t_last[i], qi);
+                    } else {
+                        t_ntt[j * coeff_count + i] = t_last[i];
+                    }
+                    uint64_t fix = qi.value() - utils::barrett_reduce_uint64(qk_half, key_modulus[j]);
+                    t_ntt[j * coeff_count + i] += fix;
+                }
+            }
+        } else {
+            size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
+            utils::set_device(t_last.device_index());
+            kernel_ski_util6<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                t_last, coeff_count, qk, key_modulus, decomp_modulus_size, t_ntt
+            );
+            utils::stream_sync();
+        }
+    }
+
+    __global__ static void kernel_ski_util5_merged_step1(
+        ConstSlice<uint64_t> poly_prod_intt,
+        ConstPointer<Modulus> plain_modulus,
+        ConstSlice<Modulus> key_modulus,
+        size_t key_component_count,
+        size_t decomp_modulus_size,
+        size_t coeff_count,
+        uint64_t qk_inv_qp,
+        Slice<uint64_t> delta
+     ) {
+
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        if (global_index >= key_component_count * coeff_count) return;
+        size_t k = global_index / coeff_count;
+        size_t i = global_index % coeff_count;
+        size_t t_last_offset = coeff_count * (decomp_modulus_size + 1) * k + decomp_modulus_size * coeff_count;
+        
+        uint64_t kt = plain_modulus->reduce(poly_prod_intt[i + t_last_offset]);
+        kt = utils::negate_uint64_mod(kt, *plain_modulus);
+        if (qk_inv_qp != 1) {
+            kt = utils::multiply_uint64_mod(kt, qk_inv_qp, *plain_modulus);
+        }
+
+        uint64_t qk = key_modulus[key_modulus.size() - 1].value();
+
+        for (size_t j = 0; j < decomp_modulus_size; j++) {
+            uint64_t delta_result = 0;
+            const Modulus& qi = key_modulus[j];
+            // delta = k mod q_i
+            delta_result = qi.reduce(kt);
+            // delta = k * q_k mod q_i
+            delta_result = utils::multiply_uint64_mod(delta_result, qk, qi);
+            // c mod q_i
+            uint64_t c_mod_qi = qi.reduce(poly_prod_intt[i + t_last_offset]);
+            // delta = c + k * q_k mod q_i
+            // c_{i} = c_{i} - delta mod q_i
+            delta_result = utils::add_uint64_mod(delta_result, c_mod_qi, qi);
+            delta[(k * decomp_modulus_size + j) * coeff_count + i] = delta_result;
+        }
+
+    }
+    
+    __global__ static void kernel_ski_util5_merged_step2(
+        ConstSlice<uint64_t> delta_array,
+        Slice<uint64_t> poly_prod,
+        size_t coeff_count,
+        ConstSlice<Modulus> key_modulus,
+        size_t key_component_count,
+        size_t decomp_modulus_size,
+        ConstSlice<MultiplyUint64Operand> modswitch_factors,
+        Slice<uint64_t> encrypted
+    ) {
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        if (global_index >= coeff_count * key_component_count) return;
+        size_t i = global_index % coeff_count;
+        size_t k = global_index / coeff_count;
+        for (size_t j = 0; j < decomp_modulus_size; j++) {
+            size_t index = (k * decomp_modulus_size + j) * coeff_count + i;
+            uint64_t delta = delta_array[index];
+            uint64_t& target = poly_prod[(k * (decomp_modulus_size + 1) + j) * coeff_count + i];
+            target = utils::sub_uint64_mod(target, delta, key_modulus[j]);
+            target = utils::multiply_uint64operand_mod(target, modswitch_factors[j], key_modulus[j]);
+            encrypted[index] = utils::add_uint64_mod(target, encrypted[index], key_modulus[j]);
+        }
+    }
+
+    __global__ static void kernel_ski_util6_merged(
+        Slice<uint64_t> poly_prod_intt,
+        size_t key_component_count,
+        size_t decomp_modulus_size,
+        size_t coeff_count,
+        ConstPointer<Modulus> qk,
+        ConstSlice<Modulus> key_modulus,
+        Slice<uint64_t> temp_last
+    ) {
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        if (global_index >= key_component_count * coeff_count) return;
+        size_t i = global_index % coeff_count;
+        size_t k = global_index / coeff_count;
+        uint64_t qk_half = qk->value() >> 1;
+        size_t offset = coeff_count * (decomp_modulus_size + 1) * k + decomp_modulus_size * coeff_count;
+        size_t poly_prod_intt_i = utils::barrett_reduce_uint64(poly_prod_intt[offset + i] + qk_half, *qk);
+        for (size_t j = 0; j < decomp_modulus_size; j++) {
+            uint64_t result;
+            const Modulus& qi = key_modulus[j];
+            if (qk->value() > qi.value()) {
+                result = utils::barrett_reduce_uint64(poly_prod_intt_i, qi);
+            } else {
+                result = poly_prod_intt_i;
+            }
+            uint64_t fix = qi.value() - utils::barrett_reduce_uint64(qk_half, key_modulus[j]);
+            result += fix;
+            temp_last[(k * decomp_modulus_size + j) * coeff_count + i] = result;
+        }
+        
+    }
+
+    __global__ static void kernel_ski_util7_merged(
+        Slice<uint64_t> poly_prod,
+        ConstSlice<uint64_t> temp_last,
+        size_t coeff_count, 
+        Slice<uint64_t> encrypted,
+        bool is_ckks,
+        size_t key_component_count,
+        size_t decomp_modulus_size,
+        ConstSlice<Modulus> key_modulus,
+        ConstSlice<MultiplyUint64Operand> modswitch_factors
+    ) {
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        if (global_index >= coeff_count * decomp_modulus_size) return;
+        size_t i = global_index % coeff_count;
+        size_t j = global_index / coeff_count;
+        for (size_t k = 0; k < key_component_count; k++) {
+            size_t offset = k * decomp_modulus_size * coeff_count;
+            uint64_t& dest = poly_prod[k * (decomp_modulus_size + 1) * coeff_count + j * coeff_count + i];
+            uint64_t qi = key_modulus[j].value();
+            dest += ((is_ckks) ? (qi << 2) : (qi << 1)) - temp_last[offset + j * coeff_count + i];
+            dest = utils::multiply_uint64operand_mod(dest, modswitch_factors[j], key_modulus[j]);
+            encrypted[offset + j * coeff_count + i] = utils::add_uint64_mod(
+                encrypted[offset + j * coeff_count + i], dest, key_modulus[j]
+            );
+        }
+    }
+
     __global__ static void kernel_ski_util7(
         Slice<uint64_t> t_poly_prod_i,
         ConstSlice<uint64_t> t_ntt,
@@ -1055,8 +1216,8 @@ namespace troy {
         size_t coeff_count = parms.poly_modulus_degree();
         size_t decomp_modulus_size = parms.coeff_modulus().size();
         ConstSlice<Modulus> key_modulus = key_parms.coeff_modulus();
-        Array<Modulus> key_modulus_host = Array<Modulus>::create_and_copy_from_slice(key_modulus, pool);
-        key_modulus_host.to_host_inplace();
+        // Array<Modulus> key_modulus_host = Array<Modulus>::create_and_copy_from_slice(key_modulus, pool); // TODO: can we remove this?
+        // key_modulus_host.to_host_inplace();
         size_t key_modulus_size = key_modulus.size();
         size_t rns_modulus_size = decomp_modulus_size + 1;
         ConstSlice<NTTTables> key_ntt_tables = key_context_data->small_ntt_tables();
@@ -1082,135 +1243,221 @@ namespace troy {
 
         // Temporary result
         bool device = target.on_device();
-        Array<uint64_t> poly_prod(key_component_count * coeff_count * rns_modulus_size, device, pool);
-        Array<uint64_t> poly_lazy(key_component_count * coeff_count * 2, device, pool);
-        Array<uint64_t> temp_ntt(coeff_count, device, pool);
 
-        for (size_t i = 0; i < rns_modulus_size; i++) {
-            size_t key_index = (i == decomp_modulus_size ? key_modulus_size - 1 : i);
+        // We fuse some kernels for device only. This is not necessary for host execution.
 
-            // Product of two numbers is up to 60 + 60 = 120 bits, so we can sum up to 256 of them without reduction.
-            size_t lazy_reduction_summand_bound = utils::HE_MULTIPLY_ACCUMULATE_USER_MOD_MAX;
-            size_t lazy_reduction_counter = lazy_reduction_summand_bound;
+        Buffer<uint64_t> poly_prod(key_component_count, rns_modulus_size, coeff_count, device, pool);
 
-            // Allocate memory for a lazy accumulator (128-bit coefficients)
-            poly_lazy.set_zero();
+        if (!device) { // host
 
-            // Multiply with keys and perform lazy reduction on product's coefficients
-            temp_ntt.set_zero();
-            for (size_t j = 0; j < decomp_modulus_size; j++) {
-                ConstSlice<uint64_t> temp_operand(nullptr, 0, device, nullptr);
-                if (is_ntt_form && (i == j)) {
-                    temp_operand = target.const_slice(j * coeff_count, (j + 1) * coeff_count);
-                } else {
-                    if (key_modulus_host[j].value() <= key_modulus_host[key_index].value()) {
-                        temp_ntt.copy_from_slice(target_copied.const_slice(j * coeff_count, (j + 1) * coeff_count));
+            Buffer<uint64_t> poly_lazy(key_component_count * coeff_count * 2, device, pool);
+            Buffer<uint64_t> temp_ntt(coeff_count, device, pool);
+
+            for (size_t i = 0; i < rns_modulus_size; i++) {
+                size_t key_index = (i == decomp_modulus_size ? key_modulus_size - 1 : i);
+
+                // Product of two numbers is up to 60 + 60 = 120 bits, so we can sum up to 256 of them without reduction.
+                size_t lazy_reduction_summand_bound = utils::HE_MULTIPLY_ACCUMULATE_USER_MOD_MAX;
+                size_t lazy_reduction_counter = lazy_reduction_summand_bound;
+
+                // Allocate memory for a lazy accumulator (128-bit coefficients)
+                poly_lazy.set_zero();
+
+                // Multiply with keys and perform lazy reduction on product's coefficients
+                for (size_t j = 0; j < decomp_modulus_size; j++) {
+                    ConstSlice<uint64_t> temp_operand(nullptr, 0, device, nullptr);
+                    if (is_ntt_form && (i == j)) {
+                        temp_operand = target.const_slice(j * coeff_count, (j + 1) * coeff_count);
                     } else {
-                        utils::modulo(target_copied.const_slice(j * coeff_count, (j + 1) * coeff_count), key_modulus.at(key_index), temp_ntt.reference());
+                        if (key_modulus[j].value() <= key_modulus[key_index].value()) {
+                            temp_ntt.copy_from_slice(target_copied.const_slice(j * coeff_count, (j + 1) * coeff_count));
+                        } else {
+                            utils::modulo(target_copied.const_slice(j * coeff_count, (j + 1) * coeff_count), key_modulus.at(key_index), temp_ntt.reference());
+                        }
+                        utils::ntt_inplace(temp_ntt.reference(), coeff_count, key_ntt_tables.at(key_index));
+                        temp_operand = temp_ntt.const_reference();
                     }
-                    utils::ntt_lazy_inplace(temp_ntt.reference(), coeff_count, key_ntt_tables.at(key_index));
-                    temp_operand = temp_ntt.const_reference();
+                    
+                    // Multiply with keys and modular accumulate products in a lazy fashion
+                    size_t key_vector_poly_coeff_size = key_modulus_size * coeff_count;
+
+                    if (!lazy_reduction_counter) {
+                        ski_util1(
+                            poly_lazy.reference(), coeff_count, key_component_count,
+                            key_vector[j].as_ciphertext().const_reference(),
+                            key_vector_poly_coeff_size,
+                            temp_operand, key_index, key_modulus.at(key_index)
+                        );
+                    } else {
+                        ski_util2(
+                            poly_lazy.reference(), coeff_count, key_component_count,
+                            key_vector[j].as_ciphertext().const_reference(),
+                            key_vector_poly_coeff_size,
+                            temp_operand, key_index
+                        );
+                    }
+
+                    lazy_reduction_counter -= 1;
+                    if (lazy_reduction_counter == 0) {
+                        lazy_reduction_counter = lazy_reduction_summand_bound;
+                    }
                 }
                 
-                // Multiply with keys and modular accumulate products in a lazy fashion
-                size_t key_vector_poly_coeff_size = key_modulus_size * coeff_count;
+                Slice<uint64_t> t_poly_prod_iter = poly_prod.slice(i * coeff_count, poly_prod.size());
 
-                if (!lazy_reduction_counter) {
-                    ski_util1(
-                        poly_lazy.reference(), coeff_count, key_component_count,
-                        key_vector[j].as_ciphertext().const_reference(),
-                        key_vector_poly_coeff_size,
-                        temp_operand, key_index, key_modulus.at(key_index)
+                if (lazy_reduction_counter == lazy_reduction_summand_bound) {
+                    ski_util3(
+                        poly_lazy.const_reference(), coeff_count, key_component_count,
+                        rns_modulus_size, t_poly_prod_iter
                     );
                 } else {
-                    ski_util2(
-                        poly_lazy.reference(), coeff_count, key_component_count,
-                        key_vector[j].as_ciphertext().const_reference(),
-                        key_vector_poly_coeff_size,
-                        temp_operand, key_index
+                    ski_util4(
+                        poly_lazy.const_reference(), coeff_count, key_component_count,
+                        rns_modulus_size, t_poly_prod_iter,
+                        key_modulus.at(key_index)
                     );
                 }
+            } // i
 
-                lazy_reduction_counter -= 1;
-                if (lazy_reduction_counter == 0) {
-                    lazy_reduction_counter = lazy_reduction_summand_bound;
-                }
-            }
-            
-            Slice<uint64_t> t_poly_prod_iter = poly_prod.slice(i * coeff_count, poly_prod.size());
+        } else { // device
 
-            if (lazy_reduction_counter == lazy_reduction_summand_bound) {
-                ski_util3(
-                    poly_lazy.const_reference(), coeff_count, key_component_count,
-                    rns_modulus_size, t_poly_prod_iter
-                );
-            } else {
-                ski_util4(
-                    poly_lazy.const_reference(), coeff_count, key_component_count,
-                    rns_modulus_size, t_poly_prod_iter,
-                    key_modulus.at(key_index)
-                );
-            }
-        } // i
+            Buffer<uint64_t> poly_lazy(key_component_count * coeff_count * 2, device, pool);
+            Buffer<uint64_t> temp_ntt(rns_modulus_size, decomp_modulus_size, coeff_count, device, pool);
+
+            utils::fgk::switch_key::set_accumulate(decomp_modulus_size, coeff_count, target_copied.const_reference(), temp_ntt, key_modulus);
+
+            utils::ntt_inplace_ps(temp_ntt.reference(), rns_modulus_size, decomp_modulus_size, coeff_count, 
+                utils::NTTTableIndexer::key_switching_set_products(key_ntt_tables, decomp_modulus_size));
+
+            utils::fgk::switch_key::accumulate_products(
+                decomp_modulus_size, key_component_count, coeff_count, temp_ntt.const_reference(), 
+                key_modulus, kswitch_keys.get_data_ptrs(kswitch_keys_index), poly_prod.reference()
+            );
+
+        }
         
         // Accumulated products are now stored in t_poly_prod
 
-        temp_ntt = Array<uint64_t>(decomp_modulus_size * coeff_count, device, pool);
-        for (size_t i = 0; i < key_component_count; i++) {
-            if (scheme == SchemeType::BGV) {
-                // qk is the special prime
-                uint64_t qk = key_modulus_host[key_modulus_size - 1].value();
-                uint64_t qk_inv_qp = this->context()->key_context_data().value()->rns_tool().inv_q_last_mod_t();
+        if (!device) { // host
+            Buffer<uint64_t> temp_ntt = Buffer<uint64_t>(decomp_modulus_size, coeff_count, device, pool);
+            for (size_t i = 0; i < key_component_count; i++) {
+                if (scheme == SchemeType::BGV) {
+                    // qk is the special prime
+                    uint64_t qk = key_modulus[key_modulus_size - 1].value();
+                    uint64_t qk_inv_qp = this->context()->key_context_data().value()->rns_tool().inv_q_last_mod_t();
 
-                // Lazy reduction; this needs to be then reduced mod qi
-                size_t t_last_offset = coeff_count * rns_modulus_size * i + decomp_modulus_size * coeff_count;
-                Slice<uint64_t> t_last = poly_prod.slice(t_last_offset, t_last_offset + coeff_count);
-                utils::intt_inplace(t_last, coeff_count, key_ntt_tables.at(key_modulus_size - 1));
-                ConstPointer<Modulus> plain_modulus = parms.plain_modulus();
+                    // Lazy reduction; this needs to be then reduced mod qi
+                    size_t t_last_offset = coeff_count * rns_modulus_size * i + decomp_modulus_size * coeff_count;
+                    Slice<uint64_t> t_last = poly_prod.slice(t_last_offset, t_last_offset + coeff_count);
+                    utils::intt_inplace(t_last, coeff_count, key_ntt_tables.at(key_modulus_size - 1));
+                    ConstPointer<Modulus> plain_modulus = parms.plain_modulus();
 
-                ski_util5(
-                    t_last.as_const(), poly_prod.slice(i * coeff_count * rns_modulus_size, poly_prod.size()),
-                    coeff_count, plain_modulus, key_modulus, key_ntt_tables,
-                    decomp_modulus_size, qk_inv_qp, qk,
-                    modswitch_factors, encrypted.poly(i),
-                    pool
-                );
-            } else {
-                // Lazy reduction; this needs to be then reduced mod qi
-                size_t t_last_offset = coeff_count * rns_modulus_size * i + decomp_modulus_size * coeff_count;
-                Slice<uint64_t> t_last = poly_prod.slice(t_last_offset, t_last_offset + coeff_count);
-                temp_ntt.set_zero();
-                utils::intt_inplace(t_last, coeff_count, key_ntt_tables.at(key_modulus_size - 1));
-
-                ski_util6(
-                    t_last, coeff_count, key_modulus.at(key_modulus_size - 1),
-                    key_modulus,
-                    decomp_modulus_size,
-                    temp_ntt.reference()
-                );
-                
-                if (is_ntt_form) {
-                    utils::ntt_lazy_inplace_p(temp_ntt.reference(), coeff_count, key_ntt_tables.const_slice(0, decomp_modulus_size));
+                    ski_util5(
+                        t_last.as_const(), poly_prod.slice(i * coeff_count * rns_modulus_size, poly_prod.size()),
+                        coeff_count, plain_modulus, key_modulus, key_ntt_tables,
+                        decomp_modulus_size, qk_inv_qp, qk,
+                        modswitch_factors, encrypted.poly(i),
+                        pool
+                    );
                 } else {
-                    utils::intt_inplace_p(
-                        poly_prod.slice(
-                            i * coeff_count * rns_modulus_size, 
-                            i * coeff_count * rns_modulus_size + decomp_modulus_size * coeff_count
-                        ), 
-                        coeff_count, 
-                        key_ntt_tables.const_slice(0, decomp_modulus_size)
+                    // Lazy reduction; this needs to be then reduced mod qi
+                    size_t t_last_offset = coeff_count * rns_modulus_size * i + decomp_modulus_size * coeff_count;
+                    Slice<uint64_t> t_last = poly_prod.slice(t_last_offset, t_last_offset + coeff_count);
+                    // temp_ntt.set_zero();
+                    utils::intt_inplace(t_last, coeff_count, key_ntt_tables.at(key_modulus_size - 1));
+
+                    ski_util6(
+                        t_last, coeff_count, key_modulus.at(key_modulus_size - 1),
+                        key_modulus,
+                        decomp_modulus_size,
+                        temp_ntt.reference()
+                    );
+                    
+                    if (is_ntt_form) {
+                        utils::ntt_inplace_p(temp_ntt.reference(), coeff_count, key_ntt_tables.const_slice(0, decomp_modulus_size));
+                    } else {
+                        utils::intt_inplace_p(
+                            poly_prod.slice(
+                                i * coeff_count * rns_modulus_size, 
+                                i * coeff_count * rns_modulus_size + decomp_modulus_size * coeff_count
+                            ), 
+                            coeff_count, 
+                            key_ntt_tables.const_slice(0, decomp_modulus_size)
+                        );
+                    }
+
+                    ski_util7(
+                        poly_prod.slice(i * coeff_count * rns_modulus_size, poly_prod.size()),
+                        temp_ntt.const_reference(),
+                        coeff_count, encrypted.poly(i),
+                        scheme==SchemeType::CKKS, decomp_modulus_size, key_modulus,
+                        modswitch_factors
                     );
                 }
-
-                ski_util7(
-                    poly_prod.slice(i * coeff_count * rns_modulus_size, poly_prod.size()),
-                    temp_ntt.const_reference(),
-                    coeff_count, encrypted.poly(i),
-                    scheme==SchemeType::CKKS, decomp_modulus_size, key_modulus,
-                    modswitch_factors
-                );
             }
-            // printf("enc %ld: ", i); printDeviceArray(encrypted.data(i).get(), key_component_count * coeff_count);
+
+        } else { // device
+
+            Buffer<uint64_t> poly_prod_intt(key_component_count, rns_modulus_size, coeff_count, device, pool);
+            
+            // When is_ntt_form is true, we actually only need the INTT of the every polynomial's last component. 
+            // but iteration over the polynomial and then conduct INTT will be inefficient because of multiple kernel calls.
+            utils::intt_ps(
+                poly_prod.const_reference(), key_component_count, rns_modulus_size, coeff_count, 
+                poly_prod_intt.reference(), utils::NTTTableIndexer::key_switching_skip_finals(key_ntt_tables, decomp_modulus_size)
+            );
+            
+            if (scheme == SchemeType::BGV) {
+
+                Buffer<uint64_t> delta(key_component_count, decomp_modulus_size, coeff_count, device, pool);
+                
+                size_t total = key_component_count * coeff_count;
+                size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+                utils::set_device(poly_prod_intt.device_index());
+                kernel_ski_util5_merged_step1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                    poly_prod_intt.const_reference(),
+                    parms.plain_modulus(), key_modulus, key_component_count, decomp_modulus_size, coeff_count,
+                    this->context()->key_context_data().value()->rns_tool().inv_q_last_mod_t(),
+                    delta.reference()
+                );
+                utils::stream_sync();
+                utils::ntt_inplace_ps(delta.reference(), key_component_count, coeff_count, key_ntt_tables.const_slice(0, decomp_modulus_size));
+                utils::set_device(poly_prod.device_index());
+                kernel_ski_util5_merged_step2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                    delta.const_reference(), poly_prod.reference(), coeff_count, key_modulus, key_component_count, decomp_modulus_size, modswitch_factors, encrypted.data().reference()
+                );
+
+            } else {
+
+                Buffer<uint64_t> temp_last(key_component_count, decomp_modulus_size, coeff_count, device, pool);
+                
+                size_t block_count = utils::ceil_div(key_component_count * coeff_count, utils::KERNEL_THREAD_COUNT);
+                kernel_ski_util6_merged<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                    poly_prod_intt.reference(),
+                    key_component_count, decomp_modulus_size, coeff_count, key_modulus.at(key_modulus_size - 1),
+                    key_modulus,
+                    temp_last.reference()
+                );
+                if (is_ntt_form) {
+                    utils::ntt_inplace_ps(temp_last.reference(), key_component_count, coeff_count, 
+                        key_ntt_tables.const_slice(0, decomp_modulus_size));
+                }
+                if (!is_ntt_form) {
+                    poly_prod = std::move(poly_prod_intt);
+                }
+
+                block_count = utils::ceil_div(coeff_count * decomp_modulus_size, utils::KERNEL_THREAD_COUNT);
+                kernel_ski_util7_merged<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                    poly_prod.reference(),
+                    temp_last.const_reference(),
+                    coeff_count, encrypted.data().reference(),
+                    scheme==SchemeType::CKKS, key_component_count, decomp_modulus_size,
+                    key_modulus, modswitch_factors
+                );
+
+                // printf("enc %ld: ", i); printDeviceArray(encrypted.data(i).get(), key_component_count * coeff_count);
+            }
+
         }
     }
 

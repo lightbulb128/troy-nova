@@ -587,7 +587,7 @@ namespace troy {namespace utils {
         Array<uint64_t> temp(coeff_count * (base_q_size - 1), device, pool);
         divide_and_round_q_last_ntt_inplace_step1(*this, input, temp.reference());
         
-        utils::ntt_lazy_inplace_p(temp.reference(), coeff_count, rns_ntt_tables.const_slice(0, base_q_size - 1));
+        utils::ntt_inplace_p(temp.reference(), coeff_count, rns_ntt_tables.const_slice(0, base_q_size - 1));
     
         divide_and_round_q_last_ntt_inplace_step2(*this, input, temp.const_reference());
     }

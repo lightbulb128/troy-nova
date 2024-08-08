@@ -165,6 +165,7 @@ namespace troy {
             save_seed, pool
         );
         ret.parms_id() = this->context()->key_parms_id();
+        ret.build_key_data_ptrs(pool);
         return ret;
     }
     
@@ -184,6 +185,7 @@ namespace troy {
                 pool
             );
         }
+        destination.build_key_data_ptrs(pool);
     }
 
     RelinKeys KeyGenerator::generate_rlk(size_t count, bool save_seed, MemoryPoolHandle pool) const {
@@ -251,6 +253,7 @@ namespace troy {
                 save_seed, pool
             );
         }
+        galois_keys.as_kswitch_keys().build_key_data_ptrs(pool);
 
         // Set the parms_id
         galois_keys.parms_id() = context_data->parms_id();

@@ -1,5 +1,6 @@
 #pragma once
 #include "key.h"
+#include "utils/memory_pool.h"
 
 namespace troy {
 
@@ -8,8 +9,31 @@ namespace troy {
     private:
         ParmsID parms_id_;
         std::vector<std::vector<PublicKey>> keys;
+        std::vector<utils::Array<const uint64_t*>> key_data_ptrs;
 
     public: 
+
+        inline void build_key_data_ptrs(MemoryPoolHandle pool) {
+            key_data_ptrs.resize(keys.size());
+            for (size_t i = 0; i < keys.size(); i++) {
+                key_data_ptrs[i] = utils::Array<const uint64_t*>(keys[i].size(), false, pool);
+                for (size_t j = 0; j < keys[i].size(); j++) {
+                    key_data_ptrs[i][j] = keys[i][j].as_ciphertext().data().raw_pointer();
+                }
+            }
+            if (on_device()) {
+                for (size_t i = 0; i < keys.size(); i++) {
+                    key_data_ptrs[i].to_device_inplace(pool);
+                }
+            }
+        }
+
+        inline utils::ConstSlice<const uint64_t*> get_data_ptrs(size_t index) const {
+            if (index >= key_data_ptrs.size()) {
+                throw std::invalid_argument("[KSwitchKeys::get_data_ptrs] index is out of range.");
+            }
+            return key_data_ptrs[index].const_reference();
+        }
     
         inline MemoryPoolHandle pool() const { 
             // find first non-empty vector
@@ -31,7 +55,9 @@ namespace troy {
         }
 
         inline KSwitchKeys(): parms_id_(parms_id_zero) {}
-        inline KSwitchKeys(ParmsID parms_id, std::vector<std::vector<PublicKey>> keys): parms_id_(parms_id), keys(keys) {}
+        inline KSwitchKeys(ParmsID parms_id, std::vector<std::vector<PublicKey>> keys, MemoryPoolHandle pool): parms_id_(parms_id), keys(keys) {
+            build_key_data_ptrs(pool);
+        }
 
         inline KSwitchKeys clone(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             KSwitchKeys result;
@@ -43,6 +69,7 @@ namespace troy {
                     result.keys[i][j] = keys[i][j].clone(pool);
                 }
             }
+            result.build_key_data_ptrs(pool);
             return result;
         }
 
@@ -52,6 +79,9 @@ namespace troy {
                     key.to_device_inplace(pool);
                 }
             }
+            for (auto& ptrs : key_data_ptrs) {
+                ptrs.to_device_inplace(pool);
+            }
         }
 
         inline void to_host_inplace() {
@@ -59,6 +89,9 @@ namespace troy {
                 for (auto& key : v) {
                     key.to_host_inplace();
                 }
+            }
+            for (auto& ptrs : key_data_ptrs) {
+                ptrs.to_host_inplace();
             }
         }
 

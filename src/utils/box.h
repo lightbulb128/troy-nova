@@ -229,6 +229,11 @@ namespace troy { namespace utils {
         MemoryPool* pool() const { return memory_pool_handle_; }
         size_t device_index() const { return memory_pool_handle_->get_device(); }
 
+        __host__ __device__ ConstSlice(ConstPointer<T> pointer) 
+            : pointer(pointer.get()), len(1), device(pointer.on_device()), memory_pool_handle_(pointer.pool()) {}
+        __host__ __device__ ConstSlice(Pointer<T> pointer) 
+            : pointer(pointer.get()), len(1), device(pointer.on_device()), memory_pool_handle_(pointer.pool()) {}
+
         __host__ __device__ ConstSlice(const T* pointer, size_t len, bool device, MemoryPool* memory_pool_handle) 
             : pointer(pointer), len(len), device(device), memory_pool_handle_(memory_pool_handle) {}
         __host__ __device__ size_t size() const { return len; }
@@ -254,6 +259,9 @@ namespace troy { namespace utils {
         MemoryPool* pool() const { return memory_pool_handle_; }
         size_t device_index() const { return memory_pool_handle_->get_device(); }
 
+        __host__ __device__ Slice(Pointer<T> pointer) 
+            : pointer(pointer.get()), len(1), device(pointer.on_device()), memory_pool_handle_(pointer.pool()) {}
+
         __host__ __device__ Slice(T* pointer, size_t len, bool device, MemoryPool* memory_pool_handle) 
             : pointer(pointer), len(len), device(device), memory_pool_handle_(memory_pool_handle) {}
         __host__ __device__ size_t size() const { return len; }
@@ -261,6 +269,7 @@ namespace troy { namespace utils {
         __host__ __device__ Pointer<T> at(size_t index) { return Pointer<T>(pointer + index, device, memory_pool_handle_); }
         __host__ __device__ ConstPointer<T> const_at(size_t index) const { return ConstPointer<T>(pointer + index, device, memory_pool_handle_); }
         __host__ __device__ ConstSlice<T> as_const() const { return ConstSlice<T>(pointer, len, device, memory_pool_handle_); }
+        __host__ __device__ operator ConstSlice<T>() const { return ConstSlice<T>(pointer, len, device, memory_pool_handle_); }
         __host__ __device__ ConstSlice<T> const_slice(size_t begin, size_t end) const { return ConstSlice<T>(pointer + begin, end - begin, device, memory_pool_handle_); }
         __host__ __device__ Slice<T> slice(size_t begin, size_t end) { return Slice<T>(pointer + begin, end - begin, device, memory_pool_handle_); }
         __host__ __device__ bool on_device() const { return device; }

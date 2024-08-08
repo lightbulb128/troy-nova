@@ -50,6 +50,7 @@ namespace troy {
                 this->data()[id][j].load(stream, context, pool);
             }
         }
+        this->build_key_data_ptrs(pool);
     }
 
     size_t KSwitchKeys::serialized_size_upperbound(HeContextPointer context, CompressionMode mode) const {

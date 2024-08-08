@@ -95,7 +95,7 @@ void test1(size_t n, size_t repeat) {
     auto th_host = timer.register_timer("host");
     auto th_device = timer.register_timer("device");
     
-    EncryptionParameters params(SchemeType::BFV);
+    EncryptionParameters params(SchemeType::BGV);
     params.set_poly_modulus_degree(n);
     params.set_plain_modulus(PlainModulus::batching(n, 30));
     params.set_coeff_modulus(CoeffModulus::create(n, {50, 50, 50}));
@@ -106,6 +106,7 @@ void test1(size_t n, size_t repeat) {
         auto th = th_host;
         KeyGenerator keygen(context);
         Encryptor encryptor(context); encryptor.set_public_key(keygen.create_public_key(false));
+        KSwitchKeys ksk = keygen.create_keyswitching_key(keygen.secret_key(), false);
         Evaluator evaluator(context);
         Ciphertext c = encryptor.encrypt_asymmetric_new(encoder.encode_new({ 1, 2, 3, 4, 5 }));
         Plaintext p = encoder.encode_new({ 1, 2, 3, 4, 5 });
@@ -118,7 +119,7 @@ void test1(size_t n, size_t repeat) {
             if (i == warm_up) {
                 timer.tick(th);
             }
-            evaluator.multiply_plain(c, p, r);
+            evaluator.apply_keyswitching(c, ksk, r);
             if (i == repeat + warm_up - 1) {
                 timer.tock(th);
             }
@@ -132,6 +133,7 @@ void test1(size_t n, size_t repeat) {
         auto th = th_device;
         KeyGenerator keygen(context);
         Encryptor encryptor(context); encryptor.set_public_key(keygen.create_public_key(false));
+        KSwitchKeys ksk = keygen.create_keyswitching_key(keygen.secret_key(), false);
         Evaluator evaluator(context);
         Ciphertext c = encryptor.encrypt_asymmetric_new(encoder.encode_new({ 1, 2, 3, 4, 5 }));
         Plaintext p = encoder.encode_new({ 1, 2, 3, 4, 5 });
@@ -145,7 +147,7 @@ void test1(size_t n, size_t repeat) {
                 cudaStreamSynchronize(0);
                 timer.tick(th);
             }
-            evaluator.multiply_plain(c, p, r);
+            evaluator.apply_keyswitching(c, ksk, r);
             if (i == repeat + warm_up - 1) {
                 cudaStreamSynchronize(0);
                 timer.tock(th);

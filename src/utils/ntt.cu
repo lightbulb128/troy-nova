@@ -73,79 +73,81 @@ namespace troy {namespace utils {
 
     }
 
-    void host_ntt_multiply_inv_degree(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables) {
+    void host_ntt_multiply_inv_degree(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, NTTTableIndexer tables) {
         size_t degree = static_cast<size_t>(1) << log_degree; 
-        for (size_t j = 0; j < tables.size(); j++) {
-            const Modulus& modulus = tables[j].modulus();
-            MultiplyUint64Operand scalar = tables[j].inv_degree_modulo();
+        for (size_t j = 0; j < component_count; j++) {
             for (size_t k = 0; k < pcount; k++) {
+                const Modulus& modulus = tables.get(k, j).modulus();
+                MultiplyUint64Operand scalar = tables.get(k, j).inv_degree_modulo();
                 for (size_t i = 0; i < degree; i++) {
-                    size_t x_index = ((k * tables.size() + j) << log_degree) + i;
+                    size_t x_index = ((k * component_count + j) << log_degree) + i;
                     operand[x_index] = multiply_uint64operand_mod_lazy(operand[x_index], scalar, modulus);
                 }
             }
         }
     }
 
-    __global__ void kernel_ntt_multiply_inv_degree(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables) {
+    __global__ void kernel_ntt_multiply_inv_degree(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, NTTTableIndexer tables) {
         size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
         size_t degree = static_cast<size_t>(1) << log_degree;
-        size_t total = pcount * tables.size() * degree;
+        size_t total = pcount * component_count * degree;
         if (global_index < total) {
-            // size_t k = global_index / (tables.size() * degree);
-            size_t j = (global_index / degree) % tables.size();
+            size_t k = global_index / (component_count * degree);
+            size_t j = (global_index / degree) % component_count;
             // size_t i = global_index % degree;
-            const Modulus& modulus = tables[j].modulus();
-            MultiplyUint64Operand scalar = tables[j].inv_degree_modulo();
+            const NTTTables& table = tables.get(k, j);
+            const Modulus& modulus = table.modulus();
+            MultiplyUint64Operand scalar = table.inv_degree_modulo();
             operand[global_index] = multiply_uint64operand_mod_lazy(operand[global_index], scalar, modulus);
         }
     }
 
-    void ntt_multiply_inv_degree(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables) {
+    void ntt_multiply_inv_degree(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, NTTTableIndexer tables) {
         bool device = operand.on_device();
         // same device
         if (!device_compatible(operand, tables)) {
             throw std::invalid_argument("[ntt_multiply_inv_degree] Operand and tables must be on the same device.");
         }
         if (device) {
-            size_t total = (pcount * tables.size()) << log_degree;
+            size_t total = (pcount * component_count) << log_degree;
             size_t block_count = ceil_div<size_t>(total, KERNEL_THREAD_COUNT);
             utils::set_device(operand.device_index());
-            kernel_ntt_multiply_inv_degree<<<block_count, KERNEL_THREAD_COUNT>>>(operand, pcount, log_degree, tables);
+            kernel_ntt_multiply_inv_degree<<<block_count, KERNEL_THREAD_COUNT>>>(operand, pcount, component_count, log_degree, tables);
             utils::stream_sync();
         } else {
-            host_ntt_multiply_inv_degree(operand, pcount, log_degree, tables);
+            host_ntt_multiply_inv_degree(operand, pcount, component_count, log_degree, tables);
         }
     }
 
-    void ntt_transfer_to_rev_inplace(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers) {
-        if constexpr (NTT_USE_COOPERATIVE) fgk::ntt_cooperative::ntt_inplace(operand, pcount, log_degree, tables, use_inv_root_powers);
-        else fgk::ntt_grouped::ntt_inplace(operand, pcount, log_degree, tables, use_inv_root_powers);
+    void ntt_transfer_to_rev_inplace(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, NTTTableIndexer tables) {
+        if constexpr (NTT_USE_COOPERATIVE) fgk::ntt_cooperative::ntt_inplace(operand, pcount, component_count, log_degree, use_inv_root_powers, tables);
+        else fgk::ntt_grouped::ntt_inplace(operand, pcount, component_count, log_degree, use_inv_root_powers, tables);
     }
 
-    void ntt_transfer_from_rev_inplace(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers) {
-        if constexpr (NTT_USE_COOPERATIVE) fgk::ntt_cooperative::intt_inplace(operand, pcount, log_degree, tables, use_inv_root_powers);
-        else fgk::ntt_grouped::intt_inplace(operand, pcount, log_degree, tables, use_inv_root_powers);
+    void ntt_transfer_from_rev_inplace(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, NTTTableIndexer tables) {
+        if constexpr (NTT_USE_COOPERATIVE) fgk::ntt_cooperative::intt_inplace(operand, pcount, component_count, log_degree, use_inv_root_powers, tables);
+        else fgk::ntt_grouped::intt_inplace(operand, pcount, component_count, log_degree, use_inv_root_powers, tables);
     }
 
-    void ntt_transfer_to_rev(ConstSlice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers, Slice<uint64_t> result) {
-        if constexpr (NTT_USE_COOPERATIVE) fgk::ntt_cooperative::ntt(operand, pcount, log_degree, tables, use_inv_root_powers, result);
-        else fgk::ntt_grouped::ntt(operand, pcount, log_degree, tables, use_inv_root_powers, result);
+    void ntt_transfer_to_rev(ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, Slice<uint64_t> result, NTTTableIndexer tables) {
+        if constexpr (NTT_USE_COOPERATIVE) fgk::ntt_cooperative::ntt(operand, pcount, component_count, log_degree, use_inv_root_powers, result, tables);
+        else fgk::ntt_grouped::ntt(operand, pcount, component_count, log_degree, use_inv_root_powers, result, tables);
     }
 
-    void ntt_transfer_from_rev(ConstSlice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, bool use_inv_root_powers, Slice<uint64_t> result) {
-        if constexpr (NTT_USE_COOPERATIVE) fgk::ntt_cooperative::intt(operand, pcount, log_degree, tables, use_inv_root_powers, result);
-        else fgk::ntt_grouped::intt(operand, pcount, log_degree, tables, use_inv_root_powers, result);
+    void ntt_transfer_from_rev(ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, Slice<uint64_t> result, NTTTableIndexer tables) {
+        if constexpr (NTT_USE_COOPERATIVE) fgk::ntt_cooperative::intt(operand, pcount, component_count, log_degree, use_inv_root_powers, result, tables);
+        else fgk::ntt_grouped::intt(operand, pcount, component_count, log_degree, use_inv_root_powers, result, tables);
     }
 
-    void host_ntt_transfer_last_reduce(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables) {
+    void host_ntt_transfer_last_reduce(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, NTTTableIndexer tables) {
         size_t degree = static_cast<size_t>(1) << log_degree; 
-        for (size_t j = 0; j < tables.size(); j++) {
-            uint64_t modulus = tables[j].modulus().value();
-            uint64_t two_times_modulus = modulus << 1;
+        for (size_t j = 0; j < component_count; j++) {
             for (size_t k = 0; k < pcount; k++) {
+                const NTTTables& table = tables.get(k, j);
+                uint64_t modulus = table.modulus().value();
+                uint64_t two_times_modulus = modulus << 1;
                 for (size_t i = 0; i < degree; i++) {
-                    size_t x_index = ((k * tables.size() + j) << log_degree) + i;
+                    size_t x_index = ((k * component_count + j) << log_degree) + i;
                     uint64_t x = operand[x_index];
                     if (x >= two_times_modulus) x -= two_times_modulus;
                     if (x >= modulus) x -= modulus;
@@ -155,16 +157,16 @@ namespace troy {namespace utils {
         }
     }
 
-    __global__ void kernel_ntt_transfer_last_reduce(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables) {
+    __global__ void kernel_ntt_transfer_last_reduce(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, NTTTableIndexer tables) {
         size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
         size_t degree = static_cast<size_t>(1) << log_degree;
-        size_t total = pcount * tables.size() * degree;
+        size_t total = pcount * component_count* degree;
         if (global_index < total) {
-            // size_t k = global_index / (tables.size() * degree);
-            size_t j = (global_index / degree) % tables.size();
+            size_t k = global_index / (component_count * degree);
+            size_t j = (global_index / degree) % component_count;
             // size_t i = global_index % degree;
             uint64_t x = operand[global_index];
-            uint64_t modulus = tables[j].modulus().value();
+            uint64_t modulus = tables.get(k, j).modulus().value();
             uint64_t two_times_modulus = modulus << 1;
             if (x >= two_times_modulus) x -= two_times_modulus;
             if (x >= modulus) x -= modulus;
@@ -172,19 +174,19 @@ namespace troy {namespace utils {
         }
     }
 
-    void ntt_transfer_last_reduce(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables) {
+    void ntt_transfer_last_reduce(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, NTTTableIndexer tables) {
         bool device = operand.on_device();
         // same device=
         if (!device_compatible(operand, tables)) {
             throw std::invalid_argument("[ntt_transfer_last_reduce] Operand and tables must be on the same device.");
         }
         if (device) {
-            size_t total = (pcount * tables.size()) << log_degree;
+            size_t total = (pcount * component_count) << log_degree;
             size_t block_count = ceil_div<size_t>(total, KERNEL_THREAD_COUNT);
-            kernel_ntt_transfer_last_reduce<<<block_count, KERNEL_THREAD_COUNT>>>(operand, pcount, log_degree, tables);
+            kernel_ntt_transfer_last_reduce<<<block_count, KERNEL_THREAD_COUNT>>>(operand, pcount, component_count, log_degree, tables);
             utils::stream_sync();
         } else {
-            host_ntt_transfer_last_reduce(operand, pcount, log_degree, tables);
+            host_ntt_transfer_last_reduce(operand, pcount, component_count, log_degree, tables);
         }
     }
 
