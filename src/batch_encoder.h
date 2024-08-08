@@ -91,7 +91,7 @@ namespace troy {
 
         void decode_slice(const Plaintext& plaintext, utils::Slice<uint64_t> destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline utils::Array<uint64_t> decode_slice_new(const Plaintext& plaintext, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            utils::Array<uint64_t> destination(slot_count(), on_device(), pool);
+            utils::Array<uint64_t> destination = utils::Array<uint64_t>::create_uninitialized(slot_count(), on_device(), pool);
             decode_slice(plaintext, destination.reference(), pool);
             return destination;
         }
@@ -107,7 +107,7 @@ namespace troy {
 
         void decode_polynomial_slice(const Plaintext& plaintext, utils::Slice<uint64_t> destination) const;
         inline utils::Array<uint64_t> decode_polynomial_slice_new(const Plaintext& plaintext, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            utils::Array<uint64_t> destination(plaintext.data().size(), on_device(), pool);
+            utils::Array<uint64_t> destination = utils::Array<uint64_t>::create_uninitialized(plaintext.data().size(), on_device(), pool);
             decode_polynomial_slice(plaintext, destination.reference());
             return destination;
         }

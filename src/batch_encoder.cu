@@ -165,7 +165,7 @@ namespace troy {
         if (device) {destination.to_device_inplace(pool);}
         else {destination.to_host_inplace();}
         destination.parms_id() = parms_id_zero;
-        destination.resize(slots);
+        destination.resize(slots, false, false);
         destination.poly_modulus_degree() = slots;
         destination.coeff_modulus_size() = 1;
         destination.is_ntt_form() = false;
@@ -224,7 +224,7 @@ namespace troy {
         if (device) {destination.to_device_inplace(pool);}
         else {destination.to_host_inplace();}
         destination.parms_id() = parms_id_zero;
-        destination.resize(value_size);
+        destination.resize(value_size, false, false);
         destination.poly_modulus_degree() = slots;
         destination.coeff_modulus_size() = 1;
         destination.is_ntt_form() = false;
