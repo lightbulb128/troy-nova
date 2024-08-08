@@ -191,8 +191,8 @@ namespace troy {
             );
             destination = Ciphertext::like(encrypted1, enc1_size, false, pool);
             utils::multiply_scalar_ps(encrypted1.const_reference(), f1, enc1_size, coeff_count, coeff_modulus, destination.data().reference());
-            Ciphertext encrypted2_copy = encrypted2.clone(pool);
-            utils::multiply_scalar_inplace_ps(encrypted2_copy.data().reference(), f2, enc2_size, coeff_count, coeff_modulus); 
+            Ciphertext encrypted2_copy = Ciphertext::like(encrypted2, false, pool);
+            utils::multiply_scalar_ps(encrypted2.data().const_reference(), f2, enc2_size, coeff_count, coeff_modulus, encrypted2_copy.data().reference()); 
             // Set new correction factor
             destination.correction_factor() = f0;
             encrypted2_copy.correction_factor() = f0;
@@ -242,8 +242,8 @@ namespace troy {
                 plain_modulus, f0, f1, f2
             );
             utils::multiply_scalar_inplace_ps(encrypted1.data().reference(), f1, enc1_size, coeff_count, coeff_modulus);
-            Ciphertext encrypted2_copy = encrypted2.clone(pool);
-            utils::multiply_scalar_inplace_ps(encrypted2_copy.data().reference(), f2, enc2_size, coeff_count, coeff_modulus); 
+            Ciphertext encrypted2_copy = Ciphertext::like(encrypted2, false, pool);
+            utils::multiply_scalar_ps(encrypted2.data().const_reference(), f2, enc2_size, coeff_count, coeff_modulus, encrypted2_copy.data().reference()); 
             // Set new correction factor
             encrypted1.correction_factor() = f0;
             encrypted2_copy.correction_factor() = f0;
@@ -1677,9 +1677,7 @@ namespace troy {
         if (scheme == SchemeType::CKKS) {
             // take the last modulus
             size_t id = parms.coeff_modulus().size() - 1;
-            Array<Modulus> modulus = Array<Modulus>::create_and_copy_from_slice(parms.coeff_modulus().const_slice(id, id+1), pool);
-            modulus.to_host_inplace();
-            destination.scale() = encrypted.scale() / modulus[0].value();
+            destination.scale() = encrypted.scale() / parms.coeff_modulus_host()[id].value();
         } else if (scheme == SchemeType::BGV) {
             destination.correction_factor() = utils::multiply_uint64_mod(
                 encrypted.correction_factor(), rns_tool.inv_q_last_mod_t(), next_parms.plain_modulus_host()
@@ -2133,7 +2131,7 @@ namespace troy {
         destination.is_ntt_form() = false;
     }
     
-    void Evaluator::apply_galois_inplace(Ciphertext& encrypted, size_t galois_element, const GaloisKeys& galois_keys, MemoryPoolHandle pool) const {
+    void Evaluator::apply_galois(const Ciphertext& encrypted, size_t galois_element, const GaloisKeys& galois_keys, Ciphertext& destination, MemoryPoolHandle pool) const {
         check_no_seed("[Evaluator::apply_galois_inplace]", encrypted);
         if (galois_keys.parms_id() != this->context()->key_parms_id()) {
             throw std::invalid_argument("[Evaluator::apply_galois_inplace] Galois keys has incorrect parms id.");
@@ -2158,22 +2156,16 @@ namespace troy {
             throw std::invalid_argument("[Evaluator::apply_galois_inplace] Ciphertext size must be 2.");
         }
 
-        Array<uint64_t> temp(coeff_count * coeff_modulus_size, encrypted.on_device(), pool);
-        // DO NOT CHANGE EXECUTION ORDER OF FOLLOWING SECTION
-        // BEGIN: Apply Galois for each ciphertext
-        // Execution order is sensitive, since apply_galois is not inplace!
+        destination = Ciphertext::like(encrypted, false, pool);
         if (!encrypted.is_ntt_form()) {
-            galois_tool.apply_p(encrypted.const_poly(0), galois_element, coeff_modulus, temp.reference());
-            encrypted.poly(0).copy_from_slice(temp.const_reference());
-            galois_tool.apply_p(encrypted.const_poly(1), galois_element, coeff_modulus, temp.reference());
+            galois_tool.apply_p(encrypted.const_poly(0), galois_element, coeff_modulus, destination.poly(0));
+            galois_tool.apply_p(encrypted.const_poly(1), galois_element, coeff_modulus, destination.poly(1));
         } else {
-            galois_tool.apply_ntt_p(encrypted.const_poly(0), coeff_modulus_size, galois_element, temp.reference(), pool);
-            encrypted.poly(0).copy_from_slice(temp.const_reference());
-            galois_tool.apply_ntt_p(encrypted.const_poly(1), coeff_modulus_size, galois_element, temp.reference(), pool);
+            galois_tool.apply_ntt_p(encrypted.const_poly(0), coeff_modulus_size, galois_element, destination.poly(0), pool);
+            galois_tool.apply_ntt_p(encrypted.const_poly(1), coeff_modulus_size, galois_element, destination.poly(1), pool);
         }
-        // encrypted.poly(1).set_zero();
 
-        this->switch_key_internal(encrypted, temp.const_reference(), galois_keys.as_kswitch_keys(), GaloisKeys::get_index(galois_element), Evaluator::SwitchKeyDestinationAssignMethod::OverwriteExceptFirst, encrypted, pool);
+        this->switch_key_internal(encrypted, destination.poly(1), galois_keys.as_kswitch_keys(), GaloisKeys::get_index(galois_element), Evaluator::SwitchKeyDestinationAssignMethod::OverwriteExceptFirst, destination, pool);
     }
     
     void Evaluator::apply_galois_plain_inplace(Plaintext& plain, size_t galois_element, MemoryPoolHandle pool) const {
@@ -2210,7 +2202,7 @@ namespace troy {
         plain.parms_id() = parms_id;
     }
 
-    void Evaluator::rotate_inplace_internal(Ciphertext& encrypted, int steps, const GaloisKeys& galois_keys, MemoryPoolHandle pool) const {
+    void Evaluator::rotate_internal(const Ciphertext& encrypted, int steps, const GaloisKeys& galois_keys, Ciphertext& destination, MemoryPoolHandle pool) const {
         ContextDataPointer context_data = this->get_context_data("[Evaluator::rotate_inplace_internal]", encrypted.parms_id());
         if (!context_data->qualifiers().using_batching) {
             throw std::invalid_argument("[Evaluator::rotate_inplace_internal] Batching must be enabled to use rotate.");
@@ -2222,26 +2214,34 @@ namespace troy {
         const GaloisTool& galois_tool = context_data->galois_tool();
         if (galois_keys.has_key(galois_tool.get_element_from_step(steps))) {
             size_t element = galois_tool.get_element_from_step(steps);
-            this->apply_galois_inplace(encrypted, element, galois_keys, pool);
+            this->apply_galois(encrypted, element, galois_keys, destination, pool);
         } else {
             // Convert the steps to NAF: guarantees using smallest HW
             std::vector<int> naf_steps = utils::naf(steps);
             if (naf_steps.size() == 1) {
                 throw std::invalid_argument("[Evaluator::rotate_inplace_internal] Galois key not present.");
             }
+            bool done_flag = false;
             for (int naf_step : naf_steps) {
-                this->rotate_inplace_internal(encrypted, naf_step, galois_keys, pool);
+                if (!done_flag) {
+                    this->rotate_internal(encrypted, naf_step, galois_keys, destination, pool);
+                    done_flag = true;
+                } else {
+                    Ciphertext temp;
+                    this->rotate_internal(destination, naf_step, galois_keys, temp, pool);
+                    destination = std::move(temp);
+                }
             }
         }
     }
     
-    void Evaluator::conjugate_inplace_internal(Ciphertext& encrypted, const GaloisKeys& galois_keys, MemoryPoolHandle pool) const {
+    void Evaluator::conjugate_internal(const Ciphertext& encrypted, const GaloisKeys& galois_keys, Ciphertext& destination, MemoryPoolHandle pool) const {
         ContextDataPointer context_data = this->get_context_data("Evaluator::conjugate_inplace_internal", encrypted.parms_id());
         if (!context_data->qualifiers().using_batching) {
             throw std::logic_error("[Evaluator::conjugate_inplace_internal] Batching is not enabled.");
         }
         const GaloisTool& galois_tool = context_data->galois_tool();
-        this->apply_galois_inplace(encrypted, galois_tool.get_element_from_step(0), galois_keys, pool);
+        this->apply_galois(encrypted, galois_tool.get_element_from_step(0), galois_keys, destination, pool);
     }
 
     void Evaluator::negacyclic_shift(const Ciphertext& encrypted, size_t shift, Ciphertext& destination, MemoryPoolHandle pool) const {

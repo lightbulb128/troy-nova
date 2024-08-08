@@ -95,7 +95,7 @@ void test1(size_t n, size_t repeat) {
     auto th_host = timer.register_timer("host");
     auto th_device = timer.register_timer("device");
     
-    EncryptionParameters params(SchemeType::BGV);
+    EncryptionParameters params(SchemeType::BFV);
     params.set_poly_modulus_degree(n);
     params.set_plain_modulus(PlainModulus::batching(n, 30));
     params.set_coeff_modulus(CoeffModulus::create(n, {50, 50, 50}));
@@ -106,7 +106,7 @@ void test1(size_t n, size_t repeat) {
         auto th = th_host;
         KeyGenerator keygen(context);
         Encryptor encryptor(context); encryptor.set_public_key(keygen.create_public_key(false));
-        KSwitchKeys ksk = keygen.create_keyswitching_key(keygen.secret_key(), false);
+        GaloisKeys gk = keygen.create_galois_keys(false);
         Evaluator evaluator(context);
         Ciphertext c = encryptor.encrypt_asymmetric_new(encoder.encode_new({ 1, 2, 3, 4, 5 }));
         Plaintext p = encoder.encode_new({ 1, 2, 3, 4, 5 });
@@ -119,7 +119,7 @@ void test1(size_t n, size_t repeat) {
             if (i == warm_up) {
                 timer.tick(th);
             }
-            evaluator.apply_keyswitching(c, ksk, r);
+            evaluator.rotate_rows(c, 7, gk, r);
             if (i == repeat + warm_up - 1) {
                 timer.tock(th);
             }
@@ -133,23 +133,21 @@ void test1(size_t n, size_t repeat) {
         auto th = th_device;
         KeyGenerator keygen(context);
         Encryptor encryptor(context); encryptor.set_public_key(keygen.create_public_key(false));
-        KSwitchKeys ksk = keygen.create_keyswitching_key(keygen.secret_key(), false);
+        GaloisKeys gk = keygen.create_galois_keys(false);
         Evaluator evaluator(context);
         Ciphertext c = encryptor.encrypt_asymmetric_new(encoder.encode_new({ 1, 2, 3, 4, 5 }));
         Plaintext p = encoder.encode_new({ 1, 2, 3, 4, 5 });
-        Ciphertext r = c.clone();
+        Ciphertext r;
 
         std::cout << "running device ...\n";
         const size_t warm_up = 10;
         
         for (size_t i = 0; i < repeat + warm_up; i++) {
             if (i == warm_up) {
-                cudaStreamSynchronize(0);
                 timer.tick(th);
             }
-            evaluator.apply_keyswitching(c, ksk, r);
+            evaluator.rotate_rows(c, 7, gk, r);
             if (i == repeat + warm_up - 1) {
-                cudaStreamSynchronize(0);
                 timer.tock(th);
             }
         }
