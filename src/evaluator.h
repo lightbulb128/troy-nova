@@ -12,6 +12,15 @@
 namespace troy {
 
     class Evaluator {
+
+    public:
+        enum SwitchKeyDestinationAssignMethod {
+            Overwrite,
+            AddInplace,
+            OverwriteExceptFirst
+        };
+
+    private:
         HeContextPointer context_;
 
         ContextDataPointer get_context_data(const char* prompt, const ParmsID& encrypted) const;
@@ -30,10 +39,14 @@ namespace troy {
         /// Suppose kswitch_keys[kswitch_kes_index] is generated with s' on a KeyGenerator of secret key s.
         /// Then the semantic of this function is as follows: `target` is supposed to multiply with s' to contribute to the
         /// decrypted result, now we apply this function, to decompose (target * s') into (c0, c1) such that c0 + c1 * s = target * s.
-        /// And then we add c0, c1 to the original c0, c1 in the `encrypted`.
-        void switch_key_inplace_internal(Ciphertext& encrypted, utils::ConstSlice<uint64_t> target, const KSwitchKeys& kswitch_keys, size_t kswitch_keys_index, MemoryPoolHandle pool) const;
+        /// If assign_method is AddInplace, then we add c0, c1 to the original c0, c1 in the `destination`; if assign_method is Overwrite, we put c0 and c1 to the `destination`.
+        void switch_key_internal(
+            const Ciphertext& encrypted, utils::ConstSlice<uint64_t> target, 
+            const KSwitchKeys& kswitch_keys, size_t kswitch_keys_index, SwitchKeyDestinationAssignMethod assign_method, Ciphertext& destination, MemoryPoolHandle pool
+        ) const;
 
         void relinearize_inplace_internal(Ciphertext& encrypted, const RelinKeys& relin_keys, size_t destination_size, MemoryPoolHandle pool) const;
+        void relinearize_internal(const Ciphertext& encrypted, const RelinKeys& relin_keys, size_t destination_size, Ciphertext& destination, MemoryPoolHandle pool) const;
 
         void mod_switch_scale_to_next_internal(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool) const;
         void mod_switch_drop_to_next_internal(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool) const;
@@ -108,10 +121,7 @@ namespace troy {
         }
 
         void apply_keyswitching_inplace(Ciphertext& encrypted, const KSwitchKeys& kswitch_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
-        inline void apply_keyswitching(const Ciphertext& encrypted, const KSwitchKeys& kswitch_keys, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            destination = encrypted.clone(pool);
-            apply_keyswitching_inplace(destination, kswitch_keys, pool);
-        }
+        void apply_keyswitching(const Ciphertext& encrypted, const KSwitchKeys& kswitch_keys, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline Ciphertext apply_keyswitching_new(const Ciphertext& encrypted, const KSwitchKeys& kswitch_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;
             apply_keyswitching(encrypted, kswitch_keys, destination, pool);
@@ -122,8 +132,7 @@ namespace troy {
             relinearize_inplace_internal(encrypted, relin_keys, 2, pool);
         }
         inline void relinearize(const Ciphertext& encrypted, const RelinKeys& relin_keys, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            destination = encrypted.clone(pool);
-            relinearize_inplace(destination, relin_keys, pool);
+            relinearize_internal(encrypted, relin_keys, 2, destination, pool);
         }
         inline Ciphertext relinearize_new(const Ciphertext& encrypted, const RelinKeys& relin_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;

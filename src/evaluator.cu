@@ -839,7 +839,8 @@ namespace troy {
         size_t decomp_modulus_size,
         ConstSlice<MultiplyUint64Operand> modswitch_factors,
         Slice<uint64_t> encrypted_i,
-        ConstSlice<uint64_t> delta_array
+        ConstSlice<uint64_t> delta_array,
+        bool add_inplace
     ) {
         size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
         if (global_index >= coeff_count * decomp_modulus_size) return;
@@ -849,7 +850,11 @@ namespace troy {
         uint64_t& target = t_poly_prod_i[j * coeff_count + i];
         target = utils::sub_uint64_mod(target, delta, key_modulus[j]);
         target = utils::multiply_uint64operand_mod(target, modswitch_factors[j], key_modulus[j]);
-        encrypted_i[global_index] = utils::add_uint64_mod(target, encrypted_i[global_index], key_modulus[j]);
+        if (add_inplace) {
+            encrypted_i[global_index] = utils::add_uint64_mod(target, encrypted_i[global_index], key_modulus[j]);
+        } else {
+            encrypted_i[global_index] = target;
+        }
     }
 
 
@@ -864,7 +869,8 @@ namespace troy {
         uint64_t qk_inv_qp,
         uint64_t qk,
         ConstSlice<MultiplyUint64Operand> modswitch_factors,
-        Slice<uint64_t> encrypted_i,
+        Slice<uint64_t> destination_i,
+        bool add_inplace,
         MemoryPoolHandle pool
     ) {
         bool device = t_last.on_device();
@@ -895,7 +901,11 @@ namespace troy {
                 Slice<uint64_t> t_poly_prod_i_comp_j = t_poly_prod_i.slice(j * coeff_count, (j + 1) * coeff_count);
                 utils::sub_inplace(t_poly_prod_i_comp_j, delta.as_const(), key_modulus.at(j));
                 utils::multiply_uint64operand_inplace(t_poly_prod_i_comp_j, modswitch_factors.at(j), key_modulus.at(j));
-                utils::add_inplace(encrypted_i.slice(j * coeff_count, (j + 1) * coeff_count), t_poly_prod_i_comp_j.as_const(), key_modulus.at(j));
+                if (add_inplace) {
+                    utils::add_inplace(destination_i.slice(j * coeff_count, (j + 1) * coeff_count), t_poly_prod_i_comp_j.as_const(), key_modulus.at(j));
+                } else {
+                    destination_i.slice(j * coeff_count, (j + 1) * coeff_count).copy_from_slice(t_poly_prod_i_comp_j.as_const());
+                }
             }
 
         } else {
@@ -912,7 +922,7 @@ namespace troy {
             utils::set_device(t_poly_prod_i.device_index());
             kernel_ski_util5_step2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 t_poly_prod_i, coeff_count, key_modulus, 
-                decomp_modulus_size, modswitch_factors, encrypted_i, delta.const_reference()
+                decomp_modulus_size, modswitch_factors, destination_i, delta.const_reference(), add_inplace
             );
             utils::stream_sync();
         }
@@ -1062,19 +1072,29 @@ namespace troy {
         size_t key_component_count,
         size_t decomp_modulus_size,
         ConstSlice<MultiplyUint64Operand> modswitch_factors,
-        Slice<uint64_t> encrypted
+        Slice<uint64_t> destination,
+        Evaluator::SwitchKeyDestinationAssignMethod assign_method
     ) {
         size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
         if (global_index >= coeff_count * key_component_count) return;
         size_t i = global_index % coeff_count;
         size_t k = global_index / coeff_count;
+        
+        bool add_inplace = (assign_method == Evaluator::SwitchKeyDestinationAssignMethod::AddInplace) || (
+            k == 0 && assign_method == Evaluator::SwitchKeyDestinationAssignMethod::OverwriteExceptFirst
+        );
+
         for (size_t j = 0; j < decomp_modulus_size; j++) {
             size_t index = (k * decomp_modulus_size + j) * coeff_count + i;
             uint64_t delta = delta_array[index];
             uint64_t& target = poly_prod[(k * (decomp_modulus_size + 1) + j) * coeff_count + i];
             target = utils::sub_uint64_mod(target, delta, key_modulus[j]);
             target = utils::multiply_uint64operand_mod(target, modswitch_factors[j], key_modulus[j]);
-            encrypted[index] = utils::add_uint64_mod(target, encrypted[index], key_modulus[j]);
+            if (add_inplace) {
+                destination[index] = utils::add_uint64_mod(target, destination[index], key_modulus[j]);
+            } else {
+                destination[index] = target;
+            }
         }
     }
 
@@ -1113,12 +1133,13 @@ namespace troy {
         Slice<uint64_t> poly_prod,
         ConstSlice<uint64_t> temp_last,
         size_t coeff_count, 
-        Slice<uint64_t> encrypted,
+        Slice<uint64_t> destination,
         bool is_ckks,
         size_t key_component_count,
         size_t decomp_modulus_size,
         ConstSlice<Modulus> key_modulus,
-        ConstSlice<MultiplyUint64Operand> modswitch_factors
+        ConstSlice<MultiplyUint64Operand> modswitch_factors,
+        Evaluator::SwitchKeyDestinationAssignMethod assign_method
     ) {
         size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
         if (global_index >= coeff_count * decomp_modulus_size) return;
@@ -1130,9 +1151,16 @@ namespace troy {
             uint64_t qi = key_modulus[j].value();
             dest += ((is_ckks) ? (qi << 2) : (qi << 1)) - temp_last[offset + j * coeff_count + i];
             dest = utils::multiply_uint64operand_mod(dest, modswitch_factors[j], key_modulus[j]);
-            encrypted[offset + j * coeff_count + i] = utils::add_uint64_mod(
-                encrypted[offset + j * coeff_count + i], dest, key_modulus[j]
+            bool add_inplace = (assign_method == Evaluator::SwitchKeyDestinationAssignMethod::AddInplace) || (
+                k == 0 && assign_method == Evaluator::SwitchKeyDestinationAssignMethod::OverwriteExceptFirst
             );
+            if (add_inplace) {
+                destination[offset + j * coeff_count + i] = utils::add_uint64_mod(
+                    destination[offset + j * coeff_count + i], dest, key_modulus[j]
+                );
+            } else {
+                destination[offset + j * coeff_count + i] = dest;
+            }
         }
     }
 
@@ -1140,11 +1168,12 @@ namespace troy {
         Slice<uint64_t> t_poly_prod_i,
         ConstSlice<uint64_t> t_ntt,
         size_t coeff_count, 
-        Slice<uint64_t> encrypted_i,
+        Slice<uint64_t> destination_i,
         bool is_ckks,
         size_t decomp_modulus_size,
         ConstSlice<Modulus> key_modulus,
-        ConstSlice<MultiplyUint64Operand> modswitch_factors
+        ConstSlice<MultiplyUint64Operand> modswitch_factors,
+        bool add_inplace
     ) {
         size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
         if (global_index >= coeff_count * decomp_modulus_size) return;
@@ -1154,20 +1183,25 @@ namespace troy {
         uint64_t qi = key_modulus[j].value();
         dest += ((is_ckks) ? (qi << 2) : (qi << 1)) - t_ntt[j * coeff_count + i];
         dest = utils::multiply_uint64operand_mod(dest, modswitch_factors[j], key_modulus[j]);
-        encrypted_i[j * coeff_count + i] = utils::add_uint64_mod(
-            encrypted_i[j * coeff_count + i], dest, key_modulus[j]
-        );
+        if (add_inplace) {
+            destination_i[j * coeff_count + i] = utils::add_uint64_mod(
+                destination_i[j * coeff_count + i], dest, key_modulus[j]
+            );
+        } else {
+            destination_i[j * coeff_count + i] = dest;
+        }
     }
 
     static void ski_util7(
         Slice<uint64_t> t_poly_prod_i,
         ConstSlice<uint64_t> t_ntt,
         size_t coeff_count, 
-        Slice<uint64_t> encrypted_i,
+        Slice<uint64_t> destination_i,
         bool is_ckks,
         size_t decomp_modulus_size,
         ConstSlice<Modulus> key_modulus,
-        ConstSlice<MultiplyUint64Operand> modswitch_factors
+        ConstSlice<MultiplyUint64Operand> modswitch_factors,
+        bool add_inplace
     ) {
         bool device = t_poly_prod_i.on_device();
         if (!device) {
@@ -1177,23 +1211,32 @@ namespace troy {
                     uint64_t qi = key_modulus[j].value();
                     dest += ((is_ckks) ? (qi << 2) : (qi << 1)) - t_ntt[j * coeff_count + i];
                     dest = utils::multiply_uint64operand_mod(dest, modswitch_factors[j], key_modulus[j]);
-                    encrypted_i[j * coeff_count + i] = utils::add_uint64_mod(
-                        encrypted_i[j * coeff_count + i], dest, key_modulus[j]
-                    );
+                    if (add_inplace) {
+                        destination_i[j * coeff_count + i] = utils::add_uint64_mod(
+                            destination_i[j * coeff_count + i], dest, key_modulus[j]
+                        );
+                    } else {
+                        destination_i[j * coeff_count + i] = dest;
+                    }
                 }
             }
         } else {
             size_t block_count = utils::ceil_div(coeff_count * decomp_modulus_size, utils::KERNEL_THREAD_COUNT);
             utils::set_device(t_poly_prod_i.device_index());
             kernel_ski_util7<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
-                t_poly_prod_i, t_ntt, coeff_count, encrypted_i, is_ckks, 
-                decomp_modulus_size, key_modulus, modswitch_factors
+                t_poly_prod_i, t_ntt, coeff_count, destination_i, is_ckks, 
+                decomp_modulus_size, key_modulus, modswitch_factors, add_inplace
             );
             utils::stream_sync();
         }
     }
 
-    void Evaluator::switch_key_inplace_internal(Ciphertext& encrypted, utils::ConstSlice<uint64_t> target, const KSwitchKeys& kswitch_keys, size_t kswitch_keys_index, MemoryPoolHandle pool) const {
+    void Evaluator::switch_key_internal(
+        const Ciphertext& encrypted, utils::ConstSlice<uint64_t> target, 
+        const KSwitchKeys& kswitch_keys, size_t kswitch_keys_index, 
+        SwitchKeyDestinationAssignMethod assign_method, 
+        Ciphertext& destination, MemoryPoolHandle pool
+    ) const {
         check_no_seed("[Evaluator::switch_key_inplace_internal]", encrypted);
         if (!this->context()->using_keyswitching()) {
             throw std::invalid_argument("[Evaluator::switch_key_inplace_internal] Keyswitching is not supported.");
@@ -1216,8 +1259,6 @@ namespace troy {
         size_t coeff_count = parms.poly_modulus_degree();
         size_t decomp_modulus_size = parms.coeff_modulus().size();
         ConstSlice<Modulus> key_modulus = key_parms.coeff_modulus();
-        // Array<Modulus> key_modulus_host = Array<Modulus>::create_and_copy_from_slice(key_modulus, pool); // TODO: can we remove this?
-        // key_modulus_host.to_host_inplace();
         size_t key_modulus_size = key_modulus.size();
         size_t rns_modulus_size = decomp_modulus_size + 1;
         ConstSlice<NTTTables> key_ntt_tables = key_context_data->small_ntt_tables();
@@ -1225,6 +1266,20 @@ namespace troy {
 
         const std::vector<PublicKey>& key_vector = kswitch_keys.data()[kswitch_keys_index];
         size_t key_component_count = key_vector[0].as_ciphertext().polynomial_count();
+
+        if (destination.polynomial_count() < key_component_count) {
+            throw std::invalid_argument("[Evaluator::switch_key_inplace_internal] Destination should have at least same amount of polys as the key switching key.");
+        }
+        if (destination.polynomial_count() > key_component_count && assign_method != SwitchKeyDestinationAssignMethod::AddInplace) {
+            destination.polys(key_component_count, destination.polynomial_count()).set_zero();
+        }
+        if (destination.parms_id() != parms_id) {
+            throw std::invalid_argument("[Evaluator::switch_key_inplace_internal] Destination parms_id should match the input parms_id.");
+        }
+        if (!utils::device_compatible(encrypted, destination, target)) {
+            throw std::invalid_argument("[Evaluator::switch_key_inplace_internal] Incompatible encryption parameters.");
+        }
+
         for (size_t i = 0; i < key_vector.size(); i++) {
             check_no_seed("[Evaluator::switch_key_inplace_internal]", key_vector[i].as_ciphertext());
         }
@@ -1232,13 +1287,17 @@ namespace troy {
         if (target.size() != decomp_modulus_size * coeff_count) {
             throw std::invalid_argument("[Evaluator::switch_key_inplace_internal] Invalid target size.");
         }
-        Array<uint64_t> target_copied = Array<uint64_t>::create_and_copy_from_slice(target, pool);
+        Buffer<uint64_t> target_copied_underlying(target.size(), target.on_device(), pool);
+        ConstSlice<uint64_t> target_copied(nullptr, 0, false, nullptr);
 
         // If target is in NTT form; switch back to normal form
         if (is_ntt_form) {
-            utils::intt_inplace_p(
-                target_copied.reference(), coeff_count, key_ntt_tables.const_slice(0, decomp_modulus_size)
+            utils::intt_p(
+                target, coeff_count, key_ntt_tables.const_slice(0, decomp_modulus_size), target_copied_underlying.reference()
             );
+            target_copied = target_copied_underlying.const_reference();
+        } else {
+            target_copied = target;
         }
 
         // Temporary result
@@ -1324,7 +1383,7 @@ namespace troy {
             Buffer<uint64_t> poly_lazy(key_component_count * coeff_count * 2, device, pool);
             Buffer<uint64_t> temp_ntt(rns_modulus_size, decomp_modulus_size, coeff_count, device, pool);
 
-            utils::fgk::switch_key::set_accumulate(decomp_modulus_size, coeff_count, target_copied.const_reference(), temp_ntt, key_modulus);
+            utils::fgk::switch_key::set_accumulate(decomp_modulus_size, coeff_count, target_copied, temp_ntt, key_modulus);
 
             utils::ntt_inplace_ps(temp_ntt.reference(), rns_modulus_size, decomp_modulus_size, coeff_count, 
                 utils::NTTTableIndexer::key_switching_set_products(key_ntt_tables, decomp_modulus_size));
@@ -1341,6 +1400,10 @@ namespace troy {
         if (!device) { // host
             Buffer<uint64_t> temp_ntt = Buffer<uint64_t>(decomp_modulus_size, coeff_count, device, pool);
             for (size_t i = 0; i < key_component_count; i++) {
+                
+                bool add_inplace = (assign_method == SwitchKeyDestinationAssignMethod::AddInplace) || 
+                    (i == 0 && assign_method == SwitchKeyDestinationAssignMethod::OverwriteExceptFirst);
+
                 if (scheme == SchemeType::BGV) {
                     // qk is the special prime
                     uint64_t qk = key_modulus[key_modulus_size - 1].value();
@@ -1356,7 +1419,8 @@ namespace troy {
                         t_last.as_const(), poly_prod.slice(i * coeff_count * rns_modulus_size, poly_prod.size()),
                         coeff_count, plain_modulus, key_modulus, key_ntt_tables,
                         decomp_modulus_size, qk_inv_qp, qk,
-                        modswitch_factors, encrypted.poly(i),
+                        modswitch_factors, destination.poly(i),
+                        add_inplace,
                         pool
                     );
                 } else {
@@ -1389,9 +1453,10 @@ namespace troy {
                     ski_util7(
                         poly_prod.slice(i * coeff_count * rns_modulus_size, poly_prod.size()),
                         temp_ntt.const_reference(),
-                        coeff_count, encrypted.poly(i),
+                        coeff_count, destination.poly(i),
                         scheme==SchemeType::CKKS, decomp_modulus_size, key_modulus,
-                        modswitch_factors
+                        modswitch_factors,
+                        add_inplace
                     );
                 }
             }
@@ -1424,7 +1489,8 @@ namespace troy {
                 utils::ntt_inplace_ps(delta.reference(), key_component_count, coeff_count, key_ntt_tables.const_slice(0, decomp_modulus_size));
                 utils::set_device(poly_prod.device_index());
                 kernel_ski_util5_merged_step2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
-                    delta.const_reference(), poly_prod.reference(), coeff_count, key_modulus, key_component_count, decomp_modulus_size, modswitch_factors, encrypted.data().reference()
+                    delta.const_reference(), poly_prod.reference(), coeff_count, key_modulus, key_component_count, decomp_modulus_size, modswitch_factors, 
+                    destination.data().reference(), assign_method
                 );
 
             } else {
@@ -1450,15 +1516,34 @@ namespace troy {
                 kernel_ski_util7_merged<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                     poly_prod.reference(),
                     temp_last.const_reference(),
-                    coeff_count, encrypted.data().reference(),
+                    coeff_count, destination.data().reference(),
                     scheme==SchemeType::CKKS, key_component_count, decomp_modulus_size,
-                    key_modulus, modswitch_factors
+                    key_modulus, modswitch_factors, assign_method
                 );
 
                 // printf("enc %ld: ", i); printDeviceArray(encrypted.data(i).get(), key_component_count * coeff_count);
             }
 
         }
+    }
+
+    void Evaluator::apply_keyswitching(const Ciphertext& encrypted, const KSwitchKeys& kswitch_keys, Ciphertext& destination, MemoryPoolHandle pool) const {
+        if (kswitch_keys.data().size() != 1) {
+            throw std::invalid_argument("[Evaluator::apply_keyswitching_inplace] Key switch keys size must be 1.");
+        }
+        if (encrypted.polynomial_count() != 2) {
+            throw std::invalid_argument("[Evaluator::apply_keyswitching_inplace] Ciphertext polynomial count must be 2.");
+        }
+        if (kswitch_keys.data()[0][0].as_ciphertext().polynomial_count() != 2) {
+            throw std::invalid_argument("[Evaluator::apply_keyswitching_inplace] Key switch keys polynomial count must be 2. Check the key switch key generation for problems.");
+        }
+        destination = Ciphertext::like(encrypted, false, pool);
+        this->switch_key_internal(encrypted, encrypted.poly(1), kswitch_keys, 0, Evaluator::SwitchKeyDestinationAssignMethod::Overwrite, destination, pool);
+        
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::switch_key_inplace_internal]", encrypted.parms_id());
+        const EncryptionParameters& parms = context_data->parms();
+
+        utils::add_inplace_p(destination.poly(0), encrypted.poly(0), parms.poly_modulus_degree(), parms.coeff_modulus());
     }
 
     void Evaluator::apply_keyswitching_inplace(Ciphertext& encrypted, const KSwitchKeys& kswitch_keys, MemoryPoolHandle pool) const {
@@ -1468,11 +1553,11 @@ namespace troy {
         if (encrypted.polynomial_count() != 2) {
             throw std::invalid_argument("[Evaluator::apply_keyswitching_inplace] Ciphertext polynomial count must be 2.");
         }
-        // due to the semantics of `switch_key_inplace_internal`, we should first get the c0 out
-        // and then clear the original c0 in the encrypted.
-        Array<uint64_t> target = Array<uint64_t>::create_and_copy_from_slice(encrypted.const_poly(1), pool);
-        encrypted.poly(1).set_zero();
-        this->switch_key_inplace_internal(encrypted, target.const_reference(), kswitch_keys, 0, pool);
+        if (kswitch_keys.data()[0][0].as_ciphertext().polynomial_count() != 2) {
+            throw std::invalid_argument("[Evaluator::apply_keyswitching_inplace] Key switch keys polynomial count must be 2. Check the key switch key generation for problems.");
+        }
+        this->switch_key_internal(encrypted, encrypted.poly(1), kswitch_keys, 0, Evaluator::SwitchKeyDestinationAssignMethod::OverwriteExceptFirst, encrypted, pool);
+        
     }
 
     void Evaluator::relinearize_inplace_internal(Ciphertext& encrypted, const RelinKeys& relin_keys, size_t destination_size, MemoryPoolHandle pool) const {
@@ -1490,12 +1575,39 @@ namespace troy {
         }
         size_t relins_needed = encrypted_size - destination_size;
         for (size_t i = 0; i < relins_needed; i++) {
-            this->switch_key_inplace_internal(
+            this->switch_key_internal(
                 encrypted, encrypted.const_poly(encrypted_size - 1),
-                relin_keys.as_kswitch_keys(), RelinKeys::get_index(encrypted_size - 1), pool);
+                relin_keys.as_kswitch_keys(), RelinKeys::get_index(encrypted_size - 1), Evaluator::SwitchKeyDestinationAssignMethod::AddInplace, encrypted, pool);
             encrypted_size -= 1;
         }
         encrypted.resize(this->context(), context_data->parms_id(), destination_size);
+    }
+
+    void Evaluator::relinearize_internal(const Ciphertext& encrypted, const RelinKeys& relin_keys, size_t destination_size, Ciphertext& destination, MemoryPoolHandle pool) const {
+        check_no_seed("[Evaluator::relinearize_inplace_internal]", encrypted);
+        if (relin_keys.parms_id() != this->context()->key_parms_id()) {
+            throw std::invalid_argument("[Evaluator::relinearize_inplace_internal] Relin keys has incorrect parms id.");
+        }
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::relinearize_inplace_internal]", encrypted.parms_id());
+        size_t encrypted_size = encrypted.polynomial_count();
+        if (encrypted_size < 2 || destination_size > encrypted_size) {
+            throw std::invalid_argument("[Evaluator::relinearize_inplace_internal] Destination size must be at least 2 and less/equal to the size of the encrypted polynomial.");
+        }
+        if (destination_size == encrypted_size) {
+            return;
+        }
+        size_t relins_needed = encrypted_size - destination_size;
+        destination = Ciphertext::like(encrypted, destination_size, false, pool);
+        for (size_t i = 0; i < relins_needed; i++) {
+            this->switch_key_internal(
+                encrypted, encrypted.const_poly(encrypted_size - 1),
+                relin_keys.as_kswitch_keys(), RelinKeys::get_index(encrypted_size - 1), 
+                i == 0 ? Evaluator::SwitchKeyDestinationAssignMethod::Overwrite : Evaluator::SwitchKeyDestinationAssignMethod::AddInplace, 
+                destination, pool);
+            encrypted_size -= 1;
+        }
+        const EncryptionParameters& parms = context_data->parms();
+        utils::add_inplace_ps(destination.polys(0, destination_size), encrypted.const_polys(0, destination_size), destination_size, parms.poly_modulus_degree(), parms.coeff_modulus());
     }
 
     void Evaluator::mod_switch_scale_to_next_internal(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool) const {
@@ -2059,9 +2171,9 @@ namespace troy {
             encrypted.poly(0).copy_from_slice(temp.const_reference());
             galois_tool.apply_ntt_p(encrypted.const_poly(1), coeff_modulus_size, galois_element, temp.reference(), pool);
         }
-        encrypted.poly(1).set_zero();
+        // encrypted.poly(1).set_zero();
 
-        this->switch_key_inplace_internal(encrypted, temp.const_reference(), galois_keys.as_kswitch_keys(), GaloisKeys::get_index(galois_element), pool);
+        this->switch_key_internal(encrypted, temp.const_reference(), galois_keys.as_kswitch_keys(), GaloisKeys::get_index(galois_element), Evaluator::SwitchKeyDestinationAssignMethod::OverwriteExceptFirst, encrypted, pool);
     }
     
     void Evaluator::apply_galois_plain_inplace(Plaintext& plain, size_t galois_element, MemoryPoolHandle pool) const {
