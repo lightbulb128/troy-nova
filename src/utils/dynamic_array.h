@@ -180,11 +180,11 @@ namespace troy {namespace utils {
             return inner.to_vector();
         }
 
-        void resize(size_t new_size, bool copy_data) {
+        void resize(size_t new_size, bool copy_data = true) {
             resize_internal(new_size, true, copy_data);
         }
 
-        void resize_uninitialized(size_t new_size, bool copy_data) {
+        void resize_uninitialized(size_t new_size, bool copy_data = true) {
             resize_internal(new_size, false, copy_data);
         }
 
