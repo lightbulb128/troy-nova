@@ -86,7 +86,7 @@ namespace troy {namespace scaling_variant {
         ConstSlice<Modulus> coeff_modulus,
         Slice<uint64_t> destination,
         size_t destination_coeff_count,
-        bool add_to_destination,
+        ConstSlice<uint64_t> add_to_destination,
         bool subtract
     ) {
         size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -108,21 +108,30 @@ namespace troy {namespace scaling_variant {
             plain_data[i], coeff_div_plain_modulus[j], fix[0], coeff_modulus[j]
         );
         uint64_t& destination_target = destination[j * destination_coeff_count + i];
-        if (add_to_destination) {
+        if (add_to_destination.raw_pointer()) {
+            uint64_t original = add_to_destination[j * destination_coeff_count + i];
             if (!subtract) {
-                destination_target = utils::add_uint64_mod(destination_target, scaled_rounded_coeff, coeff_modulus[j]);
+                destination_target = utils::add_uint64_mod(original, scaled_rounded_coeff, coeff_modulus[j]);
             } else {
-                destination_target = utils::sub_uint64_mod(destination_target, scaled_rounded_coeff, coeff_modulus[j]);
+                destination_target = utils::sub_uint64_mod(original, scaled_rounded_coeff, coeff_modulus[j]);
             }
         } else {
             destination_target = scaled_rounded_coeff;
         }
     }
 
-    void scale_up(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, size_t destination_coeff_count, bool add_to_destination, bool subtract) {
+    void scale_up(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, size_t destination_coeff_count, utils::ConstSlice<uint64_t> add_to_destination, bool subtract) {
         bool device = plain.on_device();
         if (!utils::device_compatible(*context_data, plain, destination)) {
             throw std::invalid_argument("[scaling_variant::scale_up] Arguments are not on the same device.");
+        }
+        if (add_to_destination.raw_pointer()) {
+            if (!utils::device_compatible(*context_data, add_to_destination)) {
+                throw std::invalid_argument("[scaling_variant::scale_up] Arguments are not on the same device.");
+            }
+            if (add_to_destination.size() != destination.size()) {
+                throw std::invalid_argument("[scaling_variant::scale_up] add_to_destination has incorrect size.");
+            }
         }
         const EncryptionParameters& parms = context_data->parms();
         ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
@@ -156,11 +165,11 @@ namespace troy {namespace scaling_variant {
                     uint64_t scaled_rounded_coeff = utils::multiply_uint64operand_add_uint64_mod(
                         plain_data[i], coeff_div_plain_modulus[j], fix[0], coeff_modulus[j]
                     );
-                    if (add_to_destination) {
+                    if (add_to_destination.raw_pointer()) {
                         if (!subtract) {
-                            destination[j * destination_coeff_count + i] = utils::add_uint64_mod(destination[j * destination_coeff_count + i], scaled_rounded_coeff, coeff_modulus[j]);
+                            destination[j * destination_coeff_count + i] = utils::add_uint64_mod(add_to_destination[j * destination_coeff_count + i], scaled_rounded_coeff, coeff_modulus[j]);
                         } else {
-                            destination[j * destination_coeff_count + i] = utils::sub_uint64_mod(destination[j * destination_coeff_count + i], scaled_rounded_coeff, coeff_modulus[j]);
+                            destination[j * destination_coeff_count + i] = utils::sub_uint64_mod(add_to_destination[j * destination_coeff_count + i], scaled_rounded_coeff, coeff_modulus[j]);
                         }
                     } else {
                         destination[j * destination_coeff_count + i] = scaled_rounded_coeff;
@@ -188,12 +197,21 @@ namespace troy {namespace scaling_variant {
         }
     }
 
-    void multiply_add_plain(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, size_t destination_coeff_count) {
-        scale_up(plain, context_data, destination, destination_coeff_count, true, false);
+    void multiply_add_plain_inplace(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, size_t destination_coeff_count) {
+        scale_up(plain, context_data, destination, destination_coeff_count, destination.as_const(), false);
     }
 
-    void multiply_sub_plain(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, size_t destination_coeff_count) {
-        scale_up(plain, context_data, destination, destination_coeff_count, true, true);
+    void multiply_sub_plain_inplace(const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, size_t destination_coeff_count) {
+        scale_up(plain, context_data, destination, destination_coeff_count, destination.as_const(), true);
+    }
+
+
+    void multiply_add_plain(utils::ConstSlice<uint64_t> from, const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, size_t destination_coeff_count) {
+        scale_up(plain, context_data, destination, destination_coeff_count, from, false);
+    }
+
+    void multiply_sub_plain(utils::ConstSlice<uint64_t> from, const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, size_t destination_coeff_count) {
+        scale_up(plain, context_data, destination, destination_coeff_count, from, true);
     }
 
     __global__ static void kernel_multiply_plain_normal_no_fast_plain_lift(

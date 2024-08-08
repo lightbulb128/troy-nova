@@ -344,7 +344,7 @@ namespace troy {
         }
         destination.resize_rns_partial(*this->context_, pid, plain.coeff_count());
         destination.is_ntt_form() = false;
-        scaling_variant::scale_up(plain, context_data, destination.reference(), plain.coeff_count(), false, false);
+        scaling_variant::scale_up(plain, context_data, destination.reference(), plain.coeff_count(), nullptr, false);
         return destination;
     }
 

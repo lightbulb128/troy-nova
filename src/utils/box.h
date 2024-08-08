@@ -229,6 +229,8 @@ namespace troy { namespace utils {
         MemoryPool* pool() const { return memory_pool_handle_; }
         size_t device_index() const { return memory_pool_handle_->get_device(); }
 
+        __host__ __device__ ConstSlice(std::nullptr_t) : pointer(nullptr), len(0), device(false), memory_pool_handle_(nullptr) {}
+
         __host__ __device__ ConstSlice(ConstPointer<T> pointer) 
             : pointer(pointer.get()), len(1), device(pointer.on_device()), memory_pool_handle_(pointer.pool()) {}
         __host__ __device__ ConstSlice(Pointer<T> pointer) 
@@ -258,6 +260,8 @@ namespace troy { namespace utils {
 
         MemoryPool* pool() const { return memory_pool_handle_; }
         size_t device_index() const { return memory_pool_handle_->get_device(); }
+
+        __host__ __device__ Slice(std::nullptr_t) : pointer(nullptr), len(0), device(false), memory_pool_handle_(nullptr) {}
 
         __host__ __device__ Slice(Pointer<T> pointer) 
             : pointer(pointer.get()), len(1), device(pointer.on_device()), memory_pool_handle_(pointer.pool()) {}

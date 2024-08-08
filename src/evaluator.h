@@ -53,6 +53,7 @@ namespace troy {
         void mod_switch_drop_to_next_plain_inplace_internal(Plaintext& plain) const;
 
         void translate_plain_inplace(Ciphertext& encrypted, const Plaintext& plain, bool subtract, MemoryPoolHandle pool) const;
+        void translate_plain(const Ciphertext& encrypted, const Plaintext& plain, Ciphertext& destination, bool subtract, MemoryPoolHandle pool) const;
 
         void multiply_plain_normal(const Ciphertext& encrypted, const Plaintext& plain, Ciphertext& destination, MemoryPoolHandle pool) const;
         void multiply_plain_ntt(const Ciphertext& encrypted, const Plaintext& plain, Ciphertext& destination, MemoryPoolHandle pool) const;
@@ -212,8 +213,7 @@ namespace troy {
             translate_plain_inplace(encrypted, plain, false, pool);
         }
         inline void add_plain(const Ciphertext& encrypted, const Plaintext& plain, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            destination = encrypted.clone(pool);
-            add_plain_inplace(destination, plain, pool);
+            translate_plain(encrypted, plain, destination, false, pool);
         }
         inline Ciphertext add_plain_new(const Ciphertext& encrypted, const Plaintext& plain, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;
@@ -225,8 +225,7 @@ namespace troy {
             translate_plain_inplace(encrypted, plain, true, pool);
         }
         inline void sub_plain(const Ciphertext& encrypted, const Plaintext& plain, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            destination = encrypted.clone(pool);
-            sub_plain_inplace(destination, plain, pool);
+            translate_plain(encrypted, plain, destination, true, pool);
         }
         inline Ciphertext sub_plain_new(const Ciphertext& encrypted, const Plaintext& plain, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;

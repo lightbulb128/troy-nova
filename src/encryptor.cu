@@ -141,7 +141,7 @@ namespace troy {
                     this->encrypt_zero_internal(this->context()->first_parms_id(), false, is_asymmetric, save_seed, u_prng, destination, pool);
                     // Multiply plain by scalar coeff_div_plaintext and reposition if in upper-half.
                     // Result gets added into the c_0 term of ciphertext (c_0,c_1).
-                    scaling_variant::multiply_add_plain(plain, this->context()->first_context_data().value(), destination.poly(0), destination.poly_modulus_degree());
+                    scaling_variant::multiply_add_plain_inplace(plain, this->context()->first_context_data().value(), destination.poly(0), destination.poly_modulus_degree());
                 } else {
                     ParmsID parms_id = plain.parms_id();
                     std::optional<ContextDataPointer> context_data_optional = this->context()->get_context_data(parms_id);

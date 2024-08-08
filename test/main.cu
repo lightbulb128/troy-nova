@@ -119,7 +119,7 @@ void test1(size_t n, size_t repeat) {
             if (i == warm_up) {
                 timer.tick(th);
             }
-            evaluator.rotate_rows(c, 7, gk, r);
+            evaluator.add_plain(c, p, r);
             if (i == repeat + warm_up - 1) {
                 timer.tock(th);
             }
@@ -146,7 +146,7 @@ void test1(size_t n, size_t repeat) {
             if (i == warm_up) {
                 timer.tick(th);
             }
-            evaluator.rotate_rows(c, 7, gk, r);
+            evaluator.add_plain(c, p, r);
             if (i == repeat + warm_up - 1) {
                 timer.tock(th);
             }
