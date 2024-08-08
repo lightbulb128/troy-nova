@@ -1650,11 +1650,11 @@ namespace troy {
                 break;
             }
             case SchemeType::CKKS: {
-                rns_tool.divide_and_round_q_last_ntt_inplace(encrypted.reference(), encrypted_size, destination.reference(), context_data->small_ntt_tables(), pool);
+                rns_tool.divide_and_round_q_last_ntt(encrypted.reference(), encrypted_size, destination.reference(), context_data->small_ntt_tables(), pool);
                 break;
             }
             case SchemeType::BGV: {
-                rns_tool.mod_t_and_divide_q_last_ntt_inplace(encrypted.reference(), encrypted_size, destination.reference(), context_data->small_ntt_tables(), pool);
+                rns_tool.mod_t_and_divide_q_last_ntt(encrypted.reference(), encrypted_size, destination.reference(), context_data->small_ntt_tables(), pool);
                 break;
             }
             default: {

@@ -370,7 +370,7 @@ namespace troy {namespace utils {
         this->device = true;
     }
 
-    __global__ static void kernel_divide_and_round_q_last_inplace(
+    __global__ static void kernel_divide_and_round_q_last(
         ConstSlice<Modulus> base_q, size_t coeff_count, size_t q_last_half,
         ConstSlice<MultiplyUint64Operand> inv_q_last_mod_q, 
         ConstSlice<uint64_t> input, size_t input_pcount, Slice<uint64_t> destination
@@ -410,7 +410,7 @@ namespace troy {namespace utils {
         if (device) {
             size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
             utils::set_device(input.device_index());
-            kernel_divide_and_round_q_last_inplace<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+            kernel_divide_and_round_q_last<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 this->base_q().base(),
                 this->coeff_count(),
                 this->q_last_half(),
@@ -447,7 +447,7 @@ namespace troy {namespace utils {
         }
     }
 
-    static void host_divide_and_round_q_last_ntt_inplace_step1(const RNSTool& self, Slice<uint64_t> input, size_t pcount, Slice<uint64_t> temp) {
+    static void host_divide_and_round_q_last_ntt_step1(const RNSTool& self, Slice<uint64_t> input, size_t pcount, Slice<uint64_t> temp) {
         size_t base_q_size = self.base_q().size();
         size_t coeff_count = self.coeff_count();
         for (size_t p = 0; p < pcount; p++) {
@@ -471,7 +471,7 @@ namespace troy {namespace utils {
         }
     }
 
-    __global__ static void kernel_divide_and_round_q_last_ntt_inplace_step1(
+    __global__ static void kernel_divide_and_round_q_last_ntt_step1(
         ConstSlice<Modulus> base_q, size_t coeff_count, size_t q_last_half,
         Slice<uint64_t> input, size_t pcount, Slice<uint64_t> temp
     ) {
@@ -500,12 +500,12 @@ namespace troy {namespace utils {
         }
     }
 
-    static void divide_and_round_q_last_ntt_inplace_step1(const RNSTool& self, Slice<uint64_t> input, size_t pcount, Slice<uint64_t> temp) {
+    static void divide_and_round_q_last_ntt_step1(const RNSTool& self, Slice<uint64_t> input, size_t pcount, Slice<uint64_t> temp) {
         bool device = self.on_device();
         if (device) {
             size_t block_count = utils::ceil_div(self.coeff_count(), utils::KERNEL_THREAD_COUNT);
             utils::set_device(input.device_index());
-            kernel_divide_and_round_q_last_ntt_inplace_step1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+            kernel_divide_and_round_q_last_ntt_step1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 self.base_q().base(),
                 self.coeff_count(),
                 self.q_last_half(),
@@ -515,11 +515,11 @@ namespace troy {namespace utils {
             );
             utils::stream_sync();
         } else {
-            host_divide_and_round_q_last_ntt_inplace_step1(self, input, pcount, temp);
+            host_divide_and_round_q_last_ntt_step1(self, input, pcount, temp);
         }
     }
     
-    static void host_divide_and_round_q_last_ntt_inplace_step2(const RNSTool& self, ConstSlice<uint64_t> input, Slice<uint64_t> destination, size_t pcount, ConstSlice<uint64_t> temp) {
+    static void host_divide_and_round_q_last_ntt_step2(const RNSTool& self, ConstSlice<uint64_t> input, Slice<uint64_t> destination, size_t pcount, ConstSlice<uint64_t> temp) {
         
         size_t base_q_size = self.base_q().size();
         size_t coeff_count = self.coeff_count();
@@ -540,7 +540,7 @@ namespace troy {namespace utils {
         }
     }
 
-    __global__ static void kernel_divide_and_round_q_last_ntt_inplace_step2(
+    __global__ static void kernel_divide_and_round_q_last_ntt_step2(
         ConstSlice<Modulus> base_q, size_t coeff_count,
         ConstSlice<MultiplyUint64Operand> inv_q_last_mod_q, ConstSlice<uint64_t> input, 
         Slice<uint64_t> destination, size_t pcount, ConstSlice<uint64_t> temp
@@ -562,13 +562,13 @@ namespace troy {namespace utils {
         }
     }
 
-    static void divide_and_round_q_last_ntt_inplace_step2(const RNSTool& self, ConstSlice<uint64_t> input, Slice<uint64_t> destination, size_t pcount, ConstSlice<uint64_t> temp) {
+    static void divide_and_round_q_last_ntt_step2(const RNSTool& self, ConstSlice<uint64_t> input, Slice<uint64_t> destination, size_t pcount, ConstSlice<uint64_t> temp) {
         bool device = self.on_device();
         size_t base_q_size = self.base_q().size();
         if (device) {
             size_t block_count = utils::ceil_div(self.coeff_count(), utils::KERNEL_THREAD_COUNT);
             utils::set_device(destination.device_index());
-            kernel_divide_and_round_q_last_ntt_inplace_step2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+            kernel_divide_and_round_q_last_ntt_step2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 self.base_q().base(),
                 self.coeff_count(),
                 self.inv_q_last_mod_q(),
@@ -577,11 +577,11 @@ namespace troy {namespace utils {
             );
             utils::stream_sync();
         } else {
-            host_divide_and_round_q_last_ntt_inplace_step2(self, input, destination, pcount, temp);
+            host_divide_and_round_q_last_ntt_step2(self, input, destination, pcount, temp);
         }
     }
     
-    void RNSTool::divide_and_round_q_last_ntt_inplace(ConstSlice<uint64_t> input, size_t pcount, Slice<uint64_t> destination, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool) const {
+    void RNSTool::divide_and_round_q_last_ntt(ConstSlice<uint64_t> input, size_t pcount, Slice<uint64_t> destination, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool) const {
         bool device = this->on_device();
         if (!utils::device_compatible(*this, input, rns_ntt_tables)) {
             throw std::invalid_argument("[RNSTool::divide_and_round_q_last_ntt_inplace] RNSTool, input and ntt_tables must be on the same device.");
@@ -606,11 +606,11 @@ namespace troy {namespace utils {
         }
 
         Buffer<uint64_t> temp(pcount, base_q_size - 1, coeff_count, device, pool);
-        divide_and_round_q_last_ntt_inplace_step1(*this, input_intt.reference(), pcount, temp.reference());
+        divide_and_round_q_last_ntt_step1(*this, input_intt.reference(), pcount, temp.reference());
         
         utils::ntt_inplace_ps(temp.reference(), pcount, coeff_count, rns_ntt_tables.const_slice(0, base_q_size - 1));
     
-        divide_and_round_q_last_ntt_inplace_step2(*this, input, destination, pcount, temp.const_reference());
+        divide_and_round_q_last_ntt_step2(*this, input, destination, pcount, temp.const_reference());
     }
 
     static void host_fast_b_conv_sk_step1(const RNSTool& self, ConstSlice<uint64_t> input, Slice<uint64_t> destination, ConstSlice<uint64_t> temp) {
@@ -1182,7 +1182,7 @@ namespace troy {namespace utils {
 
     }
 
-    static void host_mod_t_and_divide_q_last_ntt_inplace(const RNSTool& self, ConstSlice<uint64_t> input, ConstSlice<uint64_t> input_intt, size_t pcount, Slice<uint64_t> destination, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool) {
+    static void host_mod_t_and_divide_q_last_ntt(const RNSTool& self, ConstSlice<uint64_t> input, ConstSlice<uint64_t> input_intt, size_t pcount, Slice<uint64_t> destination, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool) {
         bool device = self.on_device();
         size_t base_q_size = self.base_q().size();
         size_t coeff_count = self.coeff_count();
@@ -1237,7 +1237,7 @@ namespace troy {namespace utils {
         }
     }
 
-    __global__ static void kernel_mod_t_and_divide_q_last_ntt_inplace_step1(
+    __global__ static void kernel_mod_t_and_divide_q_last_ntt_step1(
         ConstSlice<Modulus> base_q,
         ConstPointer<Modulus> t,
         size_t coeff_count,
@@ -1278,7 +1278,7 @@ namespace troy {namespace utils {
         }
     }
 
-    __global__ static void kernel_mod_t_and_divide_q_last_ntt_inplace_step2(
+    __global__ static void kernel_mod_t_and_divide_q_last_ntt_step2(
         ConstSlice<Modulus> base_q,
         size_t coeff_count,
         ConstSlice<MultiplyUint64Operand> inv_q_last_mod_q,
@@ -1306,7 +1306,7 @@ namespace troy {namespace utils {
         }
     }
 
-    static void mod_t_and_divide_q_last_ntt_inplace_step(const RNSTool& self, ConstSlice<uint64_t> input, ConstSlice<uint64_t> input_intt, size_t pcount, Slice<uint64_t> destination, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool) {
+    static void mod_t_and_divide_q_last_ntt_step(const RNSTool& self, ConstSlice<uint64_t> input, ConstSlice<uint64_t> input_intt, size_t pcount, Slice<uint64_t> destination, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool) {
         bool device = self.on_device();
         size_t base_q_size = self.base_q().size();
         size_t coeff_count = self.coeff_count();
@@ -1314,7 +1314,7 @@ namespace troy {namespace utils {
             size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
             Buffer<uint64_t> delta_mod_q_i(pcount, base_q_size - 1, coeff_count, device, pool);
             utils::set_device(input.device_index());
-            kernel_mod_t_and_divide_q_last_ntt_inplace_step1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+            kernel_mod_t_and_divide_q_last_ntt_step1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 self.base_q().base(),
                 self.t(),
                 coeff_count,
@@ -1324,7 +1324,7 @@ namespace troy {namespace utils {
             utils::stream_sync();
             utils::ntt_inplace_ps(delta_mod_q_i.reference(), pcount, coeff_count, rns_ntt_tables.const_slice(0, base_q_size - 1));
             utils::set_device(input.device_index());
-            kernel_mod_t_and_divide_q_last_ntt_inplace_step2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+            kernel_mod_t_and_divide_q_last_ntt_step2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 self.base_q().base(),
                 coeff_count,
                 self.inv_q_last_mod_q(),
@@ -1335,11 +1335,11 @@ namespace troy {namespace utils {
             );
             utils::stream_sync();
         } else {
-            host_mod_t_and_divide_q_last_ntt_inplace(self, input, input_intt, pcount, destination, rns_ntt_tables, pool);
+            host_mod_t_and_divide_q_last_ntt(self, input, input_intt, pcount, destination, rns_ntt_tables, pool);
         }
     }
 
-    void RNSTool::mod_t_and_divide_q_last_ntt_inplace(ConstSlice<uint64_t> input, size_t pcount, Slice<uint64_t> destination, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool) const {
+    void RNSTool::mod_t_and_divide_q_last_ntt(ConstSlice<uint64_t> input, size_t pcount, Slice<uint64_t> destination, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool) const {
         bool device = this->on_device();
         if (!utils::device_compatible(input, rns_ntt_tables, *this)) {
             throw std::invalid_argument("[RNSTool::mod_t_and_divide_q_last_ntt_inplace] RNSTool, input, rns_ntt_tables must be on the same device.");
@@ -1363,7 +1363,7 @@ namespace troy {namespace utils {
             }
         }
 
-        mod_t_and_divide_q_last_ntt_inplace_step(*this, input, input_intt.const_reference(), pcount, destination, rns_ntt_tables, pool);
+        mod_t_and_divide_q_last_ntt_step(*this, input, input_intt.const_reference(), pcount, destination, rns_ntt_tables, pool);
 
     }
 

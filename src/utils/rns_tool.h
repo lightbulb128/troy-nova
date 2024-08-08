@@ -111,7 +111,7 @@ namespace troy {namespace utils {
 
         void divide_and_round_q_last(ConstSlice<uint64_t> input, size_t input_pcount, Slice<uint64_t> destination) const;
 
-        void divide_and_round_q_last_ntt_inplace(ConstSlice<uint64_t> input, size_t input_pcount, Slice<uint64_t> destination, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        void divide_and_round_q_last_ntt(ConstSlice<uint64_t> input, size_t input_pcount, Slice<uint64_t> destination, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
 
         void fast_b_conv_sk(ConstSlice<uint64_t> input, Slice<uint64_t> destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
 
@@ -130,7 +130,7 @@ namespace troy {namespace utils {
 
         void mod_t_and_divide_q_last_inplace(Slice<uint64_t> input, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
 
-        void mod_t_and_divide_q_last_ntt_inplace(ConstSlice<uint64_t> input, size_t pcount, Slice<uint64_t> destination, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        void mod_t_and_divide_q_last_ntt(ConstSlice<uint64_t> input, size_t pcount, Slice<uint64_t> destination, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
 
         inline void decrypt_mod_t(ConstSlice<uint64_t> phase, Slice<uint64_t> destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             this->base_q_to_t_conv().exact_convey_array(phase, destination, pool);
