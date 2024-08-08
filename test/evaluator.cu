@@ -523,7 +523,14 @@ namespace evaluator {
         GeneralVector result = context.encoder().decode_simd(decrypted);
         // result should be same with message
         ASSERT_TRUE(message.near_equal(result, tolerance));
+
+        switched = context.evaluator().mod_switch_to_new(encrypted, context.context()->first_parms_id());
+        decrypted = context.decryptor().decrypt_new(switched);
+        result = context.encoder().decode_simd(decrypted);
+        // result should be same with message
+        ASSERT_TRUE(message.near_equal(result, tolerance));
     }
+
     TEST(EvaluatorTest, HostBFVModSwitchToNext) {
         GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_mod_switch_to_next(ghe);
@@ -563,6 +570,11 @@ namespace evaluator {
         Plaintext encoded = context.encoder().encode_simd(message, std::nullopt, scale);
         Plaintext switched = context.evaluator().mod_switch_plain_to_next_new(encoded);
         GeneralVector result = context.encoder().decode_simd(switched);
+        // result should be same with message
+        ASSERT_TRUE(message.near_equal(result, tolerance));
+
+        switched = context.evaluator().mod_switch_plain_to_new(encoded, context.context()->first_parms_id());
+        result = context.encoder().decode_simd(switched);
         // result should be same with message
         ASSERT_TRUE(message.near_equal(result, tolerance));
     }

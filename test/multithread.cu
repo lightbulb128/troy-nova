@@ -968,7 +968,7 @@ namespace multithread {
             }
             { // mod_switch_plain_to_next_inplace
                 Plaintext mod_switched = encoded.clone(pool);
-                context.evaluator().mod_switch_plain_to_next_inplace(mod_switched);
+                context.evaluator().mod_switch_plain_to_next_inplace(mod_switched, pool);
                 IF_FALSE_PRINT_RETURN(good_pool(mod_switched.pool(), pool), "mod_switch_plain_to_next_inplace/pool");
                 GeneralVector decoded = context.encoder().decode_simd(mod_switched, pool);
                 IF_FALSE_PRINT_RETURN(context.near_equal(message, decoded), "mod_switch_plain_to_next_inplace/correct");

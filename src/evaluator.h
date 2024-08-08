@@ -49,8 +49,8 @@ namespace troy {
         void relinearize_internal(const Ciphertext& encrypted, const RelinKeys& relin_keys, size_t destination_size, Ciphertext& destination, MemoryPoolHandle pool) const;
 
         void mod_switch_scale_to_next_internal(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool) const;
-        void mod_switch_drop_to_next_internal(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool) const;
-        void mod_switch_drop_to_next_plain_inplace_internal(Plaintext& plain) const;
+        void mod_switch_drop_to_internal(const Ciphertext& encrypted, Ciphertext& destination, ParmsID target_parms_id, MemoryPoolHandle pool) const;
+        void mod_switch_drop_to_plain_internal(const Plaintext& plain, Plaintext& destination, ParmsID target_parms_id, MemoryPoolHandle pool) const;
 
         void translate_plain_inplace(Ciphertext& encrypted, const Plaintext& plain, bool subtract, MemoryPoolHandle pool) const;
         void translate_plain(const Ciphertext& encrypted, const Plaintext& plain, Ciphertext& destination, bool subtract, MemoryPoolHandle pool) const;
@@ -143,8 +143,9 @@ namespace troy {
 
         void mod_switch_to_next(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline void mod_switch_to_next_inplace(Ciphertext& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            Ciphertext cloned = encrypted.clone(pool);
-            mod_switch_to_next(cloned, encrypted, pool);
+            Ciphertext destination;
+            mod_switch_to_next(encrypted, destination, pool);
+            encrypted = std::move(destination);
         }
         inline Ciphertext mod_switch_to_next_new(const Ciphertext& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;
@@ -152,23 +153,30 @@ namespace troy {
             return destination;
         }
 
-        inline void mod_switch_plain_to_next_inplace(Plaintext& plain) const {
-            this->mod_switch_drop_to_next_plain_inplace_internal(plain);
-        }
         inline void mod_switch_plain_to_next(const Plaintext& plain, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            destination = plain.clone(pool);
-            this->mod_switch_drop_to_next_plain_inplace_internal(destination);
+            auto context_data = this->get_context_data("[Evaluator::mod_switch_plain_to_next]", plain.parms_id());
+            if (!context_data->next_context_data().has_value()) {
+                throw std::invalid_argument("[Evaluator::mod_switch_plain_to_next] The input plaintext is already at the last modulus");
+            }
+            auto next_parms_id = context_data->next_context_data().value()->parms().parms_id();
+            this->mod_switch_drop_to_plain_internal(plain, destination, next_parms_id, pool);
+        }
+        inline void mod_switch_plain_to_next_inplace(Plaintext& plain, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            Plaintext destination;
+            mod_switch_plain_to_next(plain, destination, pool);
+            plain = std::move(destination);
         }
         inline Plaintext mod_switch_plain_to_next_new(const Plaintext& plain, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            Plaintext destination = plain.clone(pool);
-            this->mod_switch_drop_to_next_plain_inplace_internal(destination);
+            Plaintext destination;
+            mod_switch_plain_to_next(plain, destination, pool);
             return destination;
         }
 
-        void mod_switch_to_inplace(Ciphertext& encrypted, const ParmsID& parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
-        inline void mod_switch_to(const Ciphertext& encrypted, const ParmsID& parms_id, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            destination = encrypted.clone(pool);
-            mod_switch_to_inplace(destination, parms_id, pool);
+        void mod_switch_to(const Ciphertext& encrypted, const ParmsID& parms_id, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        inline void mod_switch_to_inplace(Ciphertext& encrypted, const ParmsID& parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            Ciphertext destination;
+            mod_switch_to(encrypted, parms_id, destination, pool);
+            encrypted = std::move(destination);
         }
         inline Ciphertext mod_switch_to_new(const Ciphertext& encrypted, const ParmsID& parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;
@@ -176,21 +184,23 @@ namespace troy {
             return destination;
         }
 
-        void mod_switch_plain_to_inplace(Plaintext& plain, const ParmsID& parms_id) const;
-        inline void mod_switch_plain_to(const Plaintext& plain, const ParmsID& parms_id, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            destination = plain.clone(pool);
-            mod_switch_plain_to_inplace(destination, parms_id);
+        void mod_switch_plain_to(const Plaintext& plain, const ParmsID& parms_id, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        inline void mod_switch_plain_to_inplace(Plaintext& plain, const ParmsID& parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            Plaintext destination;
+            mod_switch_plain_to(plain, parms_id, destination, pool);
+            plain = std::move(destination);
         }
         inline Plaintext mod_switch_plain_to_new(const Plaintext& plain, const ParmsID& parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            Plaintext destination = plain.clone(pool);
-            mod_switch_plain_to_inplace(destination, parms_id);
+            Plaintext destination;
+            mod_switch_plain_to(plain, parms_id, destination, pool);
             return destination;
         }
 
         void rescale_to_next(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline void rescale_to_next_inplace(Ciphertext& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            Ciphertext cloned = encrypted.clone(pool);
-            rescale_to_next(cloned, encrypted, pool);
+            Ciphertext destination;
+            rescale_to_next(encrypted, destination, pool);
+            encrypted = std::move(destination);
         }
         inline Ciphertext rescale_to_next_new(const Ciphertext& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;
@@ -200,8 +210,9 @@ namespace troy {
 
         void rescale_to(const Ciphertext& encrypted, const ParmsID& parms_id, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline void rescale_to_inplace(Ciphertext& encrypted, const ParmsID& parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            Ciphertext cloned = encrypted.clone(pool);
-            rescale_to(cloned, parms_id, encrypted, pool);
+            Ciphertext destination;
+            rescale_to(encrypted, parms_id, destination, pool);
+            encrypted = std::move(destination);
         }
         inline Ciphertext rescale_to_new(const Ciphertext& encrypted, const ParmsID& parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;

@@ -43,8 +43,8 @@ namespace troy {
         serialize::load_bool(stream, device);
         size_t size;
         serialize::load_object(stream, size);
-        this->data().resize(0); this->data().to_host_inplace();
-        this->data().resize(size);
+        this->data().resize(0, false); this->data().to_host_inplace();
+        this->data().resize(size, true);
         serialize::load_array(stream, this->data().raw_pointer(), size);
         if (device) {
             this->data().to_device_inplace(pool);
@@ -68,19 +68,19 @@ namespace troy {
         return size;
     }
 
-    void Plaintext::resize_rns_internal(size_t poly_modulus_degree, size_t coeff_modulus_size, size_t coeff_count, bool fill_extra_with_zeros) {
+    void Plaintext::resize_rns_internal(size_t poly_modulus_degree, size_t coeff_modulus_size, size_t coeff_count, bool fill_extra_with_zeros, bool copy_data) {
         size_t data_size = coeff_count * coeff_modulus_size;
         if (fill_extra_with_zeros) {
-            this->data().resize(data_size);
+            this->data().resize(data_size, copy_data);
         } else {
-            this->data().resize_uninitialized(data_size);
+            this->data().resize_uninitialized(data_size, copy_data);
         }
         this->poly_modulus_degree_ = poly_modulus_degree;
         this->coeff_modulus_size_ = coeff_modulus_size;
         this->coeff_count_ = coeff_count;
     }
 
-    void Plaintext::resize_rns(const HeContext& context, const ParmsID& parms_id, bool fill_extra_with_zeros) {
+    void Plaintext::resize_rns(const HeContext& context, const ParmsID& parms_id, bool fill_extra_with_zeros, bool copy_data) {
         if (!context.parameters_set()) {
             throw std::invalid_argument("[Plaintext::resize_rns] context is not set");
         }
@@ -91,10 +91,10 @@ namespace troy {
         ContextDataPointer context_data = context_data_optional.value();
         const EncryptionParameters& parms = context_data->parms();
         this->parms_id_ = parms_id;
-        this->resize_rns_internal(parms.poly_modulus_degree(), parms.coeff_modulus().size(), parms.poly_modulus_degree(), fill_extra_with_zeros);
+        this->resize_rns_internal(parms.poly_modulus_degree(), parms.coeff_modulus().size(), parms.poly_modulus_degree(), fill_extra_with_zeros, copy_data);
     }
 
-    void Plaintext::resize_rns_partial(const HeContext& context, const ParmsID& parms_id, size_t coeff_count, bool fill_extra_with_zeros) {
+    void Plaintext::resize_rns_partial(const HeContext& context, const ParmsID& parms_id, size_t coeff_count, bool fill_extra_with_zeros, bool copy_data) {
         if (!context.parameters_set()) {
             throw std::invalid_argument("[Plaintext::resize_rns] context is not set");
         }
@@ -105,7 +105,7 @@ namespace troy {
         ContextDataPointer context_data = context_data_optional.value();
         const EncryptionParameters& parms = context_data->parms();
         this->parms_id_ = parms_id;
-        this->resize_rns_internal(parms.poly_modulus_degree(), parms.coeff_modulus().size(), coeff_count, fill_extra_with_zeros);
+        this->resize_rns_internal(parms.poly_modulus_degree(), parms.coeff_modulus().size(), coeff_count, fill_extra_with_zeros, copy_data);
     }
 
 

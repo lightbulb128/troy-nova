@@ -2,19 +2,19 @@
 
 namespace troy {
 
-    Ciphertext Ciphertext::like(const Ciphertext& other, size_t polynomial_count, bool fill_zeros, MemoryPoolHandle pool) {
+    Ciphertext Ciphertext::like(const Ciphertext& other, size_t polynomial_count, size_t coeff_modulus_size, bool fill_zeros, MemoryPoolHandle pool) {
         if (polynomial_count < utils::HE_CIPHERTEXT_SIZE_MIN || polynomial_count > utils::HE_CIPHERTEXT_SIZE_MAX) {
             throw std::invalid_argument("[Ciphertext::like] Polynomial count is invalid.");
         }
         Ciphertext ret;
         ret.polynomial_count_ = polynomial_count;
-        ret.coeff_modulus_size_ = other.coeff_modulus_size();
+        ret.coeff_modulus_size_ = coeff_modulus_size;
         ret.poly_modulus_degree_ = other.poly_modulus_degree();
         ret.parms_id_ = other.parms_id();
         ret.scale_ = other.scale();
         ret.is_ntt_form_ = other.is_ntt_form();
         ret.correction_factor_ = other.correction_factor();
-        size_t data_size = polynomial_count * other.coeff_modulus_size() * other.poly_modulus_degree();
+        size_t data_size = polynomial_count * coeff_modulus_size * other.poly_modulus_degree();
         ret.data_ = utils::DynamicArray<uint64_t>::create_uninitialized(data_size, other.on_device(), pool);
         if (fill_zeros) {
             ret.data().reference().set_zero();
@@ -22,16 +22,16 @@ namespace troy {
         return ret;
     }
 
-    void Ciphertext::resize_internal(size_t polynomial_count, size_t coeff_modulus_size, size_t poly_modulus_degree, bool fill_extra_with_zeros) {
+    void Ciphertext::resize_internal(size_t polynomial_count, size_t coeff_modulus_size, size_t poly_modulus_degree, bool fill_extra_with_zeros, bool copy_data) {
         if (polynomial_count < utils::HE_CIPHERTEXT_SIZE_MIN || polynomial_count > utils::HE_CIPHERTEXT_SIZE_MAX) {
             throw std::invalid_argument("[Ciphertext::resize_internal] Polynomial count is invalid.");
         }
 
         size_t data_size = polynomial_count * coeff_modulus_size * poly_modulus_degree;
         if (fill_extra_with_zeros) {
-            this->data_.resize(data_size);
+            this->data_.resize(data_size, copy_data);
         } else {
-            this->data_.resize_uninitialized(data_size);
+            this->data_.resize_uninitialized(data_size, copy_data);
         }
 
         this->polynomial_count_ = polynomial_count;
@@ -39,7 +39,7 @@ namespace troy {
         this->poly_modulus_degree_ = poly_modulus_degree;
     }
     
-    void Ciphertext::resize(HeContextPointer context, const ParmsID& parms_id, size_t polynomial_count, bool fill_extra_with_zeros) {
+    void Ciphertext::resize(HeContextPointer context, const ParmsID& parms_id, size_t polynomial_count, bool fill_extra_with_zeros, bool copy_data) {
         if (!context->parameters_set()) {
             throw std::invalid_argument("[Ciphertext::resize] Context is not set correctly.");
         }
@@ -50,7 +50,7 @@ namespace troy {
         ContextDataPointer context_data = context_data_opt.value();
         const EncryptionParameters &parms = context_data->parms();
         this->parms_id_ = parms_id;
-        this->resize_internal(polynomial_count, parms.coeff_modulus().size(), parms.poly_modulus_degree(), fill_extra_with_zeros);
+        this->resize_internal(polynomial_count, parms.coeff_modulus().size(), parms.poly_modulus_degree(), fill_extra_with_zeros, copy_data);
     }
 
     void Ciphertext::reconfigure_like(HeContextPointer context, const Ciphertext& other, size_t polynomial_count, bool fill_extra_with_zeros) {
@@ -64,7 +64,7 @@ namespace troy {
         ContextDataPointer context_data = context_data_opt.value();
         const EncryptionParameters &parms = context_data->parms();
         this->parms_id_ = other.parms_id();
-        this->resize_internal(polynomial_count, parms.coeff_modulus().size(), parms.poly_modulus_degree(), fill_extra_with_zeros);
+        this->resize_internal(polynomial_count, parms.coeff_modulus().size(), parms.poly_modulus_degree(), fill_extra_with_zeros, true);
         this->correction_factor_ = other.correction_factor();
         this->scale_ = other.scale();
         this->is_ntt_form_ = other.is_ntt_form();
@@ -153,7 +153,7 @@ namespace troy {
         if (terms) {
             throw std::logic_error("[Ciphertext::load] Trying to call load with ciphertext with only terms saved.");
         }
-        this->data().resize(0);
+        this->data().resize(0, false);
         this->data().to_host_inplace();
 
         SchemeType scheme = context->key_context_data().value()->parms().scheme();
@@ -169,7 +169,7 @@ namespace troy {
         }
 
         if (contains_seed) {
-            this->data().resize(this->poly_modulus_degree_ * this->coeff_modulus_size_ * 2);
+            this->data().resize(this->poly_modulus_degree_ * this->coeff_modulus_size_ * 2, true);
             serialize::load_object(stream, this->seed_);
             size_t poly_size = this->poly_modulus_degree_ * this->coeff_modulus_size_;
             // load c0
@@ -179,7 +179,7 @@ namespace troy {
             this->expand_seed(context);
         } else {
             this->seed() = 0;
-            this->data().resize(this->poly_modulus_degree_ * this->coeff_modulus_size_ * this->polynomial_count_);
+            this->data().resize(this->poly_modulus_degree_ * this->coeff_modulus_size_ * this->polynomial_count_, true);
             // load all data
             serialize::load_array(stream, this->data().raw_pointer(), this->data().size());
             if (device) this->data().to_device_inplace(pool);
@@ -294,7 +294,7 @@ namespace troy {
         if (!terms_flag) {
             throw std::logic_error("[Ciphertext::load_terms] Trying to call load_terms with ciphertext with all terms saved.");
         }
-        this->data().resize(0);
+        this->data().resize(0, false);
         this->data().to_host_inplace();
 
         SchemeType scheme = context->key_context_data().value()->parms().scheme();
@@ -311,10 +311,10 @@ namespace troy {
 
         size_t poly_size = this->poly_modulus_degree_ * this->coeff_modulus_size_;
         if (contains_seed) {
-            this->data().resize(poly_size * 2);
+            this->data().resize(poly_size * 2, true);
             serialize::load_object(stream, this->seed_);
         } else {
-            this->data().resize(poly_size * polynomial_count_);
+            this->data().resize(poly_size * polynomial_count_, true);
             this->seed() = 0;
         }
 

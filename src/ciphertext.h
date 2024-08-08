@@ -21,7 +21,7 @@ namespace troy {
         uint64_t correction_factor_;
         uint64_t seed_;
 
-        void resize_internal(size_t polynomial_count, size_t coeff_modulus_size, size_t poly_modulus_degree, bool fill_extra_with_zeros);
+        void resize_internal(size_t polynomial_count, size_t coeff_modulus_size, size_t poly_modulus_degree, bool fill_extra_with_zeros, bool copy_data);
 
         size_t save_raw(std::ostream& stream, HeContextPointer context) const;
         void load_raw(std::istream& stream, HeContextPointer context, MemoryPoolHandle pool);
@@ -91,7 +91,10 @@ namespace troy {
             return *this;
         }
 
-        static Ciphertext like(const Ciphertext& other, size_t polynomial_count, bool fill_zeros, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+        static Ciphertext like(const Ciphertext& other, size_t polynomial_count, size_t coeff_modulus_size, bool fill_zeros, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+        inline static Ciphertext like(const Ciphertext& other, size_t polynomial_count, bool fill_zeros, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+            return like(other, polynomial_count, other.coeff_modulus_size(), fill_zeros, pool);
+        }
         inline static Ciphertext like(const Ciphertext& other, bool fill_zeros, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
             return like(other, other.polynomial_count(), fill_zeros, pool);
         }
@@ -190,7 +193,7 @@ namespace troy {
             return data_;
         }
 
-        void resize(HeContextPointer context, const ParmsID& parms_id, size_t polynomial_count, bool fill_extra_with_zeros = true);
+        void resize(HeContextPointer context, const ParmsID& parms_id, size_t polynomial_count, bool fill_extra_with_zeros = true, bool copy_data = true);
         void reconfigure_like(HeContextPointer context, const Ciphertext& other, size_t polynomial_count, bool fill_extra_with_zeros = true);
 
         inline utils::ConstSlice<uint64_t> reference() const noexcept {

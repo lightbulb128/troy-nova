@@ -69,15 +69,15 @@ namespace troy {
                     switch (parms.scheme()) {
                         case SchemeType::CKKS: case SchemeType::BFV: {
                             if (is_ntt_form) {
-                                rns_tool.divide_and_round_q_last_ntt_inplace(temp.poly(i), prev_context_data->small_ntt_tables(), pool);
+                                rns_tool.divide_and_round_q_last_ntt_inplace(temp.poly(i), 1, temp.poly(i), prev_context_data->small_ntt_tables(), pool);
                             } else {
-                                rns_tool.divide_and_round_q_last_inplace(temp.poly(i));
+                                rns_tool.divide_and_round_q_last(temp.poly(i), 1, temp.poly(i)); // TODO: reduce this
                             }
                             break;
                         }
                         case SchemeType::BGV: {
                             if (is_ntt_form) {
-                                rns_tool.mod_t_and_divide_q_last_ntt_inplace(temp.poly(i), prev_context_data->small_ntt_tables(), pool);
+                                rns_tool.mod_t_and_divide_q_last_ntt_inplace(temp.poly(i), 1, temp.poly(i), prev_context_data->small_ntt_tables(), pool);
                             } else {
                                 rns_tool.mod_t_and_divide_q_last_inplace(temp.poly(i), pool);
                             }

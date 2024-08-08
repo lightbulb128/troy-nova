@@ -370,206 +370,218 @@ namespace troy {namespace utils {
         this->device = true;
     }
 
-    static void host_divide_and_round_q_last_inplace(const RNSTool& self, Slice<uint64_t> input) {
-        
-        size_t base_q_size = self.base_q().size();
-        size_t coeff_count = self.coeff_count();
-        size_t last_input_offset = (base_q_size - 1) * coeff_count;
-        size_t half = self.q_last_half();
+    __global__ static void kernel_divide_and_round_q_last_inplace(
+        ConstSlice<Modulus> base_q, size_t coeff_count, size_t q_last_half,
+        ConstSlice<MultiplyUint64Operand> inv_q_last_mod_q, 
+        ConstSlice<uint64_t> input, size_t input_pcount, Slice<uint64_t> destination
+    ) {
+        size_t j = blockIdx.x * blockDim.x + threadIdx.x;
+        size_t base_q_size = base_q.size();
+        if (j >= coeff_count) return;
 
-        Slice<uint64_t> input_last = input.slice(last_input_offset, last_input_offset + coeff_count);
-        Array<uint64_t> temp(coeff_count, false, nullptr);
-        for (size_t i = 0; i < base_q_size - 1; i++) {
-            ConstPointer<Modulus> modulus = self.base_q().base().at(i);
-            Slice<uint64_t> input_i = input.slice(i * coeff_count, (i + 1) * coeff_count);
-            // (ct mod qk) mod qi
-            utils::modulo(input_last.as_const(), modulus, temp.reference());
-            // Subtract rounding correction here; the negative sign will turn into a plus in the next subtraction
-            uint64_t half_mod = modulus->reduce(half);
-            utils::sub_scalar_inplace(temp.reference(), half_mod, modulus);
-            // (ct mod qi) - (ct mod qk) mod qi
-            utils::sub_inplace(input_i, temp.const_reference(), modulus);
-            // qk^(-1) * ((ct mod qi) - (ct mod qk)) mod qi
-            utils::multiply_uint64operand_inplace(input_i, self.inv_q_last_mod_q().at(i), modulus);
+        for (size_t p = 0; p < input_pcount; p++) {
+            size_t poffset = p * coeff_count * base_q_size;
+            size_t doffset = p * coeff_count * (base_q_size - 1);
+            uint64_t input_last = input[poffset + (base_q_size - 1) * coeff_count + j];
+            uint64_t input_last_translated = utils::add_uint64_mod(input_last, q_last_half, base_q[base_q_size - 1]);
+            for (size_t i = 0; i < base_q_size - 1; i++) {
+                const Modulus& modulus = *base_q.at(i);
+                // (ct mod qk) mod qi
+                uint64_t temp = modulus.reduce(input_last_translated);
+                // Subtract rounding correction here; the negative sign will turn into a plus in the next subtraction
+                uint64_t half_mod = modulus.reduce(q_last_half);
+                temp = utils::sub_uint64_mod(temp, half_mod, modulus);
+                // (ct mod qi) - (ct mod qk) mod qi
+                uint64_t input_ij = utils::sub_uint64_mod(input[poffset + i * coeff_count + j], temp, modulus);
+                // qk^(-1) * ((ct mod qi) - (ct mod qk)) mod qi
+                destination[doffset + i * coeff_count + j] = utils::multiply_uint64operand_mod(input_ij, inv_q_last_mod_q[i], modulus);
+            }
         }
 
     }
 
-    __global__ static void kernel_divide_and_round_q_last_inplace(
-        ConstSlice<Modulus> base_q, size_t coeff_count, size_t q_last_half,
-        ConstSlice<MultiplyUint64Operand> inv_q_last_mod_q, 
-        Slice<uint64_t> input
-    ) {
-        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
-        size_t base_q_size = base_q.size();
-        if (global_index >= coeff_count * (base_q_size - 1)) return;
-        size_t i = global_index / coeff_count;
-        size_t j = global_index % coeff_count;
-
-        size_t last_input_offset = (base_q.size() - 1) * coeff_count;
-        Slice<uint64_t> input_last = input.slice(last_input_offset, last_input_offset + coeff_count);
-        Slice<uint64_t> input_i = input.slice(i * coeff_count, (i + 1) * coeff_count);
-        uint64_t temp;
-        const Modulus& modulus = *base_q.at(i);
-        // (ct mod qk) mod qi
-        temp = modulus.reduce(input_last[j]);
-        // Subtract rounding correction here; the negative sign will turn into a plus in the next subtraction
-        uint64_t half_mod = modulus.reduce(q_last_half);
-        temp = utils::sub_uint64_mod(temp, half_mod, modulus);
-        // (ct mod qi) - (ct mod qk) mod qi
-        input_i[j] = utils::sub_uint64_mod(input_i[j], temp, modulus);
-        // qk^(-1) * ((ct mod qi) - (ct mod qk)) mod qi
-        input_i[j] = utils::multiply_uint64operand_mod(input_i[j], inv_q_last_mod_q[i], modulus);
-    }
-
-    void RNSTool::divide_and_round_q_last_inplace(Slice<uint64_t> input) const {
+    void RNSTool::divide_and_round_q_last(ConstSlice<uint64_t> input, size_t input_pcount, Slice<uint64_t> destination) const {
         bool device = this->on_device();
         if (!utils::device_compatible(*this, input)) {
             throw std::invalid_argument("[RNSTool::divide_and_round_q_last_inplace] RNSTool and input must be on the same device.");
         }
         size_t base_q_size = this->base_q().size();
         size_t coeff_count = this->coeff_count();
-        Slice<uint64_t> input_last = input.slice((base_q_size - 1) * coeff_count, base_q_size * coeff_count);
-        // Add (qi-1)/2 to change from flooring to rounding
-        utils::add_scalar_inplace(input_last, this->q_last_half(), this->base_q().base().at(base_q_size - 1));
         if (device) {
-            size_t block_count = utils::ceil_div(this->coeff_count() * (base_q_size - 1), utils::KERNEL_THREAD_COUNT);
+            size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
             utils::set_device(input.device_index());
             kernel_divide_and_round_q_last_inplace<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 this->base_q().base(),
                 this->coeff_count(),
                 this->q_last_half(),
                 this->inv_q_last_mod_q(),
-                input
+                input,
+                input_pcount, destination
             );
             utils::stream_sync();
         } else {
-            host_divide_and_round_q_last_inplace(*this, input);
+            size_t half = this->q_last_half();
+            for (size_t p = 0; p < input_pcount; p++) {
+                size_t poffset = p * coeff_count * base_q_size;
+                size_t doffset = p * coeff_count * (base_q_size - 1);
+                ConstSlice<uint64_t> input_last = input.const_slice(poffset + (base_q_size - 1) * coeff_count, poffset + base_q_size * coeff_count);
+                Buffer<uint64_t> input_last_translated(coeff_count, false, nullptr);
+                utils::add_scalar(input_last, this->q_last_half(), this->base_q().base().at(base_q_size - 1), input_last_translated.reference());
+                Buffer<uint64_t> temp(coeff_count, false, nullptr);
+                for (size_t i = 0; i < base_q_size - 1; i++) {
+                    ConstPointer<Modulus> modulus = this->base_q().base().at(i);
+                    ConstSlice<uint64_t> input_i = input.const_slice(poffset + i * coeff_count, poffset + (i + 1) * coeff_count);
+                    Slice<uint64_t> dest_i = destination.slice(doffset + i * coeff_count, doffset + (i + 1) * coeff_count);
+                    // (ct mod qk) mod qi
+                    utils::modulo(input_last_translated.const_reference(), modulus, temp.reference());
+                    // Subtract rounding correction here; the negative sign will turn into a plus in the next subtraction
+                    uint64_t half_mod = modulus->reduce(half);
+                    utils::sub_scalar_inplace(temp.reference(), half_mod, modulus);
+                    // (ct mod qi) - (ct mod qk) mod qi
+                    utils::sub(input_i, temp.const_reference(), modulus, dest_i);
+                    // qk^(-1) * ((ct mod qi) - (ct mod qk)) mod qi
+                    utils::multiply_uint64operand_inplace(dest_i, this->inv_q_last_mod_q().at(i), modulus);
+                }
+            }
+
         }
     }
 
-    static void host_divide_and_round_q_last_ntt_inplace_step1(const RNSTool& self, Slice<uint64_t> input, Slice<uint64_t> temp) {
+    static void host_divide_and_round_q_last_ntt_inplace_step1(const RNSTool& self, Slice<uint64_t> input, size_t pcount, Slice<uint64_t> temp) {
         size_t base_q_size = self.base_q().size();
         size_t coeff_count = self.coeff_count();
-        Slice<uint64_t> input_last = input.slice((base_q_size - 1) * coeff_count, base_q_size * coeff_count);
-        ConstPointer<Modulus> last_modulus = self.base_q().base().at(base_q_size - 1);
+        for (size_t p = 0; p < pcount; p++) {
+            size_t poffset = p * coeff_count * base_q_size;
+            size_t toffset = p * coeff_count * (base_q_size - 1);
+            Slice<uint64_t> input_last = input.slice(poffset + (base_q_size - 1) * coeff_count, poffset + base_q_size * coeff_count);
+            utils::add_scalar_inplace(input_last, self.q_last_half(), self.base_q().base().at(base_q_size - 1));
+            ConstPointer<Modulus> last_modulus = self.base_q().base().at(base_q_size - 1);
 
-        for (size_t i = 0; i < base_q_size - 1; i++) {
-            ConstPointer<Modulus> modulus = self.base_q().base().at(i);
-            Slice<uint64_t> temp_i = temp.slice(i * coeff_count, (i + 1) * coeff_count);
-            if (modulus->value() < last_modulus->value()) {
-                utils::modulo(input_last.as_const(), modulus, temp_i);
-            } else {
-                utils::set_uint(input_last.as_const(), coeff_count, temp_i);
+            for (size_t i = 0; i < base_q_size - 1; i++) {
+                ConstPointer<Modulus> modulus = self.base_q().base().at(i);
+                Slice<uint64_t> temp_i = temp.slice(toffset + i * coeff_count, toffset + (i + 1) * coeff_count);
+                if (modulus->value() < last_modulus->value()) {
+                    utils::modulo(input_last.as_const(), modulus, temp_i);
+                } else {
+                    utils::set_uint(input_last.as_const(), coeff_count, temp_i);
+                }
+                uint64_t half_mod = modulus->reduce(self.q_last_half());
+                utils::sub_scalar_inplace(temp_i, half_mod, modulus);
             }
-            uint64_t half_mod = modulus->reduce(self.q_last_half());
-            utils::sub_scalar_inplace(temp_i, half_mod, modulus);
         }
     }
 
     __global__ static void kernel_divide_and_round_q_last_ntt_inplace_step1(
         ConstSlice<Modulus> base_q, size_t coeff_count, size_t q_last_half,
-        Slice<uint64_t> input, Slice<uint64_t> temp
+        Slice<uint64_t> input, size_t pcount, Slice<uint64_t> temp
     ) {
-        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        size_t j = blockIdx.x * blockDim.x + threadIdx.x;
         size_t base_q_size = base_q.size();
-        if (global_index >= coeff_count * (base_q_size - 1)) return;
-        size_t i = global_index / coeff_count;
-        size_t j = global_index % coeff_count;
+        if (j >= coeff_count) return;
 
-        const Modulus& last_modulus = *base_q.at(base_q_size - 1);
-        size_t last_input_offset = (base_q.size() - 1) * coeff_count;
-        Slice<uint64_t> input_last = input.slice(last_input_offset, last_input_offset + coeff_count);
-        Slice<uint64_t> temp_i = temp.slice(i * coeff_count, (i + 1) * coeff_count);
-        uint64_t temp_value;
-        const Modulus& modulus = *base_q.at(i);
-        if (modulus.value() < last_modulus.value()) {
-            temp_value = modulus.reduce(input_last[j]);
-        } else {
-            temp_value = input_last[j];
+        for (size_t p = 0; p < pcount; p++) {
+            size_t poffset = p * coeff_count * base_q_size;
+            size_t toffset = p * coeff_count * (base_q_size - 1);
+            uint64_t input_last = input[poffset + (base_q_size - 1) * coeff_count + j];
+            input_last = utils::add_uint64_mod(input_last, q_last_half, base_q[base_q_size - 1]);
+            for (size_t i = 0; i < base_q_size - 1; i++) {
+                const Modulus& last_modulus = *base_q.at(base_q_size - 1);
+                uint64_t temp_value;
+                const Modulus& modulus = *base_q.at(i);
+                if (modulus.value() < last_modulus.value()) {
+                    temp_value = modulus.reduce(input_last);
+                } else {
+                    temp_value = input_last;
+                }
+                uint64_t half_mod = modulus.reduce(q_last_half);
+                temp_value = utils::sub_uint64_mod(temp_value, half_mod, modulus);
+                temp[toffset + i * coeff_count + j] = temp_value;
+            }
         }
-        uint64_t half_mod = modulus.reduce(q_last_half);
-        temp_value = utils::sub_uint64_mod(temp_value, half_mod, modulus);
-        temp_i[j] = temp_value;
     }
 
-    static void divide_and_round_q_last_ntt_inplace_step1(const RNSTool& self, Slice<uint64_t> input, Slice<uint64_t> temp) {
+    static void divide_and_round_q_last_ntt_inplace_step1(const RNSTool& self, Slice<uint64_t> input, size_t pcount, Slice<uint64_t> temp) {
         bool device = self.on_device();
-        size_t base_q_size = self.base_q().size();
         if (device) {
-            size_t block_count = utils::ceil_div(self.coeff_count() * (base_q_size - 1), utils::KERNEL_THREAD_COUNT);
+            size_t block_count = utils::ceil_div(self.coeff_count(), utils::KERNEL_THREAD_COUNT);
             utils::set_device(input.device_index());
             kernel_divide_and_round_q_last_ntt_inplace_step1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 self.base_q().base(),
                 self.coeff_count(),
                 self.q_last_half(),
                 input,
+                pcount,
                 temp
             );
             utils::stream_sync();
         } else {
-            host_divide_and_round_q_last_ntt_inplace_step1(self, input, temp);
+            host_divide_and_round_q_last_ntt_inplace_step1(self, input, pcount, temp);
         }
     }
     
-    static void host_divide_and_round_q_last_ntt_inplace_step2(const RNSTool& self, Slice<uint64_t> input, ConstSlice<uint64_t> temp) {
+    static void host_divide_and_round_q_last_ntt_inplace_step2(const RNSTool& self, ConstSlice<uint64_t> input, Slice<uint64_t> destination, size_t pcount, ConstSlice<uint64_t> temp) {
         
         size_t base_q_size = self.base_q().size();
         size_t coeff_count = self.coeff_count();
-
-        for (size_t i = 0; i < base_q_size - 1; i++) {
-            ConstPointer<Modulus> modulus = self.base_q().base().at(i);
-            Slice<uint64_t> input_i = input.slice(i * coeff_count, (i + 1) * coeff_count);
-            ConstSlice<uint64_t> temp_i = temp.const_slice(i * coeff_count, (i + 1) * coeff_count);
-            uint64_t qi_lazy = modulus->value() << 2;
-            utils::add_scalar_inplace(input_i, qi_lazy, modulus);
-            utils::sub_inplace(input_i, temp_i, modulus);
-            utils::multiply_uint64operand_inplace(input_i, self.inv_q_last_mod_q().at(i), modulus);
+        
+        for (size_t p = 0; p < pcount; p++) {
+            size_t poffset = p * coeff_count * base_q_size;
+            size_t offset = p * coeff_count * (base_q_size - 1);
+            for (size_t i = 0; i < base_q_size - 1; i++) {
+                ConstPointer<Modulus> modulus = self.base_q().base().at(i);
+                ConstSlice<uint64_t> input_i = input.const_slice(poffset + i * coeff_count, poffset + (i + 1) * coeff_count);
+                Slice<uint64_t> dest_i = destination.slice(offset + i * coeff_count, offset + (i + 1) * coeff_count);
+                ConstSlice<uint64_t> temp_i = temp.const_slice(offset + i * coeff_count, offset + (i + 1) * coeff_count);
+                uint64_t qi_lazy = modulus->value() << 2;
+                utils::add_scalar(input_i, qi_lazy, modulus, dest_i);
+                utils::sub_inplace(dest_i, temp_i, modulus);
+                utils::multiply_uint64operand_inplace(dest_i, self.inv_q_last_mod_q().at(i), modulus);
+            }
         }
     }
 
     __global__ static void kernel_divide_and_round_q_last_ntt_inplace_step2(
         ConstSlice<Modulus> base_q, size_t coeff_count,
-        ConstSlice<MultiplyUint64Operand> inv_q_last_mod_q,
-        Slice<uint64_t> input, ConstSlice<uint64_t> temp
+        ConstSlice<MultiplyUint64Operand> inv_q_last_mod_q, ConstSlice<uint64_t> input, 
+        Slice<uint64_t> destination, size_t pcount, ConstSlice<uint64_t> temp
     ) {
-        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        size_t j = blockIdx.x * blockDim.x + threadIdx.x;
         size_t base_q_size = base_q.size();
-        if (global_index >= coeff_count * (base_q_size - 1)) return;
-        size_t i = global_index / coeff_count;
-        size_t j = global_index % coeff_count;
+        if (j >= coeff_count) return;
 
-        Slice<uint64_t> input_i = input.slice(i * coeff_count, (i + 1) * coeff_count);
-        ConstSlice<uint64_t> temp_i = temp.const_slice(i * coeff_count, (i + 1) * coeff_count);
-        uint64_t temp_value;
-        const Modulus& modulus = *base_q.at(i);
-        uint64_t qi_lazy = modulus.value() << 2;
-        input_i[j] = utils::add_uint64_mod(input_i[j], qi_lazy, modulus);
-        temp_value = temp_i[j];
-        input_i[j] = utils::sub_uint64_mod(input_i[j], temp_value, modulus);
-        input_i[j] = utils::multiply_uint64operand_mod(input_i[j], inv_q_last_mod_q[i], modulus);
+        for (size_t p = 0; p < pcount; p++) {
+            size_t poffset = p * coeff_count * base_q_size;
+            size_t offset = p * coeff_count * (base_q_size - 1);
+            for (size_t i = 0; i < base_q_size - 1; i++) {
+                const Modulus& modulus = *base_q.at(i);
+                uint64_t qi_lazy = modulus.value() << 2;
+                uint64_t dest_ij = utils::add_uint64_mod(input[poffset + i * coeff_count + j], qi_lazy, modulus);
+                dest_ij = utils::sub_uint64_mod(dest_ij, temp[offset + i * coeff_count + j], modulus);
+                destination[offset + i * coeff_count + j] = utils::multiply_uint64operand_mod(dest_ij, inv_q_last_mod_q[i], modulus);
+            }
+        }
     }
 
-    static void divide_and_round_q_last_ntt_inplace_step2(const RNSTool& self, Slice<uint64_t> input, ConstSlice<uint64_t> temp) {
+    static void divide_and_round_q_last_ntt_inplace_step2(const RNSTool& self, ConstSlice<uint64_t> input, Slice<uint64_t> destination, size_t pcount, ConstSlice<uint64_t> temp) {
         bool device = self.on_device();
         size_t base_q_size = self.base_q().size();
         if (device) {
-            size_t block_count = utils::ceil_div(self.coeff_count() * (base_q_size - 1), utils::KERNEL_THREAD_COUNT);
-            utils::set_device(input.device_index());
+            size_t block_count = utils::ceil_div(self.coeff_count(), utils::KERNEL_THREAD_COUNT);
+            utils::set_device(destination.device_index());
             kernel_divide_and_round_q_last_ntt_inplace_step2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 self.base_q().base(),
                 self.coeff_count(),
                 self.inv_q_last_mod_q(),
-                input,
+                input, destination, pcount,
                 temp
             );
             utils::stream_sync();
         } else {
-            host_divide_and_round_q_last_ntt_inplace_step2(self, input, temp);
+            host_divide_and_round_q_last_ntt_inplace_step2(self, input, destination, pcount, temp);
         }
     }
     
-    void RNSTool::divide_and_round_q_last_ntt_inplace(Slice<uint64_t> input, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool) const {
+    void RNSTool::divide_and_round_q_last_ntt_inplace(ConstSlice<uint64_t> input, size_t pcount, Slice<uint64_t> destination, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool) const {
         bool device = this->on_device();
         if (!utils::device_compatible(*this, input, rns_ntt_tables)) {
             throw std::invalid_argument("[RNSTool::divide_and_round_q_last_ntt_inplace] RNSTool, input and ntt_tables must be on the same device.");
@@ -577,19 +589,28 @@ namespace troy {namespace utils {
 
         size_t base_q_size = this->base_q().size();
         size_t coeff_count = this->coeff_count();
-        Slice<uint64_t> input_last = input.slice((base_q_size - 1) * coeff_count, base_q_size * coeff_count);
-        
-        utils::intt_inplace(input_last, coeff_count, rns_ntt_tables.at(base_q_size - 1));
-        
-        // Add (qi-1)/2 to change from flooring to rounding
-        utils::add_scalar_inplace(input_last, this->q_last_half(), this->base_q().base().at(base_q_size - 1));
 
-        Array<uint64_t> temp(coeff_count * (base_q_size - 1), device, pool);
-        divide_and_round_q_last_ntt_inplace_step1(*this, input, temp.reference());
+        Buffer<uint64_t> input_intt(pcount, base_q_size, coeff_count, device, pool);
+        if (device) {
+            // TODO: actually we only need the last component's intt, not all of them. This could be optimized.
+            utils::intt_ps(input, pcount, coeff_count, rns_ntt_tables, input_intt.reference());
+        } else {
+            for (size_t i = 0; i < pcount; i++) {
+                utils::intt(
+                    input.const_slice((i * base_q_size + base_q_size - 1) * coeff_count, (i + 1) * base_q_size * coeff_count),
+                    coeff_count,
+                    rns_ntt_tables.at(base_q_size - 1),
+                    input_intt.slice((i * base_q_size + base_q_size - 1) * coeff_count, (i + 1) * base_q_size * coeff_count)
+                );
+            }
+        }
+
+        Buffer<uint64_t> temp(pcount, base_q_size - 1, coeff_count, device, pool);
+        divide_and_round_q_last_ntt_inplace_step1(*this, input_intt.reference(), pcount, temp.reference());
         
-        utils::ntt_inplace_p(temp.reference(), coeff_count, rns_ntt_tables.const_slice(0, base_q_size - 1));
+        utils::ntt_inplace_ps(temp.reference(), pcount, coeff_count, rns_ntt_tables.const_slice(0, base_q_size - 1));
     
-        divide_and_round_q_last_ntt_inplace_step2(*this, input, temp.const_reference());
+        divide_and_round_q_last_ntt_inplace_step2(*this, input, destination, pcount, temp.const_reference());
     }
 
     static void host_fast_b_conv_sk_step1(const RNSTool& self, ConstSlice<uint64_t> input, Slice<uint64_t> destination, ConstSlice<uint64_t> temp) {
@@ -1161,126 +1182,164 @@ namespace troy {namespace utils {
 
     }
 
-    static void host_mod_t_and_divide_q_last_ntt_inplace_step1(const RNSTool& self, Slice<uint64_t> input, ConstSlice<uint64_t> neg_c_last_mod_t, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool) {
+    static void host_mod_t_and_divide_q_last_ntt_inplace(const RNSTool& self, ConstSlice<uint64_t> input, ConstSlice<uint64_t> input_intt, size_t pcount, Slice<uint64_t> destination, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool) {
         bool device = self.on_device();
         size_t base_q_size = self.base_q().size();
         size_t coeff_count = self.coeff_count();
-        Array<uint64_t> delta_mod_q_i(coeff_count, device, pool);
+        Buffer<uint64_t> delta_mod_q_i(coeff_count, device, pool);
         uint64_t last_modulus_value = self.base_q().base().at(base_q_size - 1)->value();
-        for (size_t i = 0; i < base_q_size - 1; i++) {
+        for (size_t p = 0; p < pcount; p++) {
+            size_t poffset = p * base_q_size * coeff_count;
+            size_t doffset = p * (base_q_size - 1) * coeff_count;
+            Buffer<uint64_t> neg_c_last_mod_t(coeff_count, device, pool);
+            utils::modulo(input_intt.const_slice(poffset + (base_q_size - 1) * coeff_count, poffset + base_q_size * coeff_count), self.t(), neg_c_last_mod_t.reference());
+            utils::negate_inplace(neg_c_last_mod_t.reference(), self.t());
+            if (self.inv_q_last_mod_t() != 1) {
+                // neg_c_last_mod_t *= q_last^(-1) (mod t)
+                utils::multiply_scalar_inplace(neg_c_last_mod_t.reference(), self.inv_q_last_mod_t(), self.t());
+            }
 
-            // delta_mod_q_i = neg_c_last_mod_t (mod q_i)
-            ConstPointer<Modulus> modulus = self.base_q().base().at(i);
-            utils::modulo(neg_c_last_mod_t, modulus, delta_mod_q_i.reference());
+            for (size_t i = 0; i < base_q_size - 1; i++) {
 
-            // delta_mod_q_i *= q_last (mod q_i)
-            utils::multiply_scalar_inplace(
-                delta_mod_q_i.reference(), last_modulus_value, modulus
-            );
+                // delta_mod_q_i = neg_c_last_mod_t (mod q_i)
+                ConstPointer<Modulus> modulus = self.base_q().base().at(i);
+                utils::modulo(neg_c_last_mod_t.const_reference(), modulus, delta_mod_q_i.reference());
 
-            // c_i = c_i - c_last - neg_c_last_mod_t * q_last (mod 2q_i)
-            //   first all all those to be subtracted to delta_mod_q_i
-            for (size_t j = 0; j < coeff_count; j++) {
-                delta_mod_q_i[j] = add_uint64_mod(
-                    delta_mod_q_i[j], 
-                    modulus->reduce(input[(base_q_size - 1) * coeff_count + j]),
-                    *modulus
+                // delta_mod_q_i *= q_last (mod q_i)
+                utils::multiply_scalar_inplace(
+                    delta_mod_q_i.reference(), last_modulus_value, modulus
+                );
+
+                // c_i = c_i - c_last - neg_c_last_mod_t * q_last (mod 2q_i)
+                //   first all all those to be subtracted to delta_mod_q_i
+                for (size_t j = 0; j < coeff_count; j++) {
+                    delta_mod_q_i[j] = add_uint64_mod(
+                        delta_mod_q_i[j], 
+                        modulus->reduce(input_intt[poffset + (base_q_size - 1) * coeff_count + j]),
+                        *modulus
+                    );
+                }
+                ntt_inplace(delta_mod_q_i.reference(), coeff_count, rns_ntt_tables.at(i));
+                //   then subtract them all
+                for (size_t j = 0; j < coeff_count; j++) {
+                    destination[doffset + i * coeff_count + j] = sub_uint64_mod(
+                        input[poffset + i * coeff_count + j], delta_mod_q_i[j], *modulus
+                    );
+                }
+                
+                // c_i = c_i * inv_q_last_mod_q_i (mod q_i)
+                utils::multiply_uint64operand_inplace(
+                    destination.slice(doffset + i * coeff_count, doffset + (i + 1) * coeff_count),
+                    self.inv_q_last_mod_q().at(i),
+                    modulus
                 );
             }
-            ntt_inplace(delta_mod_q_i.reference(), coeff_count, rns_ntt_tables.at(i));
-            //   then subtract them all
-            for (size_t j = 0; j < coeff_count; j++) {
-                input[i * coeff_count + j] = sub_uint64_mod(
-                    input[i * coeff_count + j], delta_mod_q_i[j], *modulus
-                );
-            }
-            
-            // c_i = c_i * inv_q_last_mod_q_i (mod q_i)
-            utils::multiply_uint64operand_inplace(
-                input.slice(i * coeff_count, (i + 1) * coeff_count),
-                self.inv_q_last_mod_q().at(i),
-                modulus
-            );
         }
     }
 
-    __global__ static void kernel_mod_t_and_divide_q_last_ntt_inplace_step1_inner1(
+    __global__ static void kernel_mod_t_and_divide_q_last_ntt_inplace_step1(
         ConstSlice<Modulus> base_q,
+        ConstPointer<Modulus> t,
         size_t coeff_count,
-        ConstSlice<uint64_t> neg_c_last_mod_t,
-        ConstSlice<uint64_t> input,
+        ConstSlice<uint64_t> input_intt,
+        size_t pcount,
+        uint64_t inv_q_last_mod_t,
         Slice<uint64_t> delta_mod_q_i
     ) {
-        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        size_t j = blockIdx.x * blockDim.x + threadIdx.x;
         size_t base_q_size = base_q.size();
-        if (global_index >= coeff_count * (base_q_size - 1)) return;
-        size_t i = global_index / coeff_count;
-        size_t j = global_index % coeff_count;
+        if (j >= coeff_count) return;
 
-        const Modulus& modulus = *base_q.at(i);
-        uint64_t result;
-        // delta_mod_q_i = neg_c_last_mod_t (mod q_i)
-        result = modulus.reduce(neg_c_last_mod_t[j]);
-        // delta_mod_q_i *= q_last (mod q_i)
-        result = utils::multiply_uint64_mod(result, base_q[base_q_size - 1].value(), modulus);
-        // c_i = c_i - c_last - neg_c_last_mod_t * q_last (mod 2q_i)
-        result = utils::add_uint64_mod(result, modulus.reduce(input[(base_q_size - 1) * coeff_count + j]), modulus);
-        delta_mod_q_i[global_index] = result;
+        for (size_t p = 0; p < pcount; p++) {
+
+            size_t poffset = p * base_q_size * coeff_count;
+            size_t doffset = p * (base_q_size - 1) * coeff_count;
+
+            uint64_t neg_c_last_mod_t = t->reduce(input_intt[poffset + (base_q_size - 1) * coeff_count + j]);
+            neg_c_last_mod_t = utils::negate_uint64_mod(neg_c_last_mod_t, *t);
+            if (inv_q_last_mod_t != 1) {
+                // neg_c_last_mod_t *= q_last^(-1) (mod t)
+                neg_c_last_mod_t = utils::multiply_uint64_mod(neg_c_last_mod_t, inv_q_last_mod_t, *t);
+            }
+
+            for (size_t i = 0; i < base_q.size() - 1; i++) {
+
+                const Modulus& modulus = *base_q.at(i);
+                uint64_t result;
+                // delta_mod_q_i = neg_c_last_mod_t (mod q_i)
+                result = modulus.reduce(neg_c_last_mod_t);
+                // delta_mod_q_i *= q_last (mod q_i)
+                result = utils::multiply_uint64_mod(result, base_q[base_q_size - 1].value(), modulus);
+                // c_i = c_i - c_last - neg_c_last_mod_t * q_last (mod 2q_i)
+                result = utils::add_uint64_mod(result, modulus.reduce(input_intt[poffset + (base_q_size - 1) * coeff_count + j]), modulus);
+                delta_mod_q_i[doffset + i * coeff_count + j] = result;
+
+            }
+        }
     }
 
-    __global__ static void kernel_mod_t_and_divide_q_last_ntt_inplace_step1_inner2(
+    __global__ static void kernel_mod_t_and_divide_q_last_ntt_inplace_step2(
         ConstSlice<Modulus> base_q,
         size_t coeff_count,
         ConstSlice<MultiplyUint64Operand> inv_q_last_mod_q,
-        Slice<uint64_t> input,
+        ConstSlice<uint64_t> input,
+        size_t pcount,
+        Slice<uint64_t> destination,
         ConstSlice<uint64_t> delta_mod_q_i
     ) {
-        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        size_t j = blockIdx.x * blockDim.x + threadIdx.x;
         size_t base_q_size = base_q.size();
-        if (global_index >= coeff_count * (base_q_size - 1)) return;
-        size_t i = global_index / coeff_count;
-        size_t j = global_index % coeff_count;
+        if (j >= coeff_count) return;
 
-        uint64_t& dest = input[i * coeff_count + j];
-        const Modulus& modulus = *base_q.at(i);
-        // subtract
-        dest = utils::sub_uint64_mod(dest, delta_mod_q_i[global_index], modulus);
-        // c_i = c_i * inv_q_last_mod_q_i (mod q_i)
-        dest = utils::multiply_uint64operand_mod(dest, inv_q_last_mod_q[i], modulus);
+        for (size_t p = 0; p < pcount; p++) {
+            size_t doffset = p * (base_q_size - 1) * coeff_count;
+            size_t poffset = p * base_q_size * coeff_count;
+            for (size_t i = 0; i < base_q.size() - 1; i++) {
+                uint64_t dest = input[poffset + i * coeff_count + j];
+                const Modulus& modulus = *base_q.at(i);
+                // subtract
+                dest = utils::sub_uint64_mod(dest, delta_mod_q_i[doffset + i * coeff_count + j], modulus);
+                // c_i = c_i * inv_q_last_mod_q_i (mod q_i)
+                dest = utils::multiply_uint64operand_mod(dest, inv_q_last_mod_q[i], modulus);
+                destination[doffset + i * coeff_count + j] = dest;
+            }
+        }
     }
 
-    static void mod_t_and_divide_q_last_ntt_inplace_step1(const RNSTool& self, Slice<uint64_t> input, ConstSlice<uint64_t> neg_c_last_mod_t, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool) {
+    static void mod_t_and_divide_q_last_ntt_inplace_step(const RNSTool& self, ConstSlice<uint64_t> input, ConstSlice<uint64_t> input_intt, size_t pcount, Slice<uint64_t> destination, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool) {
         bool device = self.on_device();
         size_t base_q_size = self.base_q().size();
         size_t coeff_count = self.coeff_count();
         if (device) {
-            size_t block_count = utils::ceil_div(coeff_count * (base_q_size - 1), utils::KERNEL_THREAD_COUNT);
-            Array<uint64_t> delta_mod_q_i(coeff_count * (base_q_size - 1), device, pool);
+            size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
+            Buffer<uint64_t> delta_mod_q_i(pcount, base_q_size - 1, coeff_count, device, pool);
             utils::set_device(input.device_index());
-            kernel_mod_t_and_divide_q_last_ntt_inplace_step1_inner1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+            kernel_mod_t_and_divide_q_last_ntt_inplace_step1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 self.base_q().base(),
+                self.t(),
                 coeff_count,
-                neg_c_last_mod_t,
-                input.as_const(),
+                input_intt, pcount, self.inv_q_last_mod_t(),
                 delta_mod_q_i.reference()
             );
             utils::stream_sync();
-            utils::ntt_inplace_p(delta_mod_q_i.reference(), coeff_count, rns_ntt_tables.const_slice(0, base_q_size - 1));
+            utils::ntt_inplace_ps(delta_mod_q_i.reference(), pcount, coeff_count, rns_ntt_tables.const_slice(0, base_q_size - 1));
             utils::set_device(input.device_index());
-            kernel_mod_t_and_divide_q_last_ntt_inplace_step1_inner2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+            kernel_mod_t_and_divide_q_last_ntt_inplace_step2<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 self.base_q().base(),
                 coeff_count,
                 self.inv_q_last_mod_q(),
                 input,
+                pcount,
+                destination,
                 delta_mod_q_i.const_reference()
             );
             utils::stream_sync();
         } else {
-            host_mod_t_and_divide_q_last_ntt_inplace_step1(self, input, neg_c_last_mod_t, rns_ntt_tables, pool);
+            host_mod_t_and_divide_q_last_ntt_inplace(self, input, input_intt, pcount, destination, rns_ntt_tables, pool);
         }
     }
 
-    void RNSTool::mod_t_and_divide_q_last_ntt_inplace(Slice<uint64_t> input, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool) const {
+    void RNSTool::mod_t_and_divide_q_last_ntt_inplace(ConstSlice<uint64_t> input, size_t pcount, Slice<uint64_t> destination, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool) const {
         bool device = this->on_device();
         if (!utils::device_compatible(input, rns_ntt_tables, *this)) {
             throw std::invalid_argument("[RNSTool::mod_t_and_divide_q_last_ntt_inplace] RNSTool, input, rns_ntt_tables must be on the same device.");
@@ -1289,19 +1348,22 @@ namespace troy {namespace utils {
         size_t modulus_size = this->base_q().size();
         size_t coeff_count = this->coeff_count();
 
-        Slice<uint64_t> c_last = input.slice((modulus_size - 1) * coeff_count, modulus_size * coeff_count);
-        utils::intt_inplace(c_last, coeff_count, rns_ntt_tables.at(modulus_size - 1));
-        
-        // neg_c_last_mod_t = - c_last (mod t)
-        Array<uint64_t> neg_c_last_mod_t(coeff_count, device, pool);
-        utils::modulo(c_last.as_const(), this->t(), neg_c_last_mod_t.reference());
-        utils::negate_inplace(neg_c_last_mod_t.reference(), this->t());
-        if (this->inv_q_last_mod_t() != 1) {
-            // neg_c_last_mod_t *= q_last^(-1) (mod t)
-            utils::multiply_scalar_inplace(neg_c_last_mod_t.reference(), this->inv_q_last_mod_t(), this->t());
+        Buffer<uint64_t> input_intt(pcount, modulus_size, coeff_count, device, pool);
+        if (device) {
+            // TODO: actually we only need the last component's intt, not all of them. This could be optimized.
+            utils::intt_ps(input, pcount, coeff_count, rns_ntt_tables, input_intt.reference());
+        } else {
+            for (size_t i = 0; i < pcount; i++) {
+                utils::intt(
+                    input.const_slice((i * modulus_size + modulus_size - 1) * coeff_count, (i + 1) * modulus_size * coeff_count),
+                    coeff_count,
+                    rns_ntt_tables.at(modulus_size - 1),
+                    input_intt.slice((i * modulus_size + modulus_size - 1) * coeff_count, (i + 1) * modulus_size * coeff_count)
+                );
+            }
         }
 
-        mod_t_and_divide_q_last_ntt_inplace_step1(*this, input, neg_c_last_mod_t.const_reference(), rns_ntt_tables, pool);
+        mod_t_and_divide_q_last_ntt_inplace_step(*this, input, input_intt.const_reference(), pcount, destination, rns_ntt_tables, pool);
 
     }
 

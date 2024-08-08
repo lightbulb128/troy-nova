@@ -14,7 +14,6 @@ namespace troy {
 
     using utils::Slice;
     using utils::ConstSlice;
-    using utils::Array;
     using utils::NTTTables;
     using utils::ConstPointer;
     using utils::RNSTool;
@@ -877,7 +876,7 @@ namespace troy {
         bool device = t_last.on_device();
         if (!device) {
 
-            Array<uint64_t> buffer(coeff_count * 3, false, nullptr);
+            Buffer<uint64_t> buffer(coeff_count * 3, false, nullptr);
             Slice<uint64_t> delta = buffer.slice(0, coeff_count);
             Slice<uint64_t> c_mod_qi = buffer.slice(coeff_count, 2 * coeff_count);
             Slice<uint64_t> k = buffer.slice(2 * coeff_count, 3 * coeff_count);
@@ -910,7 +909,7 @@ namespace troy {
             }
 
         } else {
-            Array<uint64_t> delta(coeff_count * decomp_modulus_size, true, pool);
+            Buffer<uint64_t> delta(coeff_count * decomp_modulus_size, true, pool);
             size_t block_count = utils::ceil_div(coeff_count * decomp_modulus_size, utils::KERNEL_THREAD_COUNT);
             utils::set_device(t_last.device_index());
             kernel_ski_util5_step1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
@@ -1522,7 +1521,6 @@ namespace troy {
                     key_modulus, modswitch_factors, assign_method
                 );
 
-                // printf("enc %ld: ", i); printDeviceArray(encrypted.data(i).get(), key_component_count * coeff_count);
             }
 
         }
@@ -1640,38 +1638,28 @@ namespace troy {
         size_t coeff_count = next_parms.poly_modulus_degree();
         size_t next_coeff_modulus_size = next_parms.coeff_modulus().size();
 
-        Ciphertext encrypted_copy = encrypted.clone(pool);
+
+        bool device = encrypted.on_device();
+        if (device) destination.to_device_inplace(pool);
+        else destination.to_host_inplace();
+        destination.resize(this->context(), next_context_data->parms_id(), encrypted_size, false);
+
         switch (scheme) {
             case SchemeType::BFV: {
-                for (size_t i = 0; i < encrypted_size; i++) {
-                    rns_tool.divide_and_round_q_last_inplace(encrypted_copy.poly(i));
-                }
+                rns_tool.divide_and_round_q_last(encrypted.reference(), encrypted_size, destination.reference());
                 break;
             }
             case SchemeType::CKKS: {
-                for (size_t i = 0; i < encrypted_size; i++) {
-                    rns_tool.divide_and_round_q_last_ntt_inplace(encrypted_copy.poly(i), context_data->small_ntt_tables(), pool);
-                }
+                rns_tool.divide_and_round_q_last_ntt_inplace(encrypted.reference(), encrypted_size, destination.reference(), context_data->small_ntt_tables(), pool);
                 break;
             }
             case SchemeType::BGV: {
-                for (size_t i = 0; i < encrypted_size; i++) {
-                    rns_tool.mod_t_and_divide_q_last_ntt_inplace(encrypted_copy.poly(i), context_data->small_ntt_tables(), pool);
-                }
+                rns_tool.mod_t_and_divide_q_last_ntt_inplace(encrypted.reference(), encrypted_size, destination.reference(), context_data->small_ntt_tables(), pool);
                 break;
             }
             default: {
                 throw std::logic_error("[Evaluator::mod_switch_scale_to_next_internal] Scheme not implemented.");
             }
-        }
-
-        bool device = encrypted.on_device();
-        if (device) destination.to_device_inplace(pool);
-        else destination.to_host_inplace();
-
-        destination.resize(this->context(), next_context_data->parms_id(), encrypted_size);
-        for (size_t i = 0; i < encrypted_size; i++) {
-            destination.poly(i).copy_from_slice(encrypted_copy.poly(i).const_slice(0, coeff_count * next_coeff_modulus_size));
         }
 
         destination.is_ntt_form() = encrypted.is_ntt_form();
@@ -1686,34 +1674,60 @@ namespace troy {
         }
     }
 
-    void Evaluator::mod_switch_drop_to_next_internal(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool) const {
+    __global__ static void kernel_mod_switch_drop_to(ConstSlice<uint64_t> source, size_t poly_count, size_t source_modulus_size, size_t remain_modulus_size, size_t degree, Slice<uint64_t> destination) {
+        size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
+        if (global_index >= remain_modulus_size * degree) return;
+        size_t i = global_index % degree;
+        size_t j = global_index / degree;
+        for (size_t p = 0; p < poly_count; p++) {
+            size_t source_index = (p * source_modulus_size + j) * degree + i;
+            size_t dest_index = (p * remain_modulus_size + j) * degree + i;
+            destination[dest_index] = source[source_index];
+        }
+    }
+
+    void Evaluator::mod_switch_drop_to_internal(const Ciphertext& encrypted, Ciphertext& destination, ParmsID target_parms_id, MemoryPoolHandle pool) const {
         ParmsID parms_id = encrypted.parms_id();
         ContextDataPointer context_data = this->get_context_data("[Evaluator::mod_switch_scale_to_next_internal]", parms_id);
         const EncryptionParameters& parms = context_data->parms();
         SchemeType scheme = parms.scheme();
         if (scheme == SchemeType::CKKS) {
-            check_is_ntt_form("[Evaluator::mod_switch_drop_to_next_internal]", encrypted);
+            check_is_ntt_form("[Evaluator::mod_switch_drop_to_internal]", encrypted);
         }
         if (!context_data->next_context_data().has_value()) {
             throw std::invalid_argument("[Evaluator::mod_switch_drop_to_next_internal] Next context data is not set.");
         }
-        ContextDataPointer next_context_data = context_data->next_context_data().value();
-        const EncryptionParameters& next_parms = next_context_data->parms();
-        if (!is_scale_within_bounds(encrypted.scale(), next_context_data)) {
-            throw std::invalid_argument("[Evaluator::mod_switch_drop_to_next_internal] Scale out of bounds.");
+        ContextDataPointer target_context_data = this->get_context_data("[Evaluator::mod_switch_drop_to_next_internal]", target_parms_id);
+        const EncryptionParameters& target_parms = target_context_data->parms();
+        if (!is_scale_within_bounds(encrypted.scale(), target_context_data)) {
+            throw std::invalid_argument("[Evaluator::mod_switch_drop_to_internal] Scale out of bounds.");
         }
         
         size_t encrypted_size = encrypted.polynomial_count();
-        size_t coeff_count = next_parms.poly_modulus_degree();
-        size_t next_coeff_modulus_size = next_parms.coeff_modulus().size();
+        size_t coeff_count = target_parms.poly_modulus_degree();
+        size_t target_coeff_modulus_size = target_parms.coeff_modulus().size();
 
-        bool device = encrypted.on_device();
-        if (device) destination.to_device_inplace(pool);
-        else destination.to_host_inplace();
+        destination = Ciphertext::like(encrypted, false, pool);
 
-        destination.resize(this->context(), next_context_data->parms_id(), encrypted_size);
-        for (size_t i = 0; i < encrypted_size; i++) {
-            destination.poly(i).copy_from_slice(encrypted.poly(i).const_slice(0, coeff_count * next_coeff_modulus_size));
+        destination.resize(this->context(), target_parms_id, encrypted_size, false, false);
+        
+        if (encrypted.on_device()) {
+            size_t block_count = utils::ceil_div(target_coeff_modulus_size * coeff_count, utils::KERNEL_THREAD_COUNT);
+            utils::set_device(encrypted.data().device_index());
+            kernel_mod_switch_drop_to<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                encrypted.data().const_reference(), encrypted_size, parms.coeff_modulus().size(), target_coeff_modulus_size, coeff_count, destination.data().reference()
+            );
+            utils::stream_sync();
+        } else {
+            for (size_t p = 0; p < encrypted_size; p++) {
+                for (size_t i = 0; i < coeff_count; i++) {
+                    for (size_t j = 0; j < target_coeff_modulus_size; j++) {
+                        size_t source_index = (p * parms.coeff_modulus().size() + j) * coeff_count + i;
+                        size_t dest_index = (p * target_parms.coeff_modulus().size() + j) * coeff_count + i;
+                        destination.data()[dest_index] = encrypted.data()[source_index];
+                    }
+                }
+            }
         }
 
         destination.is_ntt_form() = encrypted.is_ntt_form();
@@ -1721,29 +1735,43 @@ namespace troy {
         destination.correction_factor() = encrypted.correction_factor();
     }
 
-    void Evaluator::mod_switch_drop_to_next_plain_inplace_internal(Plaintext& plain) const {
+    void Evaluator::mod_switch_drop_to_plain_internal(const Plaintext& plain, Plaintext& destination, ParmsID target_parms_id, MemoryPoolHandle pool) const {
         if (!plain.is_ntt_form()) {
-            throw std::invalid_argument("[Evaluator::mod_switch_drop_to_next_plain_inplace_internal] Plaintext is not in NTT form.");
+            throw std::invalid_argument("[Evaluator::mod_switch_drop_to_plain_internal] Plaintext is not in NTT form.");
         }
         ParmsID parms_id = plain.parms_id();
-        ContextDataPointer context_data = this->get_context_data("[Evaluator::mod_switch_drop_to_next_plain_inplace_internal]", parms_id);
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::mod_switch_drop_to_plain_internal]", parms_id);
         
         if (!context_data->next_context_data().has_value()) {
-            throw std::invalid_argument("[Evaluator::mod_switch_drop_to_next_internal] Next context data is not set.");
+            throw std::invalid_argument("[Evaluator::mod_switch_drop_to_plain_internal] Next context data is not set.");
         }
-        ContextDataPointer next_context_data = context_data->next_context_data().value();
-
-        const EncryptionParameters& next_parms = next_context_data->parms();
-        if (!is_scale_within_bounds(plain.scale(), next_context_data)) {
-            throw std::invalid_argument("[Evaluator::mod_switch_drop_to_next_internal] Scale out of bounds.");
+        ContextDataPointer target_context_data = this->get_context_data("[Evaluator::mod_switch_drop_to_plain_internal]", target_parms_id);
+        const EncryptionParameters& target_parms = target_context_data->parms();
+        if (!is_scale_within_bounds(plain.scale(), target_context_data)) {
+            throw std::invalid_argument("[Evaluator::mod_switch_drop_to_plain_internal] Scale out of bounds.");
         }
 
-        size_t coeff_count = next_parms.poly_modulus_degree();
-        size_t next_coeff_modulus_size = next_parms.coeff_modulus().size();
-        size_t dest_size = coeff_count * next_coeff_modulus_size;
-        plain.parms_id() = parms_id_zero;
-        plain.resize(dest_size);
-        plain.parms_id() = next_context_data->parms_id();
+        destination = Plaintext::like(plain, false, pool);
+        destination.resize_rns(*context(), target_parms_id, false);
+
+        if (plain.on_device()) {
+            size_t block_count = utils::ceil_div(target_parms.coeff_modulus().size() * target_parms.poly_modulus_degree(), utils::KERNEL_THREAD_COUNT);
+            utils::set_device(plain.data().device_index());
+            kernel_mod_switch_drop_to<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                plain.data().const_reference(), 1, 
+                context_data->parms().coeff_modulus().size(), 
+                target_parms.coeff_modulus().size(), target_parms.poly_modulus_degree(), destination.data().reference()
+            );
+            utils::stream_sync();
+        } else {
+            for (size_t i = 0; i < target_parms.coeff_modulus().size(); i++) {
+                for (size_t j = 0; j < target_parms.poly_modulus_degree(); j++) {
+                    size_t source_index = i * context_data->parms().poly_modulus_degree() + j;
+                    size_t dest_index = i * target_parms.poly_modulus_degree() + j;
+                    destination.data()[dest_index] = plain.data()[source_index];
+                }
+            }
+        }
     }
 
     void Evaluator::mod_switch_to_next(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool) const {
@@ -1756,9 +1784,15 @@ namespace troy {
             case SchemeType::BFV: 
                 this->mod_switch_scale_to_next_internal(encrypted, destination, pool);
                 break;
-            case SchemeType::CKKS:
-                this->mod_switch_drop_to_next_internal(encrypted, destination, pool);
+            case SchemeType::CKKS: {
+                auto context_data = this->get_context_data("[Evaluator::mod_switch_to_next]", encrypted.parms_id());
+                if (!context_data->next_context_data().has_value()) {
+                    throw std::invalid_argument("[Evaluator::mod_switch_to_next] Next context data is not set.");
+                }
+                auto target_context_data = context_data->next_context_data().value();
+                this->mod_switch_drop_to_internal(encrypted, destination, target_context_data->parms_id(), pool);
                 break;
+            }
             case SchemeType::BGV:
                 this->mod_switch_scale_to_next_internal(encrypted, destination, pool);
                 break;
@@ -1767,18 +1801,27 @@ namespace troy {
         }
     }
 
-    void Evaluator::mod_switch_to_inplace(Ciphertext& encrypted, const ParmsID& parms_id, MemoryPoolHandle pool) const {
+    void Evaluator::mod_switch_to(const Ciphertext& encrypted, const ParmsID& parms_id, Ciphertext& destination, MemoryPoolHandle pool) const {
         ContextDataPointer context_data = this->get_context_data("[Evaluator::mod_switch_to_inplace]", encrypted.parms_id());
         ContextDataPointer target_context_data = this->get_context_data("[Evaluator::mod_switch_to_inplace]", parms_id);
         if (context_data->chain_index() < target_context_data->chain_index()) {
             throw std::invalid_argument("[Evaluator::mod_switch_to_inplace] Cannot switch to a higher level.");
         }
-        while (encrypted.parms_id() != parms_id) {
-            this->mod_switch_to_next_inplace(encrypted, pool);
+        if (encrypted.parms_id() == parms_id) {
+            destination = encrypted.clone(pool); return;
+        }
+        if (context_data->parms().scheme() == SchemeType::CKKS) {
+            this->mod_switch_drop_to_internal(encrypted, destination, parms_id, pool);
+        } else {
+            bool first = true;
+            while (true) {
+                if (first) this->mod_switch_to_next(encrypted, destination, pool);
+                else this->mod_switch_to_next_inplace(destination, pool);
+            }
         }
     }
 
-    void Evaluator::mod_switch_plain_to_inplace(Plaintext& plain, const ParmsID& parms_id) const {
+    void Evaluator::mod_switch_plain_to(const Plaintext& plain, const ParmsID& parms_id, Plaintext& destination, MemoryPoolHandle pool) const {
         if (!plain.is_ntt_form()) {
             throw std::invalid_argument("[Evaluator::mod_switch_plain_to_inplace] Plaintext is not in NTT form.");
         }
@@ -1787,9 +1830,10 @@ namespace troy {
         if (context_data->chain_index() < target_context_data->chain_index()) {
             throw std::invalid_argument("[Evaluator::mod_switch_plain_to_inplace] Cannot switch to a higher level.");
         }
-        while (plain.parms_id() != parms_id) {
-            this->mod_switch_plain_to_next_inplace(plain);
+        if (plain.parms_id() == parms_id) {
+            destination = plain.clone(); return;
         }
+        this->mod_switch_drop_to_plain_internal(plain, destination, parms_id, pool);
     }
 
     void Evaluator::rescale_to_next(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool) const {
@@ -2374,7 +2418,7 @@ namespace troy {
         size_t coeff_count = parms.poly_modulus_degree();
         ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
 
-        destination = encrypted.clone(pool);
+        destination = Ciphertext::like(encrypted, false, pool);
         utils::negacyclic_shift_ps(
             encrypted.polys(0, encrypted.polynomial_count()),
             shift, encrypted.polynomial_count(), coeff_count, coeff_modulus, 
@@ -2438,13 +2482,13 @@ namespace troy {
         // gather c1
         size_t shift = (term == 0) ? 0 : (coeff_count * 2 - term);
         bool device = encrypted.on_device();
-        utils::DynamicArray<uint64_t> c1(coeff_count * coeff_modulus_size, device, pool);
+        utils::DynamicArray<uint64_t> c1 = utils::DynamicArray<uint64_t>::create_uninitialized(coeff_count * coeff_modulus_size, device, pool);
         utils::negacyclic_shift_p(
             encrypted.const_poly(1), shift, coeff_count, coeff_modulus, c1.reference()
         );
 
         // gather c0
-        utils::DynamicArray<uint64_t> c0(coeff_modulus_size, device, pool);
+        utils::DynamicArray<uint64_t> c0 = utils::DynamicArray<uint64_t>::create_uninitialized(coeff_modulus_size, device, pool);
         extract_lwe_gather_c0(
             coeff_modulus_size, coeff_count, term,
             encrypted.const_poly(0), c0.reference()

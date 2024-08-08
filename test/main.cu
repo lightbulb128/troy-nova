@@ -98,7 +98,7 @@ void test1(size_t n, size_t repeat) {
     EncryptionParameters params(SchemeType::BFV);
     params.set_poly_modulus_degree(n);
     params.set_plain_modulus(PlainModulus::batching(n, 30));
-    params.set_coeff_modulus(CoeffModulus::create(n, {50, 50, 50}));
+    params.set_coeff_modulus(CoeffModulus::create(n, {50, 50, 50, 50, 50}));
     HeContextPointer context = HeContext::create(params, true, SecurityLevel::Nil);
     BatchEncoder encoder(context);
 
@@ -119,7 +119,7 @@ void test1(size_t n, size_t repeat) {
             if (i == warm_up) {
                 timer.tick(th);
             }
-            evaluator.add_plain(c, p, r);
+            evaluator.mod_switch_to_next(c, r);
             if (i == repeat + warm_up - 1) {
                 timer.tock(th);
             }
@@ -146,7 +146,7 @@ void test1(size_t n, size_t repeat) {
             if (i == warm_up) {
                 timer.tick(th);
             }
-            evaluator.add_plain(c, p, r);
+            evaluator.mod_switch_to_next(c, r);
             if (i == repeat + warm_up - 1) {
                 timer.tock(th);
             }
@@ -160,6 +160,83 @@ void test1(size_t n, size_t repeat) {
     std::cout << "host/device: " << acc << std::endl;
 
 }
+
+
+void test2(size_t n, size_t repeat) {
+    
+    Timer timer;
+
+    std::cout << "n: " << n << std::endl;
+    std::cout << "repeat: " << repeat << std::endl;
+    
+    auto th_host = timer.register_timer("host");
+    auto th_device = timer.register_timer("device");
+    
+    EncryptionParameters params(SchemeType::CKKS);
+    params.set_poly_modulus_degree(n);
+    params.set_coeff_modulus(CoeffModulus::create(n, {50, 50, 50, 50, 50}));
+    HeContextPointer context = HeContext::create(params, true, SecurityLevel::Nil);
+    CKKSEncoder encoder(context);
+
+    {
+        auto th = th_host;
+        KeyGenerator keygen(context);
+        Encryptor encryptor(context); encryptor.set_public_key(keygen.create_public_key(false));
+        GaloisKeys gk = keygen.create_galois_keys(false);
+        Evaluator evaluator(context);
+        Ciphertext c = encryptor.encrypt_asymmetric_new(encoder.encode_complex64_simd_new({ 1, 2, 3, 4, 5 }, std::nullopt, 256.0));
+        Plaintext p = encoder.encode_complex64_simd_new({ 1, 2, 3, 4, 5 }, std::nullopt, 256.0);
+        Ciphertext r;
+
+        std::cout << "running host ...\n";
+        const size_t warm_up = 10;
+        
+        for (size_t i = 0; i < repeat + warm_up; i++) {
+            if (i == warm_up) {
+                timer.tick(th);
+            }
+            evaluator.rescale_to_next(c, r);
+            if (i == repeat + warm_up - 1) {
+                timer.tock(th);
+            }
+        }
+    }
+
+    context->to_device_inplace();
+    encoder.to_device_inplace();
+
+    {
+        auto th = th_device;
+        KeyGenerator keygen(context);
+        Encryptor encryptor(context); encryptor.set_public_key(keygen.create_public_key(false));
+        GaloisKeys gk = keygen.create_galois_keys(false);
+        Evaluator evaluator(context);
+        Ciphertext c = encryptor.encrypt_asymmetric_new(encoder.encode_complex64_simd_new({ 1, 2, 3, 4, 5 }, std::nullopt, 256.0));
+        Plaintext p = encoder.encode_complex64_simd_new({ 1, 2, 3, 4, 5 }, std::nullopt, 256.0);
+        Ciphertext r;
+
+        std::cout << "running device ...\n";
+        const size_t warm_up = 10;
+        
+        for (size_t i = 0; i < repeat + warm_up; i++) {
+            if (i == warm_up) {
+                timer.tick(th);
+            }
+            evaluator.rescale_to_next(c, r);
+            if (i == repeat + warm_up - 1) {
+                timer.tock(th);
+            }
+        }
+    }
+    
+    timer.print_divided(repeat);
+
+    auto durations = timer.get();
+    float acc = static_cast<double>(durations[th_host].count()) / static_cast<double>(durations[th_device].count());
+    std::cout << "host/device: " << acc << std::endl;
+
+}
+
 
 int main(int, char** argv) {
     int n = std::stoi(argv[1]);

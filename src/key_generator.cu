@@ -22,7 +22,7 @@ namespace troy {
         bool device = this->secret_key_.on_device();
         if (device) this->secret_key_array_.to_device_inplace(pool);
         else this->secret_key_array_.to_host_inplace();
-        this->secret_key_array_.resize(coeff_count * coeff_modulus_size);
+        this->secret_key_array_.resize(coeff_count * coeff_modulus_size, true);
         this->secret_key_array_.copy_from_slice(this->secret_key_.data().const_reference());
         // unlock
         lock.unlock();
@@ -100,7 +100,7 @@ namespace troy {
 
         // Need to extend the array
         // Compute powers of secret key until max_power
-        secret_key_array.resize(new_size * poly_size);
+        secret_key_array.resize(new_size * poly_size, true);
         for (size_t i = 0; i < new_size - old_size; i++) {
             ConstSlice<uint64_t> last = secret_key_array.const_slice((old_size + i - 1) * poly_size, (old_size + i) * poly_size);
             Slice<uint64_t> next = secret_key_array.slice((old_size + i) * poly_size, (old_size + i + 1) * poly_size);

@@ -7,7 +7,7 @@ namespace troy {namespace utils {
     class DynamicArray {
         Array<T> inner;
 
-        void resize_internal(size_t new_size, bool fill_extra_with_zeros) {
+        void resize_internal(size_t new_size, bool fill_extra_with_zeros, bool copy_data) {
             if (new_size == this->inner.size()) {
                 return;
             }
@@ -22,7 +22,7 @@ namespace troy {namespace utils {
                     new_inner.pointer = reinterpret_cast<T*>(std::malloc(new_size * sizeof(T)));
                 }
                 size_t copy_length = std::min(this->inner.size(), new_size);
-                new_inner.slice(0, copy_length).copy_from_slice(this->inner.const_slice(0, copy_length));
+                if (copy_data) new_inner.slice(0, copy_length).copy_from_slice(this->inner.const_slice(0, copy_length));
                 if (fill_extra_with_zeros && new_size > copy_length) new_inner.slice(copy_length, new_size).set_zero();
             }
             this->inner = std::move(new_inner);
@@ -180,12 +180,12 @@ namespace troy {namespace utils {
             return inner.to_vector();
         }
 
-        void resize(size_t new_size) {
-            resize_internal(new_size, true);
+        void resize(size_t new_size, bool copy_data) {
+            resize_internal(new_size, true, copy_data);
         }
 
-        void resize_uninitialized(size_t new_size) {
-            resize_internal(new_size, false);
+        void resize_uninitialized(size_t new_size, bool copy_data) {
+            resize_internal(new_size, false, copy_data);
         }
 
         inline T* raw_pointer() {

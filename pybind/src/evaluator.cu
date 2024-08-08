@@ -99,9 +99,9 @@ void register_evaluator(pybind11::module& m) {
         .def("mod_switch_plain_to_next", [](const Evaluator& self, const Plaintext& plain, Plaintext& destination, MemoryPoolHandleArgument pool) {
             self.mod_switch_plain_to_next(plain, destination, nullopt_default_pool(pool));
         }, py::arg("plain"), py::arg("destination"), MEMORY_POOL_ARGUMENT)
-        .def("mod_switch_plain_to_next_inplace", [](const Evaluator& self, Plaintext& plain) {
-            self.mod_switch_plain_to_next_inplace(plain);
-        }, py::arg("plain"))
+        .def("mod_switch_plain_to_next_inplace", [](const Evaluator& self, Plaintext& plain, MemoryPoolHandleArgument pool) {
+            self.mod_switch_plain_to_next_inplace(plain, nullopt_default_pool(pool));
+        }, py::arg("plain"), MEMORY_POOL_ARGUMENT)
         .def("mod_switch_plain_to_next_new", [](const Evaluator& self, const Plaintext& plain, MemoryPoolHandleArgument pool) {
             return self.mod_switch_plain_to_next_new(plain, nullopt_default_pool(pool));
         }, py::arg("plain"), MEMORY_POOL_ARGUMENT)
@@ -121,9 +121,9 @@ void register_evaluator(pybind11::module& m) {
         .def("mod_switch_plain_to", [](const Evaluator& self, const Plaintext& plain, ParmsID parms_id, Plaintext& destination, MemoryPoolHandleArgument pool) {
             self.mod_switch_plain_to(plain, parms_id, destination, nullopt_default_pool(pool));
         }, py::arg("plain"), py::arg("parms_id"), py::arg("destination"), MEMORY_POOL_ARGUMENT)
-        .def("mod_switch_plain_to_inplace", [](const Evaluator& self, Plaintext& plain, ParmsID parms_id) {
-            self.mod_switch_plain_to_inplace(plain, parms_id);
-        }, py::arg("plain"), py::arg("parms_id"))
+        .def("mod_switch_plain_to_inplace", [](const Evaluator& self, Plaintext& plain, ParmsID parms_id, MemoryPoolHandleArgument pool) {
+            self.mod_switch_plain_to_inplace(plain, parms_id, nullopt_default_pool(pool));
+        }, py::arg("plain"), py::arg("parms_id"), MEMORY_POOL_ARGUMENT)
         .def("mod_switch_plain_to_new", [](const Evaluator& self, const Plaintext& plain, ParmsID parms_id, MemoryPoolHandleArgument pool) {
             return self.mod_switch_plain_to_new(plain, parms_id, nullopt_default_pool(pool));
         }, py::arg("plain"), py::arg("parms_id"), MEMORY_POOL_ARGUMENT)
