@@ -12,6 +12,24 @@ namespace troy {
         std::vector<utils::Array<const uint64_t*>> key_data_ptrs;
 
     public: 
+    
+        KSwitchKeys(const KSwitchKeys& clone) {
+            this->keys = clone.keys;
+            this->parms_id_ = clone.parms_id_;
+            this->key_data_ptrs.clear();
+            build_key_data_ptrs(clone.pool());
+        }
+
+        KSwitchKeys& operator=(const KSwitchKeys& assign) {
+            if (this == &assign) {
+                return *this;
+            }
+            this->keys = assign.keys;
+            this->parms_id_ = assign.parms_id_;
+            this->key_data_ptrs.clear();
+            build_key_data_ptrs(assign.pool());
+            return *this;
+        }
 
         inline void build_key_data_ptrs(MemoryPoolHandle pool) {
             key_data_ptrs.resize(keys.size());
