@@ -22,7 +22,7 @@ namespace troy::utils::fgk::translate_plain {
         }
         size_t i = global_index % coeff_count;
         size_t j = global_index / coeff_count;
-        size_t poly_count = from.size() / coeff_count / coeff_modulus.size();
+        size_t poly_count = destination.size() / coeff_count / coeff_modulus.size();
         uint64_t& destination_target = destination[j * coeff_count + i];
         if (i < plain_coeff_count) {
             uint64_t prod[2]{0, 0};
@@ -174,27 +174,51 @@ namespace troy::utils::fgk::translate_plain {
         size_t idx2 = j * translation_degree + k;
         
         if (k < translation_degree) {
-            if (!subtract) {
-                destination[idx] = utils::add_uint64_mod(from[idx1], translation[idx2], moduli[j]);
+            if (from.raw_pointer()) {
+                if (!subtract) {
+                    destination[idx] = utils::add_uint64_mod(from[idx1], translation[idx2], moduli[j]);
+                } else {
+                    destination[idx] = utils::sub_uint64_mod(from[idx1], translation[idx2], moduli[j]);
+                }
             } else {
-                destination[idx] = utils::sub_uint64_mod(from[idx1], translation[idx2], moduli[j]);
+                if (!subtract) {
+                    destination[idx] = translation[idx2];
+                } else {
+                    destination[idx] = utils::negate_uint64_mod(translation[idx2], moduli[j]);
+                }
             }
         } else {
-            destination[idx] = from[idx1];
+            if (from.raw_pointer()) {
+                destination[idx] = from[idx];
+            } else {
+                destination[idx] = 0;
+            }
         }
 
-        size_t poly_count = from.size() / from_degree / moduli.size();
+        size_t poly_count = destination.size() / from_degree / moduli.size();
         for (size_t p = 1; p < poly_count; p++) {
             size_t offset = p * from_degree * moduli.size() + idx;
-            destination[offset] = from[offset];
+            if (from.raw_pointer()) {
+                destination[offset] = from[offset];
+            } else {
+                destination[offset] = 0;
+            }
         }
     
     }
 
     void scatter_translate_copy(ConstSlice<uint64_t> from, ConstSlice<uint64_t> translation, size_t from_degree, size_t translation_degree, ConstSlice<Modulus> moduli, Slice<uint64_t> destination, bool subtract) {
-        bool device = from.on_device();
-        if (!utils::device_compatible(from, translation, destination)) {
+        bool device = destination.on_device();
+        if (!utils::device_compatible(translation, destination)) {
             throw std::invalid_argument("[scatter_translate_copy] Arguments are not on the same device.");
+        }
+        if (from.raw_pointer()) {
+            if (!utils::device_compatible(from, destination)) {
+                throw std::invalid_argument("[scatter_translate_copy] Arguments are not on the same device.");
+            }
+            if (from.size() != destination.size()) {
+                throw std::invalid_argument("[scatter_translate_copy] add_to_destination has incorrect size.");
+            }
         }
         if (!device) {
             for (size_t j = 0; j < moduli.size(); j++) {
@@ -203,18 +227,34 @@ namespace troy::utils::fgk::translate_plain {
                     if (k < translation_degree) {
                         size_t idx1 = j * from_degree + k;
                         size_t idx2 = j * translation_degree + k;
-                        if (!subtract) {
-                            destination[idx] = utils::add_uint64_mod(from[idx1], translation[idx2], moduli[j]);
+                        if (from.raw_pointer()) {
+                            if (!subtract) {
+                                destination[idx] = utils::add_uint64_mod(from[idx1], translation[idx2], moduli[j]);
+                            } else {
+                                destination[idx] = utils::sub_uint64_mod(from[idx1], translation[idx2], moduli[j]);
+                            }
                         } else {
-                            destination[idx] = utils::sub_uint64_mod(from[idx1], translation[idx2], moduli[j]);
+                            if (!subtract) {
+                                destination[idx] = translation[idx2];
+                            } else {
+                                destination[idx] = utils::negate_uint64_mod(translation[idx2], moduli[j]);
+                            }
                         }
                     } else {
-                        destination[idx] = from[idx];
+                        if (from.raw_pointer()) {
+                            destination[idx] = from[idx];
+                        } else {
+                            destination[idx] = 0;
+                        }
                     }
                 }
             }
-            destination.slice(moduli.size() * from_degree, destination.size())
-                .copy_from_slice(from.const_slice(moduli.size() * from_degree, from.size()));
+            if (from.raw_pointer()) {
+                destination.slice(moduli.size() * from_degree, destination.size())
+                    .copy_from_slice(from.const_slice(moduli.size() * from_degree, from.size()));
+            } else {
+                destination.slice(moduli.size() * from_degree, destination.size()).set_zero();
+            }
         } else {
             size_t total = from_degree * moduli.size();
             size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);

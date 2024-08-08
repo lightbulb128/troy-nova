@@ -245,24 +245,18 @@ namespace troy {
         }
 
         void transform_plain_to_ntt_inplace(Plaintext& plain, const ParmsID& parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
-        inline void transform_plain_to_ntt(const Plaintext& plain, const ParmsID& parms_id, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            destination = plain.clone(pool);
-            transform_plain_to_ntt_inplace(destination, parms_id, pool);
-        }
+        void transform_plain_to_ntt(const Plaintext& plain, const ParmsID& parms_id, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline Plaintext transform_plain_to_ntt_new(const Plaintext& plain, const ParmsID& parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            Plaintext destination = plain.clone();
-            transform_plain_to_ntt_inplace(destination, parms_id, pool);
+            Plaintext destination;
+            transform_plain_to_ntt(plain, parms_id, destination, pool);
             return destination;
         }
 
         void transform_plain_from_ntt_inplace(Plaintext& plain) const;
-        inline void transform_plain_from_ntt(const Plaintext& plain, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            destination = plain.clone(pool);
-            transform_plain_from_ntt_inplace(destination);
-        }
+        void transform_plain_from_ntt(const Plaintext& plain, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline Plaintext transform_plain_from_ntt_new(const Plaintext& plain, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            Plaintext destination = plain.clone(pool);
-            transform_plain_from_ntt_inplace(destination);
+            Plaintext destination;
+            transform_plain_from_ntt(plain, destination, pool);
             return destination;
         }
 
@@ -294,14 +288,15 @@ namespace troy {
             return destination;
         }
 
-        void apply_galois_plain_inplace(Plaintext& plain, size_t galois_element, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
-        inline void apply_galois_plain(const Plaintext& plain, size_t galois_element, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            destination = plain.clone(pool);
-            apply_galois_plain_inplace(destination, galois_element, pool);
+        void apply_galois_plain(const Plaintext& plain, size_t galois_element, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        inline void apply_galois_plain_inplace(Plaintext& plain, size_t galois_element, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            Plaintext destination;
+            apply_galois_plain(plain, galois_element, destination, pool);
+            plain = std::move(destination);
         }
         inline Plaintext apply_galois_plain_new(const Plaintext& plain, size_t galois_element, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            Plaintext destination = plain.clone();
-            apply_galois_plain_inplace(destination, galois_element, pool);
+            Plaintext destination;
+            apply_galois_plain(plain, galois_element, destination, pool);
             return destination;
         }
 
@@ -401,8 +396,9 @@ namespace troy {
             return destination;
         }
         inline void negacyclic_shift_inplace(Ciphertext& encrypted, size_t shift, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
-            Ciphertext cloned = encrypted.clone(pool);
-            negacyclic_shift(cloned, shift, encrypted, pool);
+            Ciphertext destination;
+            negacyclic_shift(encrypted, shift, destination, pool);
+            encrypted = std::move(destination);
         }
     };
 

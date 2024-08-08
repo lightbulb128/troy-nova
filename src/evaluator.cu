@@ -2111,12 +2111,50 @@ namespace troy {
                 throw std::invalid_argument("[Evaluator::transform_plain_to_ntt_inplace] Plaintext parameters do not match.");
             }
             if (plain.coeff_count() != coeff_count) {
-                Plaintext cloned = plain.clone(pool); cloned.resize_rns(*context_, plain.parms_id());
-                utils::scatter_partial_p(plain.const_poly(), plain.coeff_count(), coeff_count, coeff_modulus_size, cloned.poly());
+                Plaintext cloned; if (plain.on_device()) cloned.to_device_inplace(pool);
+                cloned.resize_rns(*context_, plain.parms_id(), false);
+                utils::fgk::translate_plain::scatter_translate_copy(nullptr, plain.const_poly(), coeff_count, plain.coeff_count(), coeff_modulus, cloned.poly(), false);
                 plain = std::move(cloned);
             }
             utils::ntt_inplace_p(plain.poly(), coeff_count, ntt_tables);
             plain.is_ntt_form() = true;
+        }
+    }
+
+    void Evaluator::transform_plain_to_ntt(const Plaintext& plain, const ParmsID& parms_id, Plaintext& destination, MemoryPoolHandle pool) const {
+        if (plain.is_ntt_form()) {
+            throw std::invalid_argument("[Evaluator::transform_plain_to_ntt] Plaintext is already in NTT form.");
+        }
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::transform_plain_to_ntt_inplace]", parms_id);
+        const EncryptionParameters& parms = context_data->parms();
+        size_t coeff_count = parms.poly_modulus_degree();
+        ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
+        size_t coeff_modulus_size = coeff_modulus.size();
+        ConstSlice<NTTTables> ntt_tables = context_data->small_ntt_tables();
+
+        destination = Plaintext::like(plain, false, pool);
+
+        if (plain.parms_id() == parms_id_zero) {
+            if (plain.on_device()) destination.to_device_inplace(pool);
+            destination.resize_rns(*context_, parms_id);
+            scaling_variant::centralize(plain, context_data, destination.poly(), coeff_count, pool);
+            utils::ntt_inplace_p(destination.poly(), coeff_count, ntt_tables);
+            destination.is_ntt_form() = true;
+            destination.coeff_modulus_size() = coeff_modulus_size;
+            destination.poly_modulus_degree() = coeff_count;
+        } else {
+            if (plain.parms_id() != parms_id) {
+                throw std::invalid_argument("[Evaluator::transform_plain_to_ntt] Plaintext parameters do not match.");
+            }
+            if (plain.coeff_count() != coeff_count) {
+                Plaintext cloned; if (plain.on_device()) cloned.to_device_inplace(pool);
+                cloned.resize_rns(*context_, plain.parms_id(), false);
+                utils::fgk::translate_plain::scatter_translate_copy(nullptr, plain.const_poly(), coeff_count, plain.coeff_count(), coeff_modulus, cloned.poly(), false);
+                utils::ntt_p(cloned.poly(), coeff_count, ntt_tables, destination.poly());
+            } else {
+                utils::ntt_p(plain.poly(), coeff_count, ntt_tables, destination.poly());
+            }
+            destination.is_ntt_form() = true;
         }
     }
 
@@ -2136,6 +2174,26 @@ namespace troy {
 
         utils::intt_inplace_p(plain.poly(), coeff_count, ntt_tables);
         plain.is_ntt_form() = false;
+    }
+
+    void Evaluator::transform_plain_from_ntt(const Plaintext& plain, Plaintext& destination, MemoryPoolHandle pool) const {
+        if (!plain.is_ntt_form()) {
+            throw std::invalid_argument("[Evaluator::transform_plain_from_ntt_inplace] Plaintext is already in NTT form.");
+        }
+        if (plain.parms_id() == parms_id_zero) {
+            throw std::invalid_argument("[Evaluator::transform_plain_from_ntt_inplace] Invalid ParmsID, but this should never be reached.");
+        }
+        ParmsID parms_id = plain.parms_id();
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::transform_plain_from_ntt_inplace]", parms_id);
+
+        destination = Plaintext::like(plain, false, pool);
+
+        const EncryptionParameters& parms = context_data->parms();
+        size_t coeff_count = parms.poly_modulus_degree();
+        ConstSlice<NTTTables> ntt_tables = context_data->small_ntt_tables();
+
+        utils::intt_p(plain.poly(), coeff_count, ntt_tables, destination.poly());
+        destination.is_ntt_form() = false;
     }
 
     void Evaluator::transform_to_ntt_inplace(Ciphertext& encrypted) const {
@@ -2239,7 +2297,7 @@ namespace troy {
         this->switch_key_internal(encrypted, destination.poly(1), galois_keys.as_kswitch_keys(), GaloisKeys::get_index(galois_element), Evaluator::SwitchKeyDestinationAssignMethod::OverwriteExceptFirst, destination, pool);
     }
     
-    void Evaluator::apply_galois_plain_inplace(Plaintext& plain, size_t galois_element, MemoryPoolHandle pool) const {
+    void Evaluator::apply_galois_plain(const Plaintext& plain, size_t galois_element, Plaintext& destination, MemoryPoolHandle pool) const {
         ContextDataPointer context_data = plain.is_ntt_form()
             ? this->get_context_data("[Evaluator::apply_galois_plain_inplace]", plain.parms_id())
             : this->context()->key_context_data().value();
@@ -2255,22 +2313,16 @@ namespace troy {
             throw std::invalid_argument("[Evaluator::apply_galois_inplace] Galois element is not valid.");
         }
 
-        Array<uint64_t> temp(coeff_count * (plain.is_ntt_form() ? coeff_modulus_size : 1), plain.on_device(), pool);
+        destination = Plaintext::like(plain, false, pool);
         if (!plain.is_ntt_form()) {
             if (context_data->is_ckks()) {
-                galois_tool.apply_p(plain.const_poly(), galois_element, coeff_modulus, temp.reference());
+                galois_tool.apply_p(plain.const_poly(), galois_element, coeff_modulus, destination.reference());
             } else {
-                galois_tool.apply(plain.const_poly(), galois_element, context_data->parms().plain_modulus(), temp.reference());
+                galois_tool.apply(plain.const_poly(), galois_element, context_data->parms().plain_modulus(), destination.reference());
             }
         } else {
-            galois_tool.apply_ntt_p(plain.const_poly(), coeff_modulus_size, galois_element, temp.reference(), pool);
+            galois_tool.apply_ntt_p(plain.const_poly(), coeff_modulus_size, galois_element, destination.reference(), pool);
         }
-
-        ParmsID parms_id = plain.parms_id();
-        plain.parms_id() = parms_id_zero;
-        plain.resize(temp.size());
-        plain.data().copy_from_slice(temp.const_reference());
-        plain.parms_id() = parms_id;
     }
 
     void Evaluator::rotate_internal(const Ciphertext& encrypted, int steps, const GaloisKeys& galois_keys, Ciphertext& destination, MemoryPoolHandle pool) const {
