@@ -2,6 +2,7 @@
 #include <sstream>
 #include "../test_adv.h"
 #include "../../src/app/conv2d.h"
+#include "../test.h"
 
 
 namespace matmul {
@@ -121,6 +122,7 @@ namespace matmul {
     }
 
     TEST(Conv2dTest, DeviceConv2d) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 1024, 40, { 60, 40, 40, 60 }, true, 0x123, 0);
         srand(0);
         test_conv2d(ghe, 2, 3, 6, 7, 9, 3, 5, false);

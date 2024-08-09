@@ -212,6 +212,7 @@ namespace rns_base {
     }
 
     TEST(RNSBase, DeviceComposeDecomposeArray) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         test_body_compose_decompose_array(true);
         MemoryPool::Destroy();
     }
@@ -255,6 +256,7 @@ namespace rns_base {
     }
 
     TEST(RNSBase, DeviceFastConvertArray) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         test_body_fast_convert_array(true);
         MemoryPool::Destroy();
     }

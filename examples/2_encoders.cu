@@ -71,8 +71,10 @@ void example_batch_encoder()
     BatchEncoder batch_encoder(context);
 
     // Convey to device
-    context->to_device_inplace();
-    batch_encoder.to_device_inplace();
+    if (utils::device_count() > 0) {
+        context->to_device_inplace();
+        batch_encoder.to_device_inplace();
+    }
 
     /*
     We can verify that batching is indeed enabled by looking at the encryption
@@ -247,8 +249,10 @@ void example_ckks_encoder()
     CKKSEncoder encoder(context);
 
     // Convey to device
-    context->to_device_inplace();
-    encoder.to_device_inplace();
+    if (utils::device_count() > 0) {
+        context->to_device_inplace();
+        encoder.to_device_inplace();
+    }
 
     /*
     Keys are created the same way as for the BFV scheme.

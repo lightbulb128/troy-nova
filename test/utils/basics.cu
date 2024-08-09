@@ -18,6 +18,7 @@ namespace basics {
     }
 
     TEST(Basics, DeviceOnDevice) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         MemoryPoolHandle pool = MemoryPool::GlobalPool();
         Array<bool> r(16, true, pool);
         utils::set_device(r.device_index());
@@ -108,6 +109,7 @@ namespace basics {
     }
 
     TEST(Basics, DeviceBits) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         Array<bool> r(16, true, MemoryPool::GlobalPool()); 
         utils::set_device(r.device_index());
         kernel_bits<<<4, 4>>>(r.reference());
@@ -201,6 +203,7 @@ namespace basics {
     }
 
     TEST(Basics, DeviceAdd) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         Array<bool> r(16, true, MemoryPool::GlobalPool()); 
         utils::set_device(r.device_index());
         kernel_add<<<4, 4>>>(r.reference());
@@ -344,6 +347,7 @@ namespace basics {
     }
 
     TEST(Basics, DeviceMultiply) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         Array<bool> r(16, true, MemoryPool::GlobalPool()); 
         utils::set_device(r.device_index());
         kernel_multiply<<<4, 4>>>(r.reference());

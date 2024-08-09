@@ -19,8 +19,11 @@ void example_quickstart() {
     // Convey them to the device memory.
     // The encoder must be conveyed to the device memory after creating it from a host-memory context.
     // i.e. you cannot create an encoder directly from a device-memory context.
-    context->to_device_inplace();
-    encoder.to_device_inplace();
+    if (utils::device_count() > 0) {
+        // Don't convey to device if there is none.
+        context->to_device_inplace();
+        encoder.to_device_inplace();
+    }
 
     // Other utilities could directly be constructed from device-memory context.
     KeyGenerator keygen(context);

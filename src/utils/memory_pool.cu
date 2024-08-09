@@ -4,6 +4,8 @@ namespace troy::utils {
 
     std::shared_ptr<MemoryPool> MemoryPool::global_pool = nullptr;
     std::mutex MemoryPool::global_pool_mutex = std::mutex();
+    bool MemoryPool::established = false;
+    bool MemoryPool::has_device = false;
 
     void stream_sync() {
         #ifdef TROY_STREAM_SYNC_AFTER_KERNEL_CALLS

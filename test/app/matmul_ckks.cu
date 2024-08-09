@@ -2,6 +2,7 @@
 #include <sstream>
 #include "../test_adv.h"
 #include "../../src/app/matmul.h"
+#include "../test.h"
 
 namespace matmul_ckks {
 
@@ -108,6 +109,7 @@ namespace matmul_ckks {
     }
 
     TEST(MatmulTest, DeviceCKKSMatmul) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::CKKS, 1024, 0, { 60, 40, 40, 60 }, true, 0x123, 2, (double)(1<<20), 1e-2);
         srand(0);
         test_matmul(ghe, 4, 5, 6, false, false);

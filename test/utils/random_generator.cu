@@ -70,6 +70,7 @@ namespace random_generator {
     }
 
     TEST(RandomGeneratorTest, DeviceSeededRNG) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         ASSERT_TRUE(test_body_seeded_rng(true));
         MemoryPool::Destroy();
     }
@@ -125,6 +126,7 @@ namespace random_generator {
     }
 
     TEST(RandomGeneratorTest, DeviceTernary) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         ASSERT_TRUE(test_body_ternary_or_centered_binomial(true, true));
         MemoryPool::Destroy();
     }
@@ -134,6 +136,7 @@ namespace random_generator {
     }
 
     TEST(RandomGeneratorTest, DeviceCenteredBinomial) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         ASSERT_TRUE(test_body_ternary_or_centered_binomial(true, false));
         MemoryPool::Destroy();
     }
@@ -182,11 +185,13 @@ namespace random_generator {
     }
 
     TEST(RandomGeneratorTest, DeviceUniform) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         ASSERT_TRUE(test_body_uniform(true));
         MemoryPool::Destroy();
     }
 
     TEST(RandomGeneratorTest, HostDeviceConsistency) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         
         // same seed should get same results
         size_t produce_count = 123;

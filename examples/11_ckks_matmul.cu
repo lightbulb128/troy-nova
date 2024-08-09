@@ -35,8 +35,10 @@ void test_ckks_matmul(
 
     // Create encoder and convey to GPU memory
     CKKSEncoder encoder(he);
-    he->to_device_inplace();
-    encoder.to_device_inplace();
+    if (utils::device_count() > 0) {
+        he->to_device_inplace();
+        encoder.to_device_inplace();
+    }
 
     // Create other util classes
     KeyGenerator keygen(he);

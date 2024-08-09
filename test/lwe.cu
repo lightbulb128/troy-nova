@@ -45,16 +45,19 @@ namespace lwe {
         test_extract_lwe(ghe);
     }
     TEST(LweTest, DeviceBFVExtractLWE) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_extract_lwe(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(LweTest, DeviceBGVExtractLWE) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_extract_lwe(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(LweTest, DeviceCKKSExtractLWE) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1<<16, 1e-2);
         test_extract_lwe(ghe);
         utils::MemoryPool::Destroy();
@@ -112,16 +115,19 @@ namespace lwe {
         test_pack_lwes(ghe);
     }
     TEST(LweTest, DeviceBFVPackLWEs) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_pack_lwes(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(LweTest, DeviceBGVPackLWEs) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_pack_lwes(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(LweTest, DeviceCKKSPackLWEs) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
         test_pack_lwes(ghe);
         utils::MemoryPool::Destroy();

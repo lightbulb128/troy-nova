@@ -1,5 +1,5 @@
 #include "test_adv.h"
-#include "gtest/gtest.h"
+#include "test.h"
 #include <gtest/gtest.h>
 #include <thread>
 #include <future>
@@ -51,6 +51,7 @@ namespace multithread {
         test_allocate(false, 64, 4, 64);
     }
     TEST(MultithreadTest, DeviceAllocate) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         test_allocate(true, 64, 4, 64);
     }
 
@@ -111,6 +112,7 @@ namespace multithread {
         test_single_pool_multi_thread(ghe, 64, 4);
     }
     TEST(MultithreadTest, DeviceSharedPoolSimple) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, false, 0x123, 0);
         test_single_pool_multi_thread(ghe, 64, 4);
         utils::MemoryPool::Destroy();
@@ -1213,6 +1215,7 @@ namespace multithread {
         );
     }
     TEST(MultithreadTest, DeviceBFVSharedPool) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         test_shared_pool(SHARED_POOL_THREADS, true, 
             SchemeType::BFV, 32, 35, 
             { 60, 40, 40, 60 }, true, 0x123, 0
@@ -1226,6 +1229,7 @@ namespace multithread {
         );
     }
     TEST(MultithreadTest, DeviceBGVSharedPool) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         test_shared_pool(SHARED_POOL_THREADS, true, 
             SchemeType::BGV, 32, 35, 
             { 60, 40, 40, 60 }, true, 0x123, 0
@@ -1240,6 +1244,7 @@ namespace multithread {
         );
     }
     TEST(MultithreadTest, DeviceCKKSSharedPool) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         test_shared_pool(SHARED_POOL_THREADS, true,
             SchemeType::CKKS, 32, 0, 
             { 60, 40, 40, 60 }, true, 0x123, 
@@ -1301,6 +1306,7 @@ namespace multithread {
         );
     }
     TEST(MultithreadTest, DeviceBFVSharedContextMultiPools) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         test_shared_context_multiple_pools(DEVICE_THREADS, true, 
             SchemeType::BFV, 32, 35, 
             { 60, 40, 40, 60 }, true, 0x123, 0
@@ -1314,6 +1320,7 @@ namespace multithread {
         );
     }
     TEST(MultithreadTest, DeviceBGVSharedContextMultiPools) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         test_shared_context_multiple_pools(DEVICE_THREADS, true, 
             SchemeType::BGV, 32, 35, 
             { 60, 40, 40, 60 }, true, 0x123, 0
@@ -1328,6 +1335,7 @@ namespace multithread {
         );
     }
     TEST(MultithreadTest, DeviceCKKSSharedContextMultiPools) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         test_shared_context_multiple_pools(DEVICE_THREADS, true,
             SchemeType::CKKS, 32, 0, 
             { 60, 40, 40, 60 }, true, 0x123, 
@@ -1393,6 +1401,7 @@ namespace multithread {
         );
     }
     TEST(MultithreadTest, DeviceBFVMultiDevices) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         int device_count;
         cudaError_t success = cudaGetDeviceCount(&device_count);
         if (success != cudaSuccess || device_count <= 1) {
@@ -1410,6 +1419,7 @@ namespace multithread {
         );
     }
     TEST(MultithreadTest, DeviceBGVMultiDevices) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         int device_count;
         cudaError_t success = cudaGetDeviceCount(&device_count);
         if (success != cudaSuccess || device_count <= 1) {
@@ -1428,6 +1438,7 @@ namespace multithread {
         );
     }
     TEST(MultithreadTest, DeviceCKKSMultiDevices) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         int device_count;
         cudaError_t success = cudaGetDeviceCount(&device_count);
         if (success != cudaSuccess || device_count <= 1) {

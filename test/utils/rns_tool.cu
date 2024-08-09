@@ -95,6 +95,7 @@ namespace rns_tool {
     }
 
     TEST(RNSToolTest, DeviceFastBConvSK) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         ASSERT_TRUE(test_body_fast_b_conv_sk(true));
         MemoryPool::Destroy();
     }
@@ -220,6 +221,7 @@ namespace rns_tool {
     }
 
     TEST(RNSToolTest, DeviceMontgomeryReduction) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         ASSERT_TRUE(test_body_montgomery_reduction(true));
         MemoryPool::Destroy();
     }
@@ -331,6 +333,7 @@ namespace rns_tool {
     }
 
     TEST(RNSToolTest, DeviceFastFloor) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         ASSERT_TRUE(test_body_fast_floor(true));
         MemoryPool::Destroy();
     }
@@ -425,6 +428,7 @@ namespace rns_tool {
     }
 
     TEST(RNSToolTest, DeviceFastBConvMTilde) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         ASSERT_TRUE(test_body_fast_b_conv_m_tilde(true));
         MemoryPool::Destroy();
     }
@@ -459,6 +463,7 @@ namespace rns_tool {
     }
 
     TEST(RNSToolTest, DeviceExactScaleAndRound) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         ASSERT_TRUE(test_body_exact_scale_and_round(true));
         MemoryPool::Destroy();
     }
@@ -540,6 +545,7 @@ namespace rns_tool {
     }
 
     TEST(RNSToolTest, DeviceModTAndDivideQLastInplace) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         ASSERT_TRUE(test_body_mod_t_and_divide_q_last_inplace(true));
         MemoryPool::Destroy();
     }
@@ -633,6 +639,7 @@ namespace rns_tool {
     }
 
     TEST(RNSToolTest, DeviceDecryptModT) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         ASSERT_TRUE(test_body_decrypt_mod_t(true));
         MemoryPool::Destroy();
     }

@@ -99,8 +99,10 @@ void example_levels()
     print_parameters(*context);
     cout << endl;
     auto encoder = BatchEncoder(context);
-    context->to_device_inplace();
-    encoder.to_device_inplace();
+    if (utils::device_count() > 0) {
+        context->to_device_inplace();
+        encoder.to_device_inplace();
+    }
 
     /*
     There are convenience method for accessing the SEALContext::ContextData for

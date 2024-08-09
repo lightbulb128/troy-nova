@@ -2,6 +2,7 @@
 #include <sstream>
 #include "../test_adv.h"
 #include "../../src/app/matmul.h"
+#include "../test.h"
 
 namespace matmul_ring2k {
 
@@ -142,11 +143,26 @@ namespace matmul_ring2k {
         test_matmul<uint128_t>(device, 128, 4096, {60, 60, 60, 60, 60, 60}, 40, 50, 60, true, false);
     }
 
-    TEST(MatmulTest, HostRing32Matmul) { ring32_test_suite(false); }
-    TEST(MatmulTest, DeviceRing32Matmul) { ring32_test_suite(true); }
-    TEST(MatmulTest, HostRing64Matmul) { ring64_test_suite(false); }
-    TEST(MatmulTest, DeviceRing64Matmul) { ring64_test_suite(true); }
-    TEST(MatmulTest, HostRing128Matmul) { ring128_test_suite(false); }
-    TEST(MatmulTest, DeviceRing128Matmul) { ring128_test_suite(true); }
+    TEST(MatmulTest, HostRing32Matmul) { 
+        ring32_test_suite(false); 
+    }
+    TEST(MatmulTest, DeviceRing32Matmul) { 
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        ring32_test_suite(true); 
+    }
+    TEST(MatmulTest, HostRing64Matmul) { 
+        ring64_test_suite(false); 
+    }
+    TEST(MatmulTest, DeviceRing64Matmul) { 
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        ring64_test_suite(true); 
+    }
+    TEST(MatmulTest, HostRing128Matmul) { 
+        ring128_test_suite(false); 
+    }
+    TEST(MatmulTest, DeviceRing128Matmul) { 
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        ring128_test_suite(true); 
+    }
 
 }

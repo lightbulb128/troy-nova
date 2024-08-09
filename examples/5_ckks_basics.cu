@@ -89,9 +89,10 @@ void example_ckks_basics()
     CKKSEncoder encoder(context);
     size_t slot_count = encoder.slot_count();
     cout << "Number of slots: " << slot_count << endl;
-
-    context->to_device_inplace();
-    encoder.to_device_inplace();
+    if (utils::device_count() > 0) {
+        context->to_device_inplace();
+        encoder.to_device_inplace();
+    }
 
     KeyGenerator keygen(context);
     auto secret_key = keygen.secret_key();

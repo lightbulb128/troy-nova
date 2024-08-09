@@ -3,6 +3,7 @@
 #include <vector>
 #include <complex>
 #include "../src/utils/box.h"
+#include <gtest/gtest.h>
 
 using namespace troy;
 using std::complex;
@@ -179,3 +180,11 @@ inline vector<double> random_double_vector(size_t count, double max) {
     }
     return vec;
 }
+
+#define SKIP_WHEN_NO_CUDA_DEVICE {               \
+    int count = troy::utils::device_count();     \
+    if (count == 0) {                            \
+        GTEST_SKIP_("No CUDA device found");     \
+    }                                            \
+}
+

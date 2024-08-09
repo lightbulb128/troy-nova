@@ -46,18 +46,21 @@ namespace special_prime_for_encryption {
     }
 
     TEST(SpecialPrimeForEncryptionTest, DeviceBFVEncrypt) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, {60, 40, 40, 60}, true, 0x123, 
             0, 0, 1e-4, false, true);
         test_encrypt(ghe);
     }
 
     TEST(SpecialPrimeForEncryptionTest, DeviceBGVEncrypt) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, {60, 40, 40, 60}, true, 0x123, 
             0, 0, 1e-4, false, true);
         test_encrypt(ghe);
     }
 
     TEST(SpecialPrimeForEncryptionTest, DeviceCKKSEncrypt) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(false, SchemeType::CKKS, 32, 20, {60, 40, 40, 60}, true, 0x123, 
             10, 1ull<<20, 1e-2, false, true);
         test_encrypt(ghe);
@@ -107,16 +110,19 @@ namespace special_prime_for_encryption {
         test_multiply(ghe);
     }
     TEST(SpecialPrimeForEncryptionTest, DeviceBFVMultiply) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_multiply(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(SpecialPrimeForEncryptionTest, DeviceBGVMultiply) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_multiply(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(SpecialPrimeForEncryptionTest, DeviceCKKSMultiply) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1ull<<20, 1e-2);
         test_multiply(ghe);
         utils::MemoryPool::Destroy();
@@ -167,16 +173,19 @@ namespace special_prime_for_encryption {
         test_relinearize(ghe);
     }
     TEST(SpecialPrimeForEncryptionTest, DeviceBFVRelinearize) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_relinearize(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(SpecialPrimeForEncryptionTest, DeviceBGVRelinearize) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_relinearize(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(SpecialPrimeForEncryptionTest, DeviceCKKSRelinearize) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
         test_relinearize(ghe);
         utils::MemoryPool::Destroy();

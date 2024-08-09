@@ -33,8 +33,10 @@ void example_rotation_bfv()
     size_t slot_count = batch_encoder.slot_count();
     size_t row_size = slot_count / 2;
     cout << "Plaintext matrix row size: " << row_size << endl;
-    context->to_device_inplace();
-    batch_encoder.to_device_inplace();
+    if (utils::device_count() > 0) {
+        context->to_device_inplace();
+        batch_encoder.to_device_inplace();
+    }
 
     KeyGenerator keygen(context);
     SecretKey secret_key = keygen.secret_key();
@@ -149,8 +151,10 @@ void example_rotation_ckks()
     size_t slot_count = ckks_encoder.slot_count();
     cout << "Number of slots: " << slot_count << endl;
 
-    context->to_device_inplace();
-    ckks_encoder.to_device_inplace();
+    if (utils::device_count() > 0) {
+        context->to_device_inplace();
+        ckks_encoder.to_device_inplace();
+    }
 
     KeyGenerator keygen(context);
     SecretKey secret_key = keygen.secret_key();

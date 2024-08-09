@@ -53,6 +53,7 @@ namespace evaluator {
         test_negate(ghe);
     }
     TEST(EvaluatorTest, DeviceBFVNegate) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         {
             GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
             test_negate(ghe);
@@ -64,6 +65,7 @@ namespace evaluator {
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceBGVNegate) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         {
             GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
             test_negate(ghe);
@@ -75,6 +77,7 @@ namespace evaluator {
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceCKKSNegate) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1<<16, 1e-2);
         test_negate(ghe);
         utils::MemoryPool::Destroy();
@@ -117,16 +120,19 @@ namespace evaluator {
         test_add_subtract(ghe);
     }
     TEST(EvaluatorTest, DeviceBFVAdd) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_add_subtract(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceBGVAdd) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_add_subtract(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceCKKSAdd) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 40, 40, 40 }, false, 0x123, 10, 1<<20, 1e-2);
         test_add_subtract(ghe);
         utils::MemoryPool::Destroy();
@@ -165,6 +171,7 @@ namespace evaluator {
         test_add_subtract_ntt(ghe);
     }
     TEST(EvaluatorTest, DeviceBFVAddNTT) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_add_subtract_ntt(ghe);
         utils::MemoryPool::Destroy();
@@ -207,11 +214,13 @@ namespace evaluator {
         test_add_subtract_intt(ghe);
     }
     TEST(EvaluatorTest, DeviceBGVAddINTT) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_add_subtract_intt(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceCKKSAddINTT) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 40, 40, 40 }, false, 0x123, 10, 1<<20, 1e-2);
         test_add_subtract_intt(ghe);
         utils::MemoryPool::Destroy();
@@ -305,6 +314,7 @@ namespace evaluator {
         test_multiply(ghe);
     }
     TEST(EvaluatorTest, DeviceBFVMultiply) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         {
             GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
             test_multiply(ghe);
@@ -316,6 +326,7 @@ namespace evaluator {
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceBGVMultiply) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         {
             GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
             test_multiply(ghe);
@@ -327,6 +338,7 @@ namespace evaluator {
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceCKKSMultiply) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1ull<<20, 1e-2);
         test_multiply(ghe);
         utils::MemoryPool::Destroy();
@@ -360,16 +372,19 @@ namespace evaluator {
         test_square(ghe);
     }
     TEST(EvaluatorTest, DeviceBFVSquare) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_square(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceBGVSquare) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_square(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceCKKSSquare) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1ull<<20, 1e-2);
         test_square(ghe);
         utils::MemoryPool::Destroy();
@@ -411,16 +426,19 @@ namespace evaluator {
         test_keyswitching(ghe);
     }
     TEST(EvaluatorTest, DeviceBFVKeySwitching) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_keyswitching(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceBGVKeySwitching) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_keyswitching(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceCKKSKeySwitching) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
         test_keyswitching(ghe);
         utils::MemoryPool::Destroy();
@@ -482,6 +500,7 @@ namespace evaluator {
         test_relinearize(ghe);
     }
     TEST(EvaluatorTest, DeviceBFVRelinearize) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         {
             GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, false, 0x123, 0);
             test_relinearize(ghe);
@@ -493,6 +512,7 @@ namespace evaluator {
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceBGVRelinearize) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         {
             GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, false, 0x123, 0);
             test_relinearize(ghe);
@@ -504,6 +524,7 @@ namespace evaluator {
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceCKKSRelinearize) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
         test_relinearize(ghe);
         utils::MemoryPool::Destroy();
@@ -544,16 +565,19 @@ namespace evaluator {
         test_mod_switch_to_next(ghe);
     }
     TEST(EvaluatorTest, DeviceBFVModSwitchToNext) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_mod_switch_to_next(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceBGVModSwitchToNext) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_mod_switch_to_next(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceCKKSModSwitchToNext) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
         test_mod_switch_to_next(ghe);
         utils::MemoryPool::Destroy();
@@ -584,6 +608,7 @@ namespace evaluator {
         test_mod_switch_plain_to_next(ghe);
     }
     TEST(EvaluatorTest, DeviceCKKSModSwitchPlainToNext) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
         test_mod_switch_plain_to_next(ghe);
         utils::MemoryPool::Destroy();
@@ -614,6 +639,7 @@ namespace evaluator {
         test_rescale_to_next(ghe);
     }
     TEST(EvaluatorTest, DeviceCKKSRescaleToNext) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
         test_rescale_to_next(ghe);
         utils::MemoryPool::Destroy();
@@ -672,16 +698,19 @@ namespace evaluator {
         test_add_subtract_plain(ghe);
     }
     TEST(EvaluatorTest, DeviceBFVAddPlain) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_add_subtract_plain(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceBGVAddPlain) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_add_subtract_plain(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceCKKSAddPlain) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 40, 40, 40 }, false, 0x123, 10, 1<<20, 1e-2);
         test_add_subtract_plain(ghe);
         utils::MemoryPool::Destroy();
@@ -735,6 +764,7 @@ namespace evaluator {
         test_add_plain_scaled(ghe);
     }
     TEST(EvaluatorTest, DeviceBFVAddPlainScaled) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_add_plain_scaled(ghe);
         utils::MemoryPool::Destroy();
@@ -795,6 +825,7 @@ namespace evaluator {
         test_add_plain_scaled_ntt(ghe);
     }
     TEST(EvaluatorTest, DeviceBFVAddPlainScaledNTT) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_add_plain_scaled_ntt(ghe);
         utils::MemoryPool::Destroy();
@@ -882,16 +913,19 @@ namespace evaluator {
         test_multiply_plain(ghe);
     }
     TEST(EvaluatorTest, DeviceBFVMultiplyPlain) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_multiply_plain(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceBGVMultiplyPlain) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_multiply_plain(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceCKKSMultiplyPlain) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1ull<<20, 1e-2);
         test_multiply_plain(ghe);
         utils::MemoryPool::Destroy();
@@ -946,11 +980,13 @@ namespace evaluator {
         test_multiply_plain_ntt(ghe);
     }
     TEST(EvaluatorTest, DeviceBFVMultiplyPlainNTT) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_multiply_plain_ntt(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceBGVMultiplyPlainNTT) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_multiply_plain_ntt(ghe);
         utils::MemoryPool::Destroy();
@@ -1017,10 +1053,12 @@ namespace evaluator {
     }
 
     TEST(EvaluatorTest, HostBFVMultiplyPlainCentralized) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_multiply_plain_centralized(ghe);
     }
     TEST(EvaluatorTest, DeviceBFVMultiplyPlainCentralized) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_multiply_plain_centralized(ghe);
         utils::MemoryPool::Destroy();
@@ -1077,16 +1115,19 @@ namespace evaluator {
         test_rotate(ghe);
     }
     TEST(EvaluatorTest, DeviceBFVRotateRows) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_rotate(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceBGVRotateRows) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_rotate(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceCKKSRotateVector) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
         test_rotate(ghe);
         utils::MemoryPool::Destroy();
@@ -1126,16 +1167,19 @@ namespace evaluator {
         test_conjugate(ghe);
     }
     TEST(EvaluatorTest, DeviceBFVRotateColumns) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_conjugate(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceBGVRotateColumns) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_conjugate(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceCKKSComplexConjugate) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
         test_conjugate(ghe);
         utils::MemoryPool::Destroy();
@@ -1211,16 +1255,19 @@ namespace evaluator {
         test_transform_plain_ntt(ghe);
     }
     TEST(EvaluatorTest, DeviceBFVTransformPlainNTT) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_transform_plain_ntt(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceBGVTransformPlainNTT) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_transform_plain_ntt(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(EvaluatorTest, DeviceCKKSTransformPlainNTT) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 40, 40, 40 }, false, 0x123, 10, 1<<20, 1e-2);
         test_transform_plain_ntt(ghe);
         utils::MemoryPool::Destroy();

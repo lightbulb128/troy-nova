@@ -45,8 +45,10 @@ void example_bgv_basics()
     Batching and slot operations are the same in BFV and BGV.
     */
     BatchEncoder batch_encoder(context);
-    context->to_device_inplace();
-    batch_encoder.to_device_inplace();
+    if (utils::device_count() > 0) {
+        context->to_device_inplace();
+        batch_encoder.to_device_inplace();
+    }
 
     /*
     Print the parameters that we have chosen.

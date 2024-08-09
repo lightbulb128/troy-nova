@@ -44,6 +44,7 @@ namespace uint_small_mod {
     }
     
     TEST(UintSmallMod, DeviceIncrementUint64Mod) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         Array<Modulus> modulus(3, false, nullptr);
         modulus[0] = Modulus(2);
         modulus[1] = Modulus(0x10000);
@@ -97,6 +98,7 @@ namespace uint_small_mod {
     }
     
     TEST(UintSmallMod, DeviceDecrementUint64Mod) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         Array<Modulus> modulus(3, false, nullptr);
         modulus[0] = Modulus(2);
         modulus[1] = Modulus(0x10000);
@@ -156,6 +158,7 @@ namespace uint_small_mod {
     }
     
     TEST(UintSmallMod, DeviceNegateUint64Mod) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         Array<Modulus> modulus(4, false, nullptr);
         modulus[0] = Modulus(2);
         modulus[1] = Modulus(0xFFFFULL);
@@ -209,6 +212,7 @@ namespace uint_small_mod {
     }
     
     TEST(UintSmallMod, DeviceDivide2Uint64Mod) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         Array<Modulus> modulus(3, false, nullptr);
         modulus[0] = Modulus(3);
         modulus[1] = Modulus(17);
@@ -272,6 +276,7 @@ namespace uint_small_mod {
     }
     
     TEST(UintSmallMod, DeviceAddUint64Mod) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         Array<Modulus> modulus(3, false, nullptr);
         modulus[0] = Modulus(2);
         modulus[1] = Modulus(10);
@@ -338,6 +343,7 @@ namespace uint_small_mod {
     }
     
     TEST(UintSmallMod, DeviceSubUint64Mod) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         Array<Modulus> modulus(3, false, nullptr);
         modulus[0] = Modulus(2);
         modulus[1] = Modulus(10);
@@ -419,6 +425,7 @@ namespace uint_small_mod {
     }
     
     TEST(UintSmallMod, DeviceBarrettReduceUint128Mod) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         Array<Modulus> modulus(3, false, nullptr);
         modulus[0] = Modulus(2);
         modulus[1] = Modulus(3);
@@ -484,6 +491,7 @@ namespace uint_small_mod {
     }
     
     TEST(UintSmallMod, DeviceMultiplyUint64Mod) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         Array<Modulus> modulus(3, false, nullptr);
         modulus[0] = Modulus(2);
         modulus[1] = Modulus(10);
@@ -539,6 +547,7 @@ namespace uint_small_mod {
     }
     
     TEST(UintSmallMod, DeviceMultiplyAddUint64Mod) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         Array<Modulus> modulus(2, false, nullptr);
         modulus[0] = Modulus(7);
         modulus[1] = Modulus(0x1FFFFFFFFFFFFFFFULL);
@@ -643,6 +652,7 @@ namespace uint_small_mod {
     }
     
     TEST(UintSmallMod, DeviceModuloUintMod) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         Array<Modulus> modulus(4, false, nullptr);
         modulus[0] = Modulus(2);
         modulus[1] = Modulus(0xFFFF);
@@ -697,6 +707,7 @@ namespace uint_small_mod {
     }
     
     TEST(UintSmallMod, DeviceExponentiateUint64Mod) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         Array<Modulus> modulus(3, false, nullptr);
         modulus[0] = Modulus(5);
         modulus[1] = Modulus(0x1000000000000000ULL);

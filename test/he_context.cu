@@ -321,6 +321,7 @@ namespace he_context {
     }
 
     TEST(HeContextTest, HeContextToDevice) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
 
         // BFV
 

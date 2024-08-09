@@ -100,6 +100,7 @@ namespace modulus {
     }
 
     TEST(Modulus, DeviceCreateModulus) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         Array<Modulus> modulus(4, false);
         modulus[0] = Modulus(0);
         modulus[1] = Modulus(3);
@@ -155,6 +156,7 @@ namespace modulus {
     }
 
     TEST(Modulus, DeviceReduce) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         Array<Modulus> modulus(2, false);
         modulus[0] = Modulus(2);
         modulus[1] = Modulus(10);

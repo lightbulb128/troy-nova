@@ -234,6 +234,7 @@ namespace encryptor {
     }
 
     TEST(EncryptorTest, DeviceBFV) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         test_bfv(true);
         utils::MemoryPool::Destroy();
     }
@@ -249,6 +250,7 @@ namespace encryptor {
     }
 
     TEST(EncryptorTest, DeviceBGV) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         test_bgv(true);
         utils::MemoryPool::Destroy();
     }
@@ -264,6 +266,7 @@ namespace encryptor {
     }
 
     TEST(EncryptorTest, DeviceCKKS) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         test_ckks(true);
         utils::MemoryPool::Destroy();
     }
@@ -318,6 +321,7 @@ namespace encryptor {
     }
 
     TEST(EncryptorTest, DeviceInvariantNoiseBudget) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         test_invariant_noise_budget(true, false);
         test_invariant_noise_budget(true, true);
         utils::MemoryPool::Destroy();

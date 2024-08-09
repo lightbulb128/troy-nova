@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 #include "../../src/app/bfv_ring2k.h"
 #include "../../src/troy.h"
+#include "../test.h"
 
 namespace bfv_ring2k {
 
@@ -96,6 +97,7 @@ namespace bfv_ring2k {
         );
     }
     TEST(BFVRing2kTest, DeviceScaleUpDownU32Test) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         template_test_scale_up_down<uint32_t>(true, 
             {40, 40, 40}, 
             {32, 20, 17}
@@ -108,6 +110,7 @@ namespace bfv_ring2k {
         );
     }
     TEST(BFVRing2kTest, DeviceScaleUpDownU64Test) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         template_test_scale_up_down<uint64_t>(true, 
             {40, 40, 40, 40}, 
             {64, 50, 33}
@@ -120,6 +123,7 @@ namespace bfv_ring2k {
         );
     }
     TEST(BFVRing2kTest, DeviceScaleUpDownU128Test) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         template_test_scale_up_down<uint128_t>(true, 
             {60, 60, 60, 60, 60, 60},
             {128, 100, 65}
@@ -168,6 +172,7 @@ namespace bfv_ring2k {
         );
     }
     TEST(BFVRing2kTest, DeviceCentralizeDecentralizeU32Test) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         template_test_centralize_decentralize<uint32_t>(true, 
             {40, 40, 40}, 
             {32, 20, 17}
@@ -180,6 +185,7 @@ namespace bfv_ring2k {
         );
     }
     TEST(BFVRing2kTest, DeviceCentralizeDecentralizeU64Test) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         template_test_centralize_decentralize<uint64_t>(true, 
             {40, 40, 40, 40}, 
             {64, 50, 33}
@@ -192,6 +198,7 @@ namespace bfv_ring2k {
         );
     }
     TEST(BFVRing2kTest, DeviceCentralizeDecentralizeU128Test) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         template_test_centralize_decentralize<uint128_t>(true, 
             {60, 60, 60, 60, 60, 60},
             {128, 100, 65}
@@ -236,6 +243,7 @@ namespace bfv_ring2k {
         );
     }
     TEST(BFVRing2kTest, DeviceEncryptU32Test) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         template_test_encrypt<uint32_t>(true, 
             {40, 40, 40}, 
             {32, 20, 17}
@@ -248,6 +256,7 @@ namespace bfv_ring2k {
         );
     }
     TEST(BFVRing2kTest, DeviceEncryptU64Test) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         template_test_encrypt<uint64_t>(true, 
             {40, 40, 40, 40}, 
             {64, 50, 33}
@@ -260,6 +269,7 @@ namespace bfv_ring2k {
         );
     }
     TEST(BFVRing2kTest, DeviceEncryptU128Test) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         template_test_encrypt<uint128_t>(true, 
             {60, 60, 60, 60, 60, 60},
             {128, 100, 65}
@@ -441,6 +451,7 @@ namespace bfv_ring2k {
         );
     }
     TEST(BFVRing2kTest, DeviceHeOperationsU32Test) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         template_test_he_operations<uint32_t>(true, 
             {40, 40, 40}, 
             {32, 20, 17}
@@ -453,6 +464,7 @@ namespace bfv_ring2k {
         );
     }
     TEST(BFVRing2kTest, DeviceHeOperationsU64Test) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         template_test_he_operations<uint64_t>(true, 
             {40, 40, 40, 40, 40}, 
             {64, 50, 33}
@@ -465,6 +477,7 @@ namespace bfv_ring2k {
         );
     }
     TEST(BFVRing2kTest, DeviceHeOperationsU128Test) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         template_test_he_operations<uint128_t>(true, 
             {60, 60, 60, 60, 60, 60},
             {128, 100, 65}

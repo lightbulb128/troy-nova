@@ -40,3 +40,5 @@
 ## 2024-07-14
 
 - Allow scaled up polynomial plaintexts to store only partial coefficients, to save device memory when only a small degree polynomial is encoded.
+- All unittests using device will be skipped if no device is detected on the machine.
+- Examples will run on host if no device is detected on the machine.

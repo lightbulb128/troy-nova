@@ -82,6 +82,7 @@ namespace galois_tool {
     }
 
     TEST(GaloisToolTest, DeviceApply) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         EXPECT_TRUE(test_body_apply(true));
         MemoryPool::Destroy();
     }

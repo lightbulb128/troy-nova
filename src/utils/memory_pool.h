@@ -14,6 +14,9 @@ namespace troy {namespace utils {
         int count;
         cudaError_t status = cudaGetDeviceCount(&count);
         if (status != cudaSuccess) {
+            if (status == cudaErrorNoDevice) {
+                return 0;
+            }
             std::string msg = "[device_count] cudaGetDeviceCount failed: ";
             msg += cudaGetErrorString(status);
             throw std::runtime_error(msg);
@@ -43,14 +46,25 @@ namespace troy {namespace utils {
 
         static std::shared_ptr<MemoryPool> global_pool;
         static std::mutex global_pool_mutex;
+        static bool established;
+        static bool has_device;
         bool denying = false;
         bool is_global_pool = false;
         size_t device_index;
         struct Impl;
         std::shared_ptr<Impl> impl_;
         inline static void ensure_global_pool() {
-            std::unique_lock lock(global_pool_mutex);
-            if (global_pool == nullptr) {
+            if (!established) {
+                std::unique_lock lock(global_pool_mutex);
+                if (global_pool != nullptr) {
+                    return;
+                }
+                int count = device_count();
+                has_device = count > 0;
+                established = true;
+                if (!has_device) {
+                    return;
+                }
                 global_pool = std::make_shared<MemoryPool>(0);
                 global_pool->is_global_pool = true;
             }
@@ -97,6 +111,9 @@ namespace troy {namespace utils {
         }
         inline static void Destroy() {
             ensure_global_pool();
+            if (!has_device) {
+                return;
+            }
             global_pool->destroy();
         }
         inline static MemoryPoolHandle GlobalPool() {

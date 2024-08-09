@@ -2,6 +2,7 @@
 #include <sstream>
 #include "../test_adv.h"
 #include "../../src/app/matmul.h"
+#include "../test.h"
 
 namespace matmul {
 
@@ -112,6 +113,7 @@ namespace matmul {
     }
 
     TEST(MatmulTest, DeviceBFVMatmul) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 1024, 40, { 60, 40, 40, 60 }, true, 0x123, 0);
         srand(0);
         test_matmul(ghe, 4, 5, 6, false, false);
@@ -133,6 +135,7 @@ namespace matmul {
     }
 
     TEST(MatmulTest, DeviceBGVMatmul) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BGV, 1024, 40, { 60, 40, 40, 60 }, true, 0x123, 0);
         srand(0);
         test_matmul(ghe, 4, 5, 6, false, false);

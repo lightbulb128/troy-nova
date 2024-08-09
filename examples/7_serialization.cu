@@ -23,8 +23,10 @@ void example_serialization()
     BatchEncoder batch_encoder(context);
 
     // Convey to device
-    context->to_device_inplace();
-    batch_encoder.to_device_inplace();
+    if (utils::device_count() > 0) {
+        context->to_device_inplace();
+        batch_encoder.to_device_inplace();
+    }
 
 
 

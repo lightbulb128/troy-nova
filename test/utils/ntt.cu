@@ -76,6 +76,7 @@ namespace ntt {
 
 
     TEST(NTT, DeviceNegacyclicNTT) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
 
         size_t coeff_count_power = 1;
         Modulus modulus(0xffffffffffc0001);
@@ -137,6 +138,7 @@ namespace ntt {
     }
 
     TEST(NTT, DeviceInverseNegacyclicNTT) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
 
         size_t coeff_count_power = 5;
         size_t n = 1 << coeff_count_power;

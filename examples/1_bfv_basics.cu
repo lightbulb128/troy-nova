@@ -128,8 +128,10 @@ void example_bfv_basics()
     */
     auto context = HeContext::create(parms, true, SecurityLevel::Classical128);
     auto encoder = BatchEncoder(context);
-    context->to_device_inplace();
-    encoder.to_device_inplace();
+    if (utils::device_count() > 0) {
+        context->to_device_inplace();
+        encoder.to_device_inplace();
+    }
 
     /*
     Print the parameters that we have chosen.

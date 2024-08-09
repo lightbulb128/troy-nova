@@ -122,6 +122,7 @@ namespace ckks_encoder {
     }
 
     TEST(CKKSEncoderTest, DeviceSimd) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         test_simd(true);
         utils::MemoryPool::Destroy();
     }
@@ -195,6 +196,7 @@ namespace ckks_encoder {
     }
 
     TEST(CKKSEncoderTest, DeviceDoublePolynomial) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         test_double_polynomial(true);
         utils::MemoryPool::Destroy();
     }
@@ -265,6 +267,7 @@ namespace ckks_encoder {
     }
 
     TEST(CKKSEncoderTest, DeviceIntegerPolynomial) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         test_integer_polynomial(true);
         utils::MemoryPool::Destroy();
     }

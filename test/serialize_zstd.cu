@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include "test_adv.h"
+#include "test.h"
 #include <sstream>
 
 namespace serialize_zstd {
@@ -49,16 +50,19 @@ namespace serialize_zstd {
         test_plaintext(ghe);
     }
     TEST(SerializeZstdTest, DeviceBFVPlaintext) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_plaintext(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(SerializeZstdTest, DeviceBGVPlaintext) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_plaintext(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(SerializeZstdTest, DeviceCKKSPlaintext) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1<<16, 1e-2);
         test_plaintext(ghe);
         utils::MemoryPool::Destroy();
@@ -111,16 +115,19 @@ namespace serialize_zstd {
         test_ciphertext(ghe);
     }
     TEST(SerializeZstdTest, DeviceBFVCiphertext) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_ciphertext(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(SerializeZstdTest, DeviceBGVCiphertext) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_ciphertext(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(SerializeZstdTest, DeviceCKKSCiphertext) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1<<16, 1e-2);
         test_ciphertext(ghe);
         utils::MemoryPool::Destroy();
@@ -175,16 +182,19 @@ namespace serialize_zstd {
         test_secret_public_key(ghe);
     }
     TEST(SerializeZstdTest, DeviceBFVSecretPublicKey) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_secret_public_key(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(SerializeZstdTest, DeviceBGVSecretPublicKey) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_secret_public_key(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(SerializeZstdTest, DeviceCKKSSecretPublicKey) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1<<16, 1e-2);
         test_secret_public_key(ghe);
         utils::MemoryPool::Destroy();
@@ -304,16 +314,19 @@ namespace serialize_zstd {
         test_kswitch_keys(ghe);
     }
     TEST(SerializeZstdTest, DeviceBFVKSwitchKeys) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_kswitch_keys(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(SerializeZstdTest, DeviceBGVKSwitchKeys) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_kswitch_keys(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(SerializeZstdTest, DeviceCKKSKSwitchKeys) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
         test_kswitch_keys(ghe);
         utils::MemoryPool::Destroy();
@@ -385,16 +398,19 @@ namespace serialize_zstd {
         test_ciphertext_terms(ghe);
     }
     TEST(SerializeZstdTest, DeviceBFVCiphertextTerms) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_ciphertext_terms(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(SerializeZstdTest, DeviceBGVCiphertextTerms) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
         test_ciphertext_terms(ghe);
         utils::MemoryPool::Destroy();
     }
     TEST(SerializeZstdTest, DeviceCKKSCiphertextTerms) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1<<16, 1e-2);
         test_ciphertext_terms(ghe);
         utils::MemoryPool::Destroy();

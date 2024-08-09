@@ -59,6 +59,7 @@ namespace batch_encoder {
     }
 
     TEST(BatchEncoderTest, DeviceUnbatchUintVector) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         test_unbatch_uint_vector(true);
         utils::MemoryPool::Destroy();
     }
@@ -103,6 +104,7 @@ namespace batch_encoder {
     }
 
     TEST(BatchEncoderTest, DeviceBFVPolynomial) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         test_polynomial(true, false);
         utils::MemoryPool::Destroy();
     }
@@ -112,6 +114,7 @@ namespace batch_encoder {
     }
 
     TEST(BatchEncoderTest, DeviceBGVPolynomial) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         test_polynomial(true, true);
         utils::MemoryPool::Destroy();
     }
@@ -174,6 +177,7 @@ namespace batch_encoder {
     }
 
     TEST(BatchEncoderTest, DeviceScaleUpDown) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         test_scale_up_down(true);
         utils::MemoryPool::Destroy();
     }
@@ -237,6 +241,7 @@ namespace batch_encoder {
     }
 
     TEST(BatchEncoderTest, DeviceCentralizeDecentralize) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
         test_centralize_decentralize(true);
         utils::MemoryPool::Destroy();
     }
