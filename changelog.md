@@ -40,5 +40,9 @@
 ## 2024-07-14
 
 - Allow scaled up polynomial plaintexts to store only partial coefficients, to save device memory when only a small degree polynomial is encoded.
+
+## 2024-08-09
+
+- Update kernels for multiple APIs in evaluator and encryptor, removing redundant cuda memory copies and memsets.
 - All unittests using device will be skipped if no device is detected on the machine.
 - Examples will run on host if no device is detected on the machine.
