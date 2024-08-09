@@ -1815,8 +1815,9 @@ namespace troy {
         } else {
             bool first = true;
             while (true) {
-                if (first) this->mod_switch_to_next(encrypted, destination, pool);
+                if (first) {this->mod_switch_to_next(encrypted, destination, pool); first = false;}
                 else this->mod_switch_to_next_inplace(destination, pool);
+                if (destination.parms_id() == parms_id) break;
             }
         }
     }

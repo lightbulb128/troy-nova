@@ -524,7 +524,7 @@ namespace evaluator {
         // result should be same with message
         ASSERT_TRUE(message.near_equal(result, tolerance));
 
-        switched = context.evaluator().mod_switch_to_new(encrypted, context.context()->first_parms_id());
+        switched = context.evaluator().mod_switch_to_new(encrypted, context.context()->last_parms_id());
         decrypted = context.decryptor().decrypt_new(switched);
         result = context.encoder().decode_simd(decrypted);
         // result should be same with message
