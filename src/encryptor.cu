@@ -32,10 +32,6 @@ namespace troy {
         }
         ContextDataPointer context_data = context_data_optional.value();
         const EncryptionParameters& parms = context_data->parms();
-        ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
-        size_t coeff_modulus_size = coeff_modulus.size();
-        size_t coeff_count = parms.poly_modulus_degree();
-        size_t poly_element_count = coeff_count * coeff_modulus_size;
         
         // Resize destination and save results
         destination.seed() = 0;
@@ -63,32 +59,29 @@ namespace troy {
                         this->public_key(), this->context(), prev_parms_id, is_ntt_form, *u_prng, temp, pool
                     );
                 }
+
+                if (parms.scheme() == SchemeType::BGV && !is_ntt_form) {
+                    throw std::invalid_argument("[Encryptor::encrypt_zero_internal] BGV - Plaintext is not in NTT form.");
+                }
                 
                 // Modulus switching
-                for (size_t i = 0; i < temp.polynomial_count(); i++) {
-                    switch (parms.scheme()) {
-                        case SchemeType::CKKS: case SchemeType::BFV: {
-                            if (is_ntt_form) {
-                                rns_tool.divide_and_round_q_last_ntt(temp.poly(i), 1, temp.poly(i), prev_context_data->small_ntt_tables(), pool);
-                            } else {
-                                rns_tool.divide_and_round_q_last(temp.poly(i), 1, temp.poly(i)); // TODO: reduce this
-                            }
-                            break;
+                switch (parms.scheme()) {
+                    case SchemeType::CKKS: case SchemeType::BFV: {
+                        if (is_ntt_form) {
+                            rns_tool.divide_and_round_q_last_ntt(temp.const_reference(), temp.polynomial_count(), destination.reference(), prev_context_data->small_ntt_tables(), pool);
+                        } else {
+                            rns_tool.divide_and_round_q_last(temp.const_reference(), temp.polynomial_count(), destination.reference());
                         }
-                        case SchemeType::BGV: {
-                            if (is_ntt_form) {
-                                rns_tool.mod_t_and_divide_q_last_ntt(temp.poly(i), 1, temp.poly(i), prev_context_data->small_ntt_tables(), pool);
-                            } else {
-                                rns_tool.mod_t_and_divide_q_last_inplace(temp.poly(i), pool);
-                            }
-                            break;
-                        }
-                        default:
-                            throw std::invalid_argument("[Encryptor::encrypt_zero_internal] Unsupported scheme.");
+                        break;
                     }
-                    destination.poly(i).copy_from_slice(
-                        temp.poly(i).const_slice(0, poly_element_count)
-                    );
+                    case SchemeType::BGV: {
+                        if (is_ntt_form) {
+                            rns_tool.mod_t_and_divide_q_last_ntt(temp.const_reference(), temp.polynomial_count(), destination.reference(), prev_context_data->small_ntt_tables(), pool);
+                        }
+                        break;
+                    }
+                    default:
+                        throw std::invalid_argument("[Encryptor::encrypt_zero_internal] Unsupported scheme.");
                 }
 
                 destination.parms_id() = parms_id;
@@ -186,7 +179,7 @@ namespace troy {
                 
                 if (!plain.is_ntt_form()) {
                     // c_{0} = pk_{0}*u + p*e_{0} + M
-                    Plaintext plain_copy = plain.clone(pool);
+                    Plaintext plain_copy = Plaintext::like(plain, false, pool);
                     // Resize to fit the entire NTT transformed (ciphertext size) polynomial
                     // Note that the new coefficients are automatically set to 0
                     plain_copy.resize(coeff_count * coeff_modulus_size);
