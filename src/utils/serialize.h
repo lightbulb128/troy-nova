@@ -45,7 +45,10 @@ namespace troy {namespace serialize {
 
     inline size_t serialized_size_upperbound(size_t raw_size, CompressionMode mode) {
         size_t compressed_size = utils::compression::compressed_size_upperbound(raw_size, mode);
-        return compressed_size + sizeof(CompressionMode) + sizeof(size_t);
+        if (mode == CompressionMode::Nil) {
+            return raw_size + sizeof(CompressionMode);
+        }
+        return std::max(compressed_size + sizeof(CompressionMode) + sizeof(size_t), raw_size + sizeof(CompressionMode));
     }
 
     // This struct is for obtaining the inner buffer of a std::stringbuf
@@ -56,13 +59,9 @@ namespace troy {namespace serialize {
     template <typename R>
     inline size_t compress(std::ostream& os, R save_raw, CompressionMode mode) {
         if (mode == CompressionMode::Nil) {
-            StringBufWithRawPointer buf;
-            std::ostream ss(&buf);
-            size_t actual_size = save_raw(ss);
             save_object(os, mode);
-            save_object(os, actual_size);
-            os.write(buf.get_buffer(), actual_size);
-            return actual_size + sizeof(CompressionMode) + sizeof(size_t);
+            size_t actual_size = save_raw(os);
+            return sizeof(CompressionMode) + actual_size;
         } else {
             // first serialize without compression
             StringBufWithRawPointer buf;
@@ -83,11 +82,9 @@ namespace troy {namespace serialize {
             } else {
                 // if compression is not effective, write mode plus actual size plus data to os
                 save_object(os, CompressionMode::Nil);
-                save_object(os, actual_size);
                 os.write(buf.get_buffer(), actual_size);
                 // total size is actual size plus mode and a size_t's size
-                return actual_size + sizeof(CompressionMode) + sizeof(size_t);
-            
+                return actual_size + sizeof(CompressionMode);
             }
         }
     }
@@ -97,8 +94,6 @@ namespace troy {namespace serialize {
         CompressionMode mode;
         load_object(is, mode);
         if (mode == CompressionMode::Nil) {
-            size_t actual_size;
-            load_object(is, actual_size);
             load_raw(is);
         } else {
             size_t compressed_size;

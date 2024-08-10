@@ -15,7 +15,7 @@ namespace serialize_zstd {
     void reserialize(T& t) {
         stringstream ss;
         t.save(ss, CompressionMode::Zstd);
-        ASSERT_TRUE(t.serialized_size_upperbound() >= ss.str().size());
+        ASSERT_TRUE(t.serialized_size_upperbound(CompressionMode::Zstd) >= ss.str().size());
         t = T::load_new(ss);
     }
 
@@ -23,7 +23,7 @@ namespace serialize_zstd {
     void reserialize(T& t, HeContextPointer context) {
         stringstream ss;
         t.save(ss, context, CompressionMode::Zstd);
-        ASSERT_TRUE(t.serialized_size_upperbound(context) >= ss.str().size());
+        ASSERT_TRUE(t.serialized_size_upperbound(context, CompressionMode::Zstd) >= ss.str().size());
         t = T::load_new(ss, context);
     }
 
@@ -335,7 +335,7 @@ namespace serialize_zstd {
     void reserialize_terms(Ciphertext& t, HeContextPointer context, const std::vector<size_t>& terms) {
         stringstream ss;
         t.save_terms(ss, context, terms, MemoryPool::GlobalPool(), CompressionMode::Zstd);
-        ASSERT_TRUE(t.serialized_terms_size_upperbound(context, terms) >= ss.str().size());
+        ASSERT_TRUE(t.serialized_terms_size_upperbound(context, terms, CompressionMode::Zstd) >= ss.str().size());
         t = Ciphertext::load_terms_new(ss, context, terms);
     }
 
