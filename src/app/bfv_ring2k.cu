@@ -199,175 +199,219 @@ namespace troy::linear {
     }
 
     template <typename T>
-    __global__ static void kernel_scale_up_component(
+    __global__ static void kernel_scale_up(
         ConstSlice<T> source,
         ConstSlice<Modulus> modulus, ConstSlice<MultiplyUint64Operand> Q_div_t_mod_qi,
         uint128_t Q_mod_t, uint128_t t_half, uint32_t base_mod_bitlen,
-        size_t mod_idx, 
         Slice<uint64_t> out
     ) {
-        size_t i = blockIdx.x * blockDim.x + threadIdx.x; // global_index
-        if (i < source.size()) {
-        // u = (Q mod t)*x mod qi
-        T x = source[i];
-        uint64_t x64 = modulus[mod_idx].reduce(x);
-        uint64_t u = utils::multiply_uint64operand_mod(x64, Q_div_t_mod_qi[mod_idx], modulus[mod_idx]);
-        // uint128_t can conver uint32_t/uint64_t mult here
-        T v = ((Q_mod_t * x + t_half) >> base_mod_bitlen);
-            out[i] = modulus[mod_idx].reduce(u + v);
-        }
-    }
-
-    /// This function obtains one RNS component of the scaled-up polynomial.
-    template <typename T>
-    void PolynomialEncoderRNSHelper<T>::scale_up_component(utils::ConstSlice<T> source, const HeContext& context, size_t modulus_index, utils::Slice<uint64_t> destination) const {
-        // This implementation is only for uint32 and uint64.
-        // Uint128 is implemented with a specialized version.
-        static_assert(std::is_same<T, uint32_t>::value || std::is_same<T, uint64_t>::value, "[PolynomialEncoderRNSHelper::scale_up_component] T must be uint32_t or uint64_t");
-        ContextDataPointer context_data = context.get_context_data(this->parms_id_).value();
-        custom_assert(source.on_device() == destination.on_device(), "[PolynomialEncoderRNSHelper::scale_up_component] source and destination are not in the same device");
-        const EncryptionParameters& parms = context_data->parms();
-        custom_assert(modulus_index < parms.coeff_modulus().size(), "[PolynomialEncoderRNSHelper::scale_up_component] modulus_index is out of range");
-        custom_assert(destination.size() >= source.size());
-        if (!source.on_device()) {
-            const Modulus& modulus = parms.coeff_modulus()[modulus_index];
-            for (size_t i = 0; i < source.size(); i++) {
-                uint64_t x64 = modulus.reduce(source[i]);
-                uint64_t u = utils::multiply_uint64operand_mod(x64, Q_div_t_mod_qi_[modulus_index], modulus);
+        size_t j = blockIdx.x * blockDim.x + threadIdx.x;
+        if (j < source.size()) {
+            T x = source[j];
+            for (size_t i = 0; i < modulus.size(); i++) {
+                // u = (Q mod t)*x mod qi
+                uint64_t x64 = modulus[i].reduce(x);
+                uint64_t u = utils::multiply_uint64operand_mod(x64, Q_div_t_mod_qi[i], modulus[i]);
                 // uint128_t can conver uint32_t/uint64_t mult here
-                uint64_t v = static_cast<uint64_t>(((static_cast<uint128_t>(Q_mod_t_) * static_cast<uint128_t>(source[i])) + static_cast<uint128_t>(t_half_)) >> t_bit_length_);
-                destination[i] = modulus.reduce(u + v);
+                T v = ((Q_mod_t * x + t_half) >> base_mod_bitlen);
+                out[i * source.size() + j] = modulus[i].reduce(u + v);
             }
-        } else {
-            size_t block_count = ceil_div(source.size(), KERNEL_THREAD_COUNT);
-            utils::set_device(destination.device_index());
-            kernel_scale_up_component<T><<<block_count, KERNEL_THREAD_COUNT>>>(
-                source, context_data->parms().coeff_modulus(), 
-                Q_div_t_mod_qi_.const_reference(), Q_mod_t_, 
-                t_half_, t_bit_length_, modulus_index, destination
-            );
-            utils::stream_sync();
         }
     }
 
-    __global__ static void kernel_scale_up_component_uint128(
+    __global__ static void kernel_scale_up_uint128(
         ConstSlice<uint128_t> source,
         ConstSlice<Modulus> modulus, ConstSlice<MultiplyUint64Operand> Q_div_t_mod_qi,
         uint128_t Q_mod_t, uint128_t t_half, uint32_t base_mod_bitlen,
-        size_t mod_idx, 
         Slice<uint64_t> out
     ) {
-        size_t i = blockIdx.x * blockDim.x + threadIdx.x; // global_index
-        if (i < source.size()) {
-            uint128_t x = source[i];
-            uint64_t x64 = modulus[mod_idx].reduce_uint128(x);
-            uint64_t u = troy::utils::multiply_uint64operand_mod(x64, Q_div_t_mod_qi[mod_idx], modulus[mod_idx]);
-            
-            // ensure 8-byte alignment
-            uint64_t Q_mod_t_arr[2]; set_uint64s_with_uint128(Q_mod_t_arr, Q_mod_t);
-            uint64_t t_half_arr[2]; set_uint64s_with_uint128(t_half_arr, t_half);
-            uint64_t x_arr[2]; set_uint64s_with_uint128(x_arr, x);
-
-            ConstSlice<uint64_t> Q_mod_t(Q_mod_t_arr, 2, true, nullptr);
-            ConstSlice<uint64_t> xlimbs(x_arr, 2, true, nullptr);
-            ConstSlice<uint64_t> t_half(t_half_arr, 2, true, nullptr);
-
-            // Compute round(x * Q_mod_t / t) for 2^64 < x, t <= 2^128
-            // round(x * Q_mod_t / t) = floor((x * Q_mod_t + t_half) / t)
-            // We need 4 limbs to store the product x * Q_mod_t
-            uint64_t mul_limbs[4]; Slice<uint64_t> mul_limbs_slice(mul_limbs, 4, true, nullptr);
-            uint64_t add_limbs[4]; Slice<uint64_t> add_limbs_slice(add_limbs, 4, true, nullptr);
-            uint64_t rs_limbs[3]; Slice<uint64_t> rs_limbs_slice(rs_limbs, 3, true, nullptr);
-            utils::multiply_uint(Q_mod_t, xlimbs, mul_limbs_slice);
-            utils::add_uint_carry(mul_limbs_slice.as_const(), t_half,
-                    0, add_limbs_slice);
-            // NOTE(juhou) base_mod_bitlen_ > 64, we can direct drop the LSB here.
-            utils::right_shift_uint192(add_limbs_slice.const_slice(1, 4), base_mod_bitlen - 64,
-                                rs_limbs_slice);
-            out[i] = modulus[mod_idx].reduce_uint128(u + uint128_from_uint64s(rs_limbs[0], rs_limbs[1]));
-        }
-    }
-
-    template <>
-    void PolynomialEncoderRNSHelper<uint128_t>::scale_up_component(utils::ConstSlice<uint128_t> source, const HeContext& context, size_t modulus_index, utils::Slice<uint64_t> destination) const {
-        ContextDataPointer context_data = context.get_context_data(this->parms_id_).value();
-        custom_assert(source.on_device() == destination.on_device(), "[PolynomialEncoderRNSHelper::scale_up_component] source and destination are not in the same device");
-        const EncryptionParameters& parms = context_data->parms();
-        custom_assert(modulus_index < parms.coeff_modulus().size(), "[PolynomialEncoderRNSHelper::scale_up_component] modulus_index is out of range");
-        custom_assert(destination.size() >= source.size());
-        if (!source.on_device()) {
-            const Modulus& modulus = parms.coeff_modulus()[modulus_index];
-            ConstSlice<uint64_t> t_half = ConstSlice<uint64_t>(reinterpret_cast<const uint64_t*>(&this->t_half_), 2, false, nullptr);
-            ConstSlice<uint64_t> q_mod_t = ConstSlice<uint64_t>(reinterpret_cast<const uint64_t*>(&this->Q_mod_t_), 2, false, nullptr);
-            for (size_t i = 0; i < source.size(); i++) {
-                uint128_t x = source[i];
-                uint64_t x64 = modulus.reduce_uint128(x);
-                uint64_t u = utils::multiply_uint64operand_mod(x64, Q_div_t_mod_qi_[modulus_index], modulus);
+        size_t j = blockIdx.x * blockDim.x + threadIdx.x; // global_index
+        if (j < source.size()) {
+            uint128_t x = source[j];
+            for (size_t i = 0; i < modulus.size(); i++) {
+                uint64_t x64 = modulus[i].reduce_uint128(x);
+                uint64_t u = troy::utils::multiply_uint64operand_mod(x64, Q_div_t_mod_qi[i], modulus[i]);
                 
-                uint64_t mul_limbs[4] = {0, 0, 0, 0}; Slice<uint64_t> mul_limbs_slice = Slice<uint64_t>(mul_limbs, 4, false, nullptr);
-                uint64_t add_limbs[4] = {0, 0, 0, 0}; Slice<uint64_t> add_limbs_slice = Slice<uint64_t>(add_limbs, 4, false, nullptr);
-                uint64_t rs_limbs[3] = {0, 0, 0}; Slice<uint64_t> rs_limbs_slice = Slice<uint64_t>(rs_limbs, 3, false, nullptr);
-                uint64_t x_limbs[2] = {static_cast<uint64_t>(x), static_cast<uint64_t>(x >> 64)}; ConstSlice<uint64_t> x_limbs_slice = ConstSlice<uint64_t>(x_limbs, 2, false, nullptr);
-                utils::multiply_uint(q_mod_t, x_limbs_slice, mul_limbs_slice);
-                utils::add_uint_carry(mul_limbs_slice.as_const(), t_half, 0, add_limbs_slice);
-                utils::right_shift_uint192(add_limbs_slice.const_slice(1, 4), t_bit_length_ - 64, rs_limbs_slice);
-                destination[i] = modulus.reduce_uint128(static_cast<uint128_t>(u) + assemble_from_limbs(rs_limbs_slice.as_const()));
-            }
-        } else {
-            size_t block_count = ceil_div(source.size(), KERNEL_THREAD_COUNT);
-            utils::set_device(destination.device_index());
-            kernel_scale_up_component_uint128<<<block_count, KERNEL_THREAD_COUNT>>>(
-                source, context_data->parms().coeff_modulus(), 
-                Q_div_t_mod_qi_.const_reference(), Q_mod_t_, 
-                t_half_, t_bit_length_, modulus_index, destination
-            );
-            utils::stream_sync();
-        }
-    }
+                // ensure 8-byte alignment
+                uint64_t Q_mod_t_arr[2]; set_uint64s_with_uint128(Q_mod_t_arr, Q_mod_t);
+                uint64_t t_half_arr[2]; set_uint64s_with_uint128(t_half_arr, t_half);
+                uint64_t x_arr[2]; set_uint64s_with_uint128(x_arr, x);
 
-    template <typename T>
-    __global__ static void kernel_centralize_at_component(
-        ConstSlice<T> source,
-        utils::ConstPointer<troy::Modulus> mod_qj,
-        uint128_t t_half, uint128_t mod_t_mask,
-        Slice<uint64_t> out
-    ) {
-        size_t i = blockIdx.x * blockDim.x + threadIdx.x; // global_index
-        if (i < source.size()) {
-            T x = source[i];
-            auto x128 = static_cast<uint128_t>(x);
-            if (x128 > t_half) {
-                uint64_t u = general_reduce(-x128 & mod_t_mask, *mod_qj);
-                out[i] = troy::utils::negate_uint64_mod(u, *mod_qj);
-            } else {
-                out[i] = general_reduce(x, *mod_qj);
+                ConstSlice<uint64_t> Q_mod_t(Q_mod_t_arr, 2, true, nullptr);
+                ConstSlice<uint64_t> xlimbs(x_arr, 2, true, nullptr);
+                ConstSlice<uint64_t> t_half(t_half_arr, 2, true, nullptr);
+
+                // Compute round(x * Q_mod_t / t) for 2^64 < x, t <= 2^128
+                // round(x * Q_mod_t / t) = floor((x * Q_mod_t + t_half) / t)
+                // We need 4 limbs to store the product x * Q_mod_t
+                uint64_t mul_limbs[4]; Slice<uint64_t> mul_limbs_slice(mul_limbs, 4, true, nullptr);
+                uint64_t add_limbs[4]; Slice<uint64_t> add_limbs_slice(add_limbs, 4, true, nullptr);
+                uint64_t rs_limbs[3]; Slice<uint64_t> rs_limbs_slice(rs_limbs, 3, true, nullptr);
+                utils::multiply_uint(Q_mod_t, xlimbs, mul_limbs_slice);
+                utils::add_uint_carry(mul_limbs_slice.as_const(), t_half,
+                        0, add_limbs_slice);
+                // NOTE(juhou) base_mod_bitlen_ > 64, we can direct drop the LSB here.
+                utils::right_shift_uint192(add_limbs_slice.const_slice(1, 4), base_mod_bitlen - 64,
+                                    rs_limbs_slice);
+                out[i * source.size() + j] = modulus[i].reduce_uint128(u + uint128_from_uint64s(rs_limbs[0], rs_limbs[1]));
             }
         }
     }
 
-    template <typename T>
-    void PolynomialEncoderRNSHelper<T>::centralize_at_component(utils::ConstSlice<T> source, const HeContext& context, size_t modulus_index, utils::Slice<uint64_t> destination) const {
-        custom_assert(destination.size() >= source.size());
-        custom_assert(source.on_device() == destination.on_device(), "[PolynomialEncoderRNSHelper::centralize_at_component] source and destination are not in the same device");
+    template<typename T>
+    void PolynomialEncoderRNSHelper<T>::scale_up(utils::ConstSlice<T> source, const HeContext& context, Plaintext& destination, MemoryPoolHandle pool) const {
+        static_assert(std::is_same<T, uint32_t>::value || std::is_same<T, uint64_t>::value, "[PolynomialEncoderRNSHelper::scale_up_component] T must be uint32_t or uint64_t");
+        // This implementation is only for uint32 and uint64.
+        // Uint128 is implemented with a specialized version.
+        if (!utils::device_compatible(source, *this)) {
+            throw std::invalid_argument("[PolynomialEncoderRNSHelper:scale_up] source and helper must be on the same device");
+        }
+        if (source.size() > context.key_context_data_pointer()->parms().poly_modulus_degree()) {
+            throw std::invalid_argument("[PolynomialEncoderRNSHelper:scale_up] source size is larger than poly_modulus_degree");
+        }
+        destination = Plaintext();
+        if (on_device()) destination.to_device_inplace(pool);
+        destination.is_ntt_form() = false;
+        destination.resize_rns_partial(context, parms_id_, source.size(), false, false);
         ContextDataPointer context_data = context.get_context_data(this->parms_id_).value();
-        const EncryptionParameters& parms = context_data->parms();
-        custom_assert(modulus_index < parms.coeff_modulus().size(), "modulus_index is out of range");
-        if (!source.on_device()) { 
-            const Modulus& modulus = parms.coeff_modulus()[modulus_index];
-            for (size_t i = 0; i < source.size(); i++) {
-                T x = source[i];
-                if (x > t_half_) {
-                    uint64_t u = general_reduce((-x) & mod_t_mask_, modulus);
-                    destination[i] = utils::negate_uint64_mod(u, modulus);
-                } else {
-                    destination[i] = general_reduce(x, modulus);
+        if (!source.on_device()) {
+            for (size_t i = 0; i < destination.coeff_modulus_size(); i++) {
+                Slice<uint64_t> destination_i = destination.component(i);
+                custom_assert(source.on_device() == destination.on_device(), "[PolynomialEncoderRNSHelper::scale_up_component] source and destination are not in the same device");
+                const EncryptionParameters& parms = context_data->parms();
+                custom_assert(i < parms.coeff_modulus().size(), "[PolynomialEncoderRNSHelper::scale_up_component] modulus_index is out of range");
+                const Modulus& modulus = parms.coeff_modulus()[i];
+                for (size_t j = 0; j < source.size(); j++) {
+                    uint64_t x64 = modulus.reduce(source[j]);
+                    uint64_t u = utils::multiply_uint64operand_mod(x64, Q_div_t_mod_qi_[i], modulus);
+                    // uint128_t can conver uint32_t/uint64_t mult here
+                    uint64_t v = static_cast<uint64_t>(((static_cast<uint128_t>(Q_mod_t_) * static_cast<uint128_t>(source[j])) + static_cast<uint128_t>(t_half_)) >> t_bit_length_);
+                    destination_i[j] = modulus.reduce(u + v);
                 }
             }
         } else {
             size_t block_count = ceil_div(source.size(), KERNEL_THREAD_COUNT);
             utils::set_device(destination.device_index());
-            kernel_centralize_at_component<T><<<block_count, KERNEL_THREAD_COUNT>>>(
-                source, parms.coeff_modulus().at(modulus_index), t_half_, mod_t_mask_, destination
+            ConstSlice<Modulus> coeff_modulus = context_data->parms().coeff_modulus();
+            custom_assert(coeff_modulus.size() == destination.coeff_modulus_size(), "[PolynomialEncoderRNSHelper::scale_up] coeff_modulus.size() != destination.coeff_modulus_size()");
+            kernel_scale_up<T><<<block_count, KERNEL_THREAD_COUNT>>>(
+                source, coeff_modulus, 
+                Q_div_t_mod_qi_.const_reference(), Q_mod_t_, 
+                t_half_, t_bit_length_, destination.reference()
+            );
+            utils::stream_sync();
+        }
+    }
+
+    template<>
+    void PolynomialEncoderRNSHelper<uint128_t>::scale_up(utils::ConstSlice<uint128_t> source, const HeContext& context, Plaintext& destination, MemoryPoolHandle pool) const {
+        // This implementation is only for uint32 and uint64.
+        // Uint128 is implemented with a specialized version.
+        if (!utils::device_compatible(source, *this)) {
+            throw std::invalid_argument("[PolynomialEncoderRNSHelper:scale_up] source and helper must be on the same device");
+        }
+        if (source.size() > context.key_context_data_pointer()->parms().poly_modulus_degree()) {
+            throw std::invalid_argument("[PolynomialEncoderRNSHelper:scale_up] source size is larger than poly_modulus_degree");
+        }
+        if (on_device()) destination.to_device_inplace(pool);
+        else destination.to_host_inplace();
+        destination.is_ntt_form() = false;
+        destination.resize_rns_partial(context, parms_id_, source.size(), false, false);
+        ContextDataPointer context_data = context.get_context_data(this->parms_id_).value();
+        if (!source.on_device()) {
+            const EncryptionParameters& parms = context_data->parms();
+            for (size_t i = 0; i < destination.coeff_modulus_size(); i++) {
+                Slice<uint64_t> destination_i = destination.component(i);
+                const Modulus& modulus = parms.coeff_modulus()[i];
+                ConstSlice<uint64_t> t_half = ConstSlice<uint64_t>(reinterpret_cast<const uint64_t*>(&this->t_half_), 2, false, nullptr);
+                ConstSlice<uint64_t> q_mod_t = ConstSlice<uint64_t>(reinterpret_cast<const uint64_t*>(&this->Q_mod_t_), 2, false, nullptr);
+                for (size_t j = 0; j < source.size(); j++) {
+                    uint128_t x = source[j];
+                    uint64_t x64 = modulus.reduce_uint128(x);
+                    uint64_t u = utils::multiply_uint64operand_mod(x64, Q_div_t_mod_qi_[i], modulus);
+                    
+                    uint64_t mul_limbs[4] = {0, 0, 0, 0}; Slice<uint64_t> mul_limbs_slice = Slice<uint64_t>(mul_limbs, 4, false, nullptr);
+                    uint64_t add_limbs[4] = {0, 0, 0, 0}; Slice<uint64_t> add_limbs_slice = Slice<uint64_t>(add_limbs, 4, false, nullptr);
+                    uint64_t rs_limbs[3] = {0, 0, 0}; Slice<uint64_t> rs_limbs_slice = Slice<uint64_t>(rs_limbs, 3, false, nullptr);
+                    uint64_t x_limbs[2] = {static_cast<uint64_t>(x), static_cast<uint64_t>(x >> 64)}; ConstSlice<uint64_t> x_limbs_slice = ConstSlice<uint64_t>(x_limbs, 2, false, nullptr);
+                    utils::multiply_uint(q_mod_t, x_limbs_slice, mul_limbs_slice);
+                    utils::add_uint_carry(mul_limbs_slice.as_const(), t_half, 0, add_limbs_slice);
+                    utils::right_shift_uint192(add_limbs_slice.const_slice(1, 4), t_bit_length_ - 64, rs_limbs_slice);
+                    destination_i[j] = modulus.reduce_uint128(static_cast<uint128_t>(u) + assemble_from_limbs(rs_limbs_slice.as_const()));
+                }
+            }
+        } else {
+            size_t block_count = ceil_div(source.size(), KERNEL_THREAD_COUNT);
+            utils::set_device(destination.device_index());
+            ConstSlice<Modulus> coeff_modulus = context_data->parms().coeff_modulus();
+            custom_assert(coeff_modulus.size() == destination.coeff_modulus_size(), "[PolynomialEncoderRNSHelper::scale_up] coeff_modulus.size() != destination.coeff_modulus_size()");
+            kernel_scale_up_uint128<<<block_count, KERNEL_THREAD_COUNT>>>(
+                source, coeff_modulus, 
+                Q_div_t_mod_qi_.const_reference(), Q_mod_t_, 
+                t_half_, t_bit_length_, destination.reference()
+            );
+            utils::stream_sync();
+        }
+    }
+
+
+    template <typename T>
+    __global__ static void kernel_centralize_at(
+        ConstSlice<T> source,
+        utils::ConstSlice<troy::Modulus> mod_qs,
+        uint128_t t_half, uint128_t mod_t_mask,
+        Slice<uint64_t> out
+    ) {
+        size_t j = blockIdx.x * blockDim.x + threadIdx.x; // global_index
+        if (j < source.size()) {
+            T x = source[j];
+            for (size_t i = 0; i < mod_qs.size(); i++) {
+                const Modulus* mod_qi = &mod_qs[i];
+                auto x128 = static_cast<uint128_t>(x);
+                if (x128 > t_half) {
+                    uint64_t u = general_reduce(-x128 & mod_t_mask, *mod_qi);
+                    out[i * source.size() + j] = troy::utils::negate_uint64_mod(u, *mod_qi);
+                } else {
+                    out[i * source.size() + j] = general_reduce(x, *mod_qi);
+                }
+            }
+        }
+    }
+
+    template <typename T>
+    void PolynomialEncoderRNSHelper<T>::centralize(utils::ConstSlice<T> source, const HeContext& context, Plaintext& destination, MemoryPoolHandle pool) const {
+        if (!utils::device_compatible(source, *this)) {
+            throw std::invalid_argument("[PolynomialEncoderRNSHelper:scale_up] source and helper must be on the same device");
+        }
+        if (source.size() > context.key_context_data_pointer()->parms().poly_modulus_degree()) {
+            throw std::invalid_argument("[PolynomialEncoderRNSHelper:scale_up] source size is larger than poly_modulus_degree");
+        }
+        destination = Plaintext();
+        if (on_device()) destination.to_device_inplace(pool);
+        destination.is_ntt_form() = false;
+        destination.resize_rns_partial(context, parms_id_, source.size(), false, false);
+        if (!source.on_device()) {
+            const EncryptionParameters& parms = context.get_context_data(this->parms_id_).value()->parms();
+            for (size_t i = 0; i < destination.coeff_modulus_size(); i++) {
+                Slice<uint64_t> destination_i = destination.component(i);
+                const Modulus& modulus = parms.coeff_modulus()[i];
+                for (size_t j = 0; j < source.size(); j++) {
+                    T x = source[j];
+                    if (x > t_half_) {
+                        uint64_t u = general_reduce((-x) & mod_t_mask_, modulus);
+                        destination_i[j] = utils::negate_uint64_mod(u, modulus);
+                    } else {
+                        destination_i[j] = general_reduce(x, modulus);
+                    }
+                }
+            }
+        } else {
+            size_t block_count = ceil_div(source.size(), KERNEL_THREAD_COUNT);
+            utils::set_device(destination.device_index());
+            ConstSlice<Modulus> coeff_modulus = context.get_context_data(this->parms_id_).value()->parms().coeff_modulus();
+            custom_assert(coeff_modulus.size() == destination.coeff_modulus_size(), "[PolynomialEncoderRNSHelper::centralize] coeff_modulus.size() != destination.coeff_modulus_size()");
+            kernel_centralize_at<<<block_count, KERNEL_THREAD_COUNT>>>(
+                source, coeff_modulus, t_half_, mod_t_mask_, destination.reference()
             );
             utils::stream_sync();
         }
@@ -448,8 +492,9 @@ namespace troy::linear {
         custom_assert(input.on_device() == destination.on_device(), "[PolynomialEncoderRNSHelper::scale_down] input and destination are not in the same device");
         bool device = input.on_device();
 
-        Array<uint64_t> tmp(input.data().size(), device, pool);
-        tmp.set_zero();
+        Array<uint64_t> tmp = Array<uint64_t>::create_uninitialized(input.data().size(), device, pool);
+
+        // TODO: the following steps could use a kernel fusing.
 
         // 1. multiply with gamma*t
         troy::utils::multiply_uint64operand_p(
@@ -458,7 +503,7 @@ namespace troy::linear {
         );
 
         // 2-1 FastBase convert from baseQ to {gamma}
-        Array<uint64_t> base_on_gamma(coeff_count, device, pool);
+        Array<uint64_t> base_on_gamma = Array<uint64_t>::create_uninitialized(coeff_count, device, pool);
         base_Q_to_gamma_.fast_convert_array(tmp.const_reference(), base_on_gamma.reference(), pool);
         // 2-2 Then multiply with -Q^{-1} mod gamma
         troy::utils::multiply_uint64operand_inplace(

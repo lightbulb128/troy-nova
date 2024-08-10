@@ -64,39 +64,8 @@ namespace troy::linear {
             PolynomialEncoderRNSHelper(ContextDataPointer context_data, size_t t_bit_length);
             void to_device_inplace(MemoryPoolHandle pool);
 
-            void scale_up_component(utils::ConstSlice<T> source, const HeContext& context, size_t modulus_index, utils::Slice<uint64_t> destination) const;
-            void centralize_at_component(utils::ConstSlice<T> source, const HeContext& context, size_t modulus_index, utils::Slice<uint64_t> destination) const;
-
-            void scale_up(utils::ConstSlice<T> source, const HeContext& context, Plaintext& destination, MemoryPoolHandle pool) const {
-                if (!utils::device_compatible(source, *this)) {
-                    throw std::invalid_argument("[PolynomialEncoderRNSHelper:scale_up] source and helper must be on the same device");
-                }
-                if (source.size() > context.key_context_data_pointer()->parms().poly_modulus_degree()) {
-                    throw std::invalid_argument("[PolynomialEncoderRNSHelper:scale_up] source size is larger than poly_modulus_degree");
-                }
-                if (on_device()) destination.to_device_inplace(pool);
-                else destination.to_host_inplace();
-                destination.is_ntt_form() = false;
-                destination.resize_rns_partial(context, parms_id_, source.size());
-                for (size_t i = 0; i < destination.coeff_modulus_size(); i++) {
-                    this->scale_up_component(source, context, i, destination.component(i));
-                }
-            }
-            void centralize(utils::ConstSlice<T> source, const HeContext& context, Plaintext& destination, MemoryPoolHandle pool) const {
-                if (!utils::device_compatible(source, *this)) {
-                    throw std::invalid_argument("[PolynomialEncoderRNSHelper:scale_up] source and helper must be on the same device");
-                }
-                if (source.size() > context.key_context_data_pointer()->parms().poly_modulus_degree()) {
-                    throw std::invalid_argument("[PolynomialEncoderRNSHelper:scale_up] source size is larger than poly_modulus_degree");
-                }
-                if (on_device()) destination.to_device_inplace(pool);
-                else destination.to_host_inplace();
-                destination.is_ntt_form() = false;
-                destination.resize_rns_partial(context, parms_id_, source.size());
-                for (size_t i = 0; i < destination.coeff_modulus_size(); i++) {
-                    this->centralize_at_component(source, context, i, destination.component(i));
-                }
-            }
+            void scale_up(utils::ConstSlice<T> source, const HeContext& context, Plaintext& destination, MemoryPoolHandle pool) const;
+            void centralize(utils::ConstSlice<T> source, const HeContext& context, Plaintext& destination, MemoryPoolHandle pool) const;
             
             void scale_down(const Plaintext& input, const HeContext& context, utils::Slice<T> destination, MemoryPoolHandle pool) const;
             void decentralize(const Plaintext& input, const HeContext& context, utils::Slice<T> destination, T correction_factor, MemoryPoolHandle pool) const;
@@ -155,7 +124,7 @@ namespace troy::linear {
             }
             void scale_up(const std::vector<T>& source, std::optional<ParmsID> parms_id, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
                 if (on_device()) {
-                    utils::Array<T> source_array(source.size(), true, pool); 
+                    utils::Array<T> source_array = utils::Array<T>::create_uninitialized(source.size(), true, pool); 
                     source_array.copy_from_slice(utils::ConstSlice<T>(source.data(), source.size(), false, nullptr));
                     this->scale_up_slice(source_array.const_reference(), parms_id, destination, pool);
                 } else {
@@ -184,7 +153,7 @@ namespace troy::linear {
             }
             void centralize(const std::vector<T>& source, std::optional<ParmsID> parms_id, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
                 if (on_device()) {
-                    utils::Array<T> source_array(source.size(), true, pool); 
+                    utils::Array<T> source_array = utils::Array<T>::create_uninitialized(source.size(), true, pool); 
                     source_array.copy_from_slice(utils::ConstSlice<T>(source.data(), source.size(), false, nullptr));
                     this->centralize_slice(source_array.const_reference(), parms_id, destination, pool);
                 } else {
