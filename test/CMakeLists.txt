@@ -70,6 +70,12 @@ if(TROY_BENCH)
     )
     target_link_libraries(troybench troy)
 
+    add_executable(bench_ntt)
+    target_sources(bench_ntt PRIVATE 
+        bench/ntt.cu
+    )
+    target_link_libraries(bench_ntt troy)
+
     add_executable(bench_matmul)
     target_sources(bench_matmul PRIVATE 
         argparse.cpp
@@ -79,11 +85,13 @@ if(TROY_BENCH)
     )
     target_link_libraries(bench_matmul troy)
 
-    add_executable(bench_ntt)
-    target_sources(bench_ntt PRIVATE 
-        bench/ntt.cu
+    add_executable(bench_conv2d)
+    target_sources(bench_conv2d PRIVATE 
+        argparse.cpp
+        bench/conv2d.cu
+        test_adv.cu
     )
-    target_link_libraries(bench_ntt troy)
+    target_link_libraries(bench_conv2d troy)
 
 endif()
 

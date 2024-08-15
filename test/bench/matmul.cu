@@ -164,6 +164,10 @@ namespace bench::matmul {
             std::cout << "  --bgv                       Run BGV scheme" << std::endl;
             std::cout << "      Exactly one of --bfv, --ckks, or --bgv should be set." << std::endl;
             std::cout << std::endl;
+            std::cout << "  -m, --m                     LHS rows (default: 10)" << std::endl;
+            std::cout << "  -r, --r                     LHS columns = RHS rows (default: 10)" << std::endl;
+            std::cout << "  -n, --n                     RHS columns (default: 10)" << std::endl;
+            std::cout << std::endl;
             std::cout << "  -R, --repeat                Repeat count (default: 1)" << std::endl;
             std::cout << "  -N, --poly-modulus-degree   Poly modulus degree (default: 8192)" << std::endl;
             std::cout << "  -st, --simd-log-t           SIMD log t (default: 40)" << std::endl;
