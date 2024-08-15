@@ -4,12 +4,6 @@
 using namespace std;
 using namespace troy;
 
-void custom_assert(bool condition) {
-    if (!condition) {
-        throw std::runtime_error("assertion failed");
-    }
-}
-
 void single_device_multiple_pools(size_t thread_count) {
 
     std::cout << "Example for single device with multiple memory pools." << std::endl;

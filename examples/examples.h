@@ -30,7 +30,10 @@ void example_rotation();
 void example_serialization();
 void example_bfv_matmul();
 void example_ckks_matmul();
+void example_lwes();
+void example_ring2k();
 void example_memory_pools();
+void example_bfv_conv2d();
 
 /*
 Helper function: Prints the name of the example in a fancy banner.
@@ -228,4 +231,12 @@ inline std::string uint64_to_hex_string(std::uint64_t value)
     std::stringstream stream;
     stream << "0x" << std::hex << value;
     return stream.str();
+}
+
+inline void custom_assert(bool condition, const std::string &message = "Assertion failed")
+{
+    if (!condition)
+    {
+        throw std::runtime_error(message);
+    }
 }

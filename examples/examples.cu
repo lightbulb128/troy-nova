@@ -25,6 +25,9 @@ int main()
         cout << "|  7. Serialization          |  7_serialization.cu        |" << endl;
         cout << "| 10. BFV MatMul             | 10_bfv_matmul.cu           |" << endl;
         cout << "| 11. CKKS MatMul            | 11_ckks_matmul.cu          |" << endl;
+        cout << "| 12. LWEs                   | 12_lwes.cu                 |" << endl;
+        cout << "| 13. Ring2k                 | 13_ring2k.cu               |" << endl;
+        cout << "| 14. BFV Conv2d             | 14_bfv_conv2d.cu           |" << endl;
         cout << "| 20. Memory Pools           | 20_memory_pools.cu         |" << endl;
         cout << "| 99. Quickstart             | 99_quickstart.cu           |" << endl;
         cout << "+----------------------------+----------------------------+" << endl;
@@ -86,6 +89,18 @@ int main()
 
         case 11:
             example_ckks_matmul();
+            break;
+
+        case 12:
+            example_lwes();
+            break;
+
+        case 13:
+            example_ring2k();
+            break;
+
+        case 14:
+            example_bfv_conv2d();
             break;
 
         case 20:

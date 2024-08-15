@@ -11,6 +11,9 @@ target_sources(troyexamples PRIVATE
     7_serialization.cu
     10_bfv_matmul.cu
     11_ckks_matmul.cu
+    12_lwes.cu
+    13_ring2k.cu
+    14_bfv_conv2d.cu
     20_memory_pools.cu
     99_quickstart.cu
 )
