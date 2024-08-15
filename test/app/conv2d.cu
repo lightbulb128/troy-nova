@@ -5,7 +5,7 @@
 #include "../test.h"
 
 
-namespace matmul {
+namespace conv2d {
 
     using namespace troy;
     using namespace troy::linear;
@@ -57,9 +57,9 @@ namespace matmul {
         const Evaluator& evaluator = context.evaluator();
         const Decryptor& decryptor = context.decryptor();
         
-        Plain2d x_encoded = helper.encode_inputs(encoder, x.integers().data());
-        Plain2d w_encoded = helper.encode_weights(encoder, w.integers().data());
-        Plain2d s_encoded = helper.encode_outputs(encoder, s.integers().data());
+        Plain2d x_encoded = helper.encode_inputs_uint64s(encoder, x.integers().data());
+        Plain2d w_encoded = helper.encode_weights_uint64s(encoder, w.integers().data());
+        Plain2d s_encoded = helper.encode_outputs_uint64s(encoder, s.integers().data());
 
         Cipher2d x_encrypted = x_encoded.encrypt_asymmetric(encryptor);
 
@@ -78,7 +78,7 @@ namespace matmul {
         helper.serialize_outputs(evaluator, y_encrypted, y_serialized);
         y_encrypted = helper.deserialize_outputs(evaluator, y_serialized);
 
-        vector<uint64_t> y_decrypted = helper.decrypt_outputs(encoder, decryptor, y_encrypted);   
+        vector<uint64_t> y_decrypted = helper.decrypt_outputs_uint64s(encoder, decryptor, y_encrypted);   
 
         vector<uint64_t> y_truth(bs * oc * oh * ow, 0);
         for (size_t b = 0; b < bs; b++) {
@@ -114,16 +114,31 @@ namespace matmul {
     }
 
 
-    TEST(Conv2dTest, HostConv2d) {
+    TEST(Conv2dTest, HostBFVConv2d) {
         GeneralHeContext ghe(false, SchemeType::BFV, 1024, 40, { 60, 40, 40, 60 }, true, 0x123, 0);
         srand(0);
         test_conv2d(ghe, 2, 3, 6, 7, 9, 3, 5, false);
         test_conv2d(ghe, 2, 3, 10, 56, 56, 10, 10, false);
     }
 
-    TEST(Conv2dTest, DeviceConv2d) {
+    TEST(Conv2dTest, DeviceBFVConv2d) {
         SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 1024, 40, { 60, 40, 40, 60 }, true, 0x123, 0);
+        srand(0);
+        test_conv2d(ghe, 2, 3, 6, 7, 9, 3, 5, false);
+        test_conv2d(ghe, 2, 3, 10, 56, 56, 10, 10, false);
+    }
+    
+    TEST(Conv2dTest, HostBGVConv2d) {
+        GeneralHeContext ghe(false, SchemeType::BGV, 1024, 40, { 60, 40, 40, 60 }, true, 0x123, 0);
+        srand(0);
+        test_conv2d(ghe, 2, 3, 6, 7, 9, 3, 5, false);
+        test_conv2d(ghe, 2, 3, 10, 56, 56, 10, 10, false);
+    }
+
+    TEST(Conv2dTest, DeviceBGVConv2d) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::BGV, 1024, 40, { 60, 40, 40, 60 }, true, 0x123, 0);
         srand(0);
         test_conv2d(ghe, 2, 3, 6, 7, 9, 3, 5, false);
         test_conv2d(ghe, 2, 3, 10, 56, 56, 10, 10, false);

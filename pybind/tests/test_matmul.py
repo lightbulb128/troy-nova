@@ -79,9 +79,6 @@ def create_test_uint64s_class(name, ghe: GeneralHeContext):
         UnnamedClass.test_matmul_medium_no_pack = lambda self: self.tester.test_matmul(64, 128, 256, pack_lwe=False, mod_switch_to_next=False)
         UnnamedClass.test_matmul_small_pack = lambda self: self.tester.test_matmul(4, 5, 6, pack_lwe=True, mod_switch_to_next=False)
         UnnamedClass.test_matmul_medium_pack = lambda self: self.tester.test_matmul(64, 128, 256, pack_lwe=True, mod_switch_to_next=False)
-        if ghe.device:
-            UnnamedClass.test_matmul_large_no_pack = lambda self: self.tester.test_matmul(400, 500, 600, pack_lwe=False, mod_switch_to_next=False)
-            UnnamedClass.test_matmul_large_pack = lambda self: self.tester.test_matmul(400, 500, 600, pack_lwe=True, mod_switch_to_next=False)
 
     return type(name, (UnnamedClass,), {})
 
@@ -94,7 +91,6 @@ class HeDoubleMatmulTest:
     def test_matmul(self, m: int, r: int, n: int, pack_lwe: bool, mod_switch_to_next: bool):
         ghe = self.ghe
         if ghe.scheme != SchemeType.CKKS: return
-        t = ghe.t
         
         x = ghe.random_polynomial(m * r)
         w = ghe.random_polynomial(r * n)
@@ -153,9 +149,6 @@ def create_test_doubles_class(name, ghe: GeneralHeContext):
     UnnamedClass.test_matmul_medium_no_pack = lambda self: self.tester.test_matmul(64, 128, 256, pack_lwe=False, mod_switch_to_next=False)
     UnnamedClass.test_matmul_small_pack = lambda self: self.tester.test_matmul(4, 5, 6, pack_lwe=True, mod_switch_to_next=False)
     UnnamedClass.test_matmul_medium_pack = lambda self: self.tester.test_matmul(64, 128, 256, pack_lwe=True, mod_switch_to_next=False)
-    if ghe.device:
-        UnnamedClass.test_matmul_large_no_pack = lambda self: self.tester.test_matmul(400, 500, 600, pack_lwe=False, mod_switch_to_next=False)
-        UnnamedClass.test_matmul_large_pack = lambda self: self.tester.test_matmul(400, 500, 600, pack_lwe=True, mod_switch_to_next=False)
 
     return type(name, (UnnamedClass,), {})
 

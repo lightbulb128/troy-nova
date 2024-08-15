@@ -32,11 +32,13 @@ if(TROY_TEST)
 
         lwe.cu
         
+        app/bfv_ring2k.cu
         app/matmul.cu
         app/matmul_ckks.cu
-        app/conv2d.cu
-        app/bfv_ring2k.cu
         app/matmul_ring2k.cu
+        app/conv2d.cu
+        app/conv2d_ckks.cu
+        app/conv2d_ring2k.cu
 
         special_prime_for_encryption.cu
 

@@ -1,6 +1,31 @@
 #include "conv2d.h"
 
 namespace troy { namespace linear {
+    
+    std::ostream& operator<<(std::ostream& os, const Conv2dHelper& helper) {
+        os << "Conv2dHelper("
+            << "batch_size=" << helper.batch_size << ", "
+            << "input_channels=" << helper.input_channels << ", "
+            << "output_channels=" << helper.output_channels << ", "
+            << "image_height=" << helper.image_height << ", "
+            << "image_width=" << helper.image_width << ", "
+            << "kernel_height=" << helper.kernel_height << ", "
+            << "kernel_width=" << helper.kernel_width << ", "
+            << "slot_count=" << helper.slot_count << ", "
+            << "objective=" << helper.objective
+            << ")";
+        return os;
+    }
+
+    using uint128_t = __uint128_t;
+
+    #define D_IMPL_ALL                                               \
+        D_IMPL(BatchEncoderAdapter, uint64_t)                        \
+        D_IMPL(CKKSEncoderAdapter, double)                           \
+        D_IMPL(PolynomialEncoderRing2kAdapter<uint32_t>, uint32_t)   \
+        D_IMPL(PolynomialEncoderRing2kAdapter<uint64_t>, uint64_t)   \
+        D_IMPL(PolynomialEncoderRing2kAdapter<uint128_t>, uint128_t)
+
 
     void Conv2dHelper::determine_block() {
         size_t best = 2147483647;
@@ -62,21 +87,32 @@ namespace troy { namespace linear {
         // printf("Conv2dHelper: batch_block = %zu, image_height_block = %zu, image_width_block = %zu, input_channel_block = %zu, output_channel_block = %zu\n", batch_block, image_height_block, image_width_block, input_channel_block, output_channel_block);
     }
 
-    Plain2d Conv2dHelper::encode_weights(
-        const BatchEncoder& encoder, 
-        const uint64_t* weights
+    template <typename E, typename T>
+    void Conv2dHelper::encode_weights(
+        const E& encoder, const Encryptor* encryptor, const T* weights, 
+        bool for_cipher, Plain2d* out_plain, Cipher2d* out_cipher
     ) const {
         size_t block_size = image_height_block * image_width_block;
-        Plain2d encoded_weights;
-        encoded_weights.data().clear();
-        encoded_weights.data().reserve(ceil_div(output_channels, output_channel_block));
+        if (out_plain) {
+            out_plain->data().clear();
+            out_plain->data().reserve(ceil_div(output_channels, output_channel_block));
+        } else {
+            if (!out_cipher || !encryptor) throw std::runtime_error("[Conv2dHelper::encode_weights]: out_cipher is null");
+            out_cipher->data().clear();
+            out_cipher->data().reserve(ceil_div(output_channels, output_channel_block));
+        }
         for (size_t loc = 0; loc < output_channels; loc += output_channel_block) {
             size_t uoc = std::min(loc + output_channel_block, output_channels);
-            std::vector<Plaintext> current_channel;
-            current_channel.reserve(ceil_div(input_channels, input_channel_block));
+            std::vector<Plaintext> current_channel_plain;
+            std::vector<Ciphertext> current_channel_cipher;
+            if (out_plain) {
+                current_channel_plain.reserve(ceil_div(input_channels, input_channel_block));
+            } else {
+                current_channel_cipher.reserve(ceil_div(input_channels, input_channel_block));
+            }
             for (size_t lic = 0; lic < input_channels; lic += input_channel_block) {
                 size_t uic = std::min(lic + input_channel_block, input_channels);
-                std::vector<uint64_t> spread(input_channel_block * output_channel_block * image_height_block * image_width_block, 0);
+                std::vector<T> spread(input_channel_block * output_channel_block * image_height_block * image_width_block, 0);
                 for (size_t oc = loc; oc < uoc; oc++) {
                     for (size_t ic = lic; ic < uic; ic++) {
                         for (size_t ki = 0; ki < kernel_height; ki++) {
@@ -89,13 +125,30 @@ namespace troy { namespace linear {
                         }
                     }
                 }
-                Plaintext pt; encoder.encode_polynomial(spread, pt, pool);
-                current_channel.push_back(std::move(pt));
+                Plaintext pt = for_cipher
+                    ? encoder.encode_for_cipher(spread, pool)
+                    : encoder.encode_for_plain(spread, pool);
+                if (out_plain) {
+                    current_channel_plain.push_back(std::move(pt));
+                } else {
+                    current_channel_cipher.push_back(encryptor->encrypt_symmetric_new(pt, true, nullptr, pool));
+                }
             }
-            encoded_weights.data().push_back(std::move(current_channel));
+            if (out_plain) {
+                out_plain->data().push_back(std::move(current_channel_plain));
+            } else {
+                out_cipher->data().push_back(std::move(current_channel_cipher));
+            }
         }
-        return encoded_weights;
     }
+
+    #define D_IMPL(adapter, dtype) \
+        template void Conv2dHelper::encode_weights<adapter, dtype>( \
+            const adapter& encoder, const Encryptor* encryptor, const dtype* weights, \
+            bool for_cipher, Plain2d* out_plain, Cipher2d* out_cipher \
+        ) const;
+    D_IMPL_ALL
+    #undef D_IMPL
 
     size_t Conv2dHelper::get_total_batch_size() const {
         size_t kh = kernel_height - 1, kw = kernel_width - 1;
@@ -104,17 +157,25 @@ namespace troy { namespace linear {
         return ceil_div(batch_size, batch_block) * sh * sw;
     }
 
-    Plain2d Conv2dHelper::encode_inputs(
-        const BatchEncoder& encoder, 
-        const uint64_t* inputs
+    template <typename E, typename T>
+    void Conv2dHelper::encode_inputs(
+        const E& encoder, const Encryptor* encryptor, const T* inputs,
+        bool for_cipher, Plain2d* out_plain, Cipher2d* out_cipher
     ) const {
         size_t kh = kernel_height - 1, kw = kernel_width - 1;
         size_t sh = ceil_div(image_height - kh, image_height_block - kh);
         size_t sw = ceil_div(image_width - kw, image_width_block - kw);
-        size_t imageSize = image_height * image_width;
+        size_t image_size = image_height * image_width;
         size_t block_size = image_height_block * image_width_block;
-        size_t totalBatch_size = ceil_div(batch_size, batch_block) * sh * sw;
-        Plain2d ret; ret.data().reserve(totalBatch_size);
+        size_t total_batch_size = ceil_div(batch_size, batch_block) * sh * sw;
+        if (out_plain) {
+            out_plain->data().clear();
+            out_plain->data().reserve(total_batch_size);
+        } else {
+            if (!out_cipher || !encryptor) throw std::runtime_error("[Conv2dHelper::encode_inputs]: out_cipher is null");
+            out_cipher->data().clear();
+            out_cipher->data().reserve(total_batch_size);
+        }
         for (size_t lb = 0; lb < batch_size; lb += batch_block) {
             size_t ub = std::min(lb + batch_block, batch_size);
             for (size_t ih = 0; ih < sh; ih++) {
@@ -123,15 +184,21 @@ namespace troy { namespace linear {
                     size_t sj = iw * (image_width_block - kw);
                     size_t ui = std::min(si + image_height_block, image_height);
                     size_t uj = std::min(sj + image_width_block, image_width);
-                    std::vector<Plaintext> group; group.reserve(ceil_div(input_channels, input_channel_block));
+                    std::vector<Plaintext> group_plain;
+                    std::vector<Ciphertext> group_cipher;
+                    if (out_plain) {
+                        group_plain.reserve(ceil_div(input_channels, input_channel_block));
+                    } else {
+                        group_cipher.reserve(ceil_div(input_channels, input_channel_block));
+                    }
                     for (size_t lci = 0; lci < input_channels; lci += input_channel_block) {
                         size_t uci = std::min(lci + input_channel_block, input_channels);
-                        std::vector<uint64_t> vec(slot_count, 0);
+                        std::vector<T> vec(slot_count, 0);
                         for (size_t b = 0; b < ub-lb; b++) {
                             for (size_t tci = 0; tci < uci-lci; tci++) {
                                 for (size_t ti = si; ti < ui; ti++) {
                                     for (size_t tj = sj; tj < uj; tj++) {
-                                        size_t inputIndex = (lb + b) * input_channels * imageSize + (lci + tci) * imageSize + ti * image_width + tj;
+                                        size_t inputIndex = (lb + b) * input_channels * image_size + (lci + tci) * image_size + ti * image_width + tj;
                                         size_t vecIndex = b * input_channel_block * output_channel_block * block_size 
                                             + tci * block_size + (ti - si) * image_width_block + (tj - sj);
                                         // printf("inputIndex: %lu, vecIndex: %lu, b=%lu, tci=%lu,ti-si=%lu, tj-sj=%ld\n", inputIndex, vecIndex, b, tci, ti-si, tj-sj);
@@ -142,44 +209,144 @@ namespace troy { namespace linear {
                             }
                         }
                         // printf("encode lb=%lu, ub=%lu, ih=%lu, iw=%lu, lci=%lu, uci=%lu, vecsize=%lu\n", lb, ub, ih, iw, lci, uci, vec.size());
-                        Plaintext pt; encoder.encode_polynomial(vec, pt, pool);
-                        // printf("encode ok\n");
-                        group.push_back(std::move(pt));
+                        Plaintext pt = for_cipher
+                            ? encoder.encode_for_cipher(vec, pool)
+                            : encoder.encode_for_plain(vec, pool);
+                        if (out_plain) {
+                            group_plain.push_back(std::move(pt));
+                        } else {
+                            group_cipher.push_back(encryptor->encrypt_symmetric_new(pt, true, nullptr, pool));
+                        }
                     }
-                    ret.data().push_back(std::move(group));
+                    if (out_plain) {
+                        out_plain->data().push_back(std::move(group_plain));
+                    } else {
+                        out_cipher->data().push_back(std::move(group_cipher));
+                    }
+                }
+            }
+        }
+    }
+
+    #define D_IMPL(adapter, dtype) \
+        template void Conv2dHelper::encode_inputs<adapter, dtype>( \
+            const adapter& encoder, const Encryptor* encryptor, const dtype* inputs, \
+            bool for_cipher, Plain2d* out_plain, Cipher2d* out_cipher \
+        ) const;
+    D_IMPL_ALL
+    #undef D_IMPL
+
+    template <typename E, typename T>
+    Plain2d Conv2dHelper::encode_outputs(const E& encoder, const T* outputs) const {
+        size_t interval = image_width_block * image_height_block;
+        std::vector<T> mask(slot_count, 0);
+        auto total_batch_size = get_total_batch_size();
+        size_t yh = image_height_block - kernel_height + 1;
+        size_t yw = image_width_block  - kernel_width  + 1;
+        size_t oyh = image_height - kernel_height + 1;
+        size_t oyw = image_width - kernel_width + 1;
+        Plain2d ret; ret.data().reserve(total_batch_size);
+        size_t kh = kernel_height - 1, kw = kernel_width - 1;
+        size_t sh = ceil_div(image_height - kh, image_height_block - kh);
+        size_t sw = ceil_div(image_width - kw, image_width_block - kw);
+        assert(total_batch_size == ceil_div(batch_size, batch_block) * sh * sw);
+        Plaintext encoded;
+        for (size_t eb = 0; eb < total_batch_size; eb++) {
+            size_t ob = eb / (sh * sw);
+            size_t si = (eb % (sh * sw)) / sw;
+            size_t sj = eb % sw;
+            size_t lb = ob * batch_block, ub = std::min(lb + batch_block, batch_size);
+            std::vector<Plaintext> group; group.reserve(ceil_div(output_channels, output_channel_block));
+            for (size_t lc = 0; lc < output_channels; lc += output_channel_block) {
+                size_t uc = std::min(lc + output_channel_block, output_channels);
+                for (size_t b = lb; b < ub; b++) {
+                    for (size_t c = lc; c < uc; c++) {
+                        for (size_t i = 0; i < yh; i++) {
+                            for (size_t j = 0; j < yw; j++) {
+                                size_t mask_index = ((b - lb) * input_channel_block * output_channel_block + (c - lc) * input_channel_block + input_channel_block - 1) * interval + (image_height_block - yh + i) * image_width_block + (image_width_block - yw + j);
+                                size_t original_index = b * output_channels * oyh * oyw + c * oyh * oyw + (si * yh + i) * oyw + (sj * yw + j);
+                                if (si * yh + i < oyh && sj * yw + j < oyw) mask[mask_index] = outputs[original_index];
+                            }
+                        }
+                    }
+                }
+                Plaintext encoded = encoder.encode_for_cipher(mask, pool);
+                group.push_back(std::move(encoded));
+            }
+            ret.data().push_back(std::move(group));
+        }
+        return ret;
+    }
+
+    #define D_IMPL(adapter, dtype) \
+        template Plain2d Conv2dHelper::encode_outputs<adapter, dtype>( \
+            const adapter& encoder, const dtype* outputs \
+        ) const;
+    D_IMPL_ALL
+    #undef D_IMPL
+
+
+    template <typename E, typename T>
+    std::vector<T> Conv2dHelper::decrypt_outputs(const E& encoder, const Decryptor& decryptor, const Cipher2d& outputs) const {
+        size_t interval = image_width_block * image_height_block;
+        auto total_batch_size = get_total_batch_size();
+        size_t yh = image_height_block - kernel_height + 1;
+        size_t yw = image_width_block  - kernel_width  + 1;
+        size_t oyh = image_height - kernel_height + 1;
+        size_t oyw = image_width - kernel_width + 1;
+        std::vector<T> ret(batch_size * output_channels * oyh * oyw, 0);
+        size_t kh = kernel_height - 1, kw = kernel_width - 1;
+        size_t sh = ceil_div(image_height - kh, image_height_block - kh);
+        size_t sw = ceil_div(image_width - kw, image_width_block - kw);
+        assert(total_batch_size == ceil_div(batch_size, batch_block) * sh * sw);
+        Plaintext encoded;
+        for (size_t eb = 0; eb < total_batch_size; eb++) {
+            size_t ob = eb / (sh * sw);
+            size_t si = (eb % (sh * sw)) / sw;
+            size_t sj = eb % sw;
+            size_t lb = ob * batch_block, ub = std::min(lb + batch_block, batch_size);
+            for (size_t lc = 0; lc < output_channels; lc += output_channel_block) {
+                size_t uc = std::min(lc + output_channel_block, output_channels);
+                // printf("Decrypting block [%lu][%lu]\n", eb, lc / output_channel_block);
+                const Ciphertext& target = outputs[eb][lc / output_channel_block];
+                std::vector<T> buffer = encoder.decrypt_outputs(decryptor, target, pool);
+                for (size_t b = lb; b < ub; b++) {
+                    for (size_t c = lc; c < uc; c++) {
+                        for (size_t i = 0; i < yh; i++) {
+                            for (size_t j = 0; j < yw; j++) {
+                                size_t mask_index = ((b - lb) * input_channel_block * output_channel_block + (c - lc) * input_channel_block + input_channel_block - 1) * interval + (image_height_block - yh + i) * image_width_block + (image_width_block - yw + j);
+                                size_t original_index = b * output_channels * oyh * oyw + c * oyh * oyw + (si * yh + i) * oyw + (sj * yw + j);
+                                // printf("Original[%lu][%lu][%lu][%lu] <- idx[%lu]\n", b, c, si * yh + i, sj * yw + j, mask_index);
+                                if (si * yh + i < oyh && sj * yw + j < oyw) {
+                                    ret[original_index] = buffer[mask_index];
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
         return ret;
     }
 
-    Cipher2d Conv2dHelper::encrypt_inputs(
-        const Encryptor& encryptor,
-        const BatchEncoder& encoder, 
-        const uint64_t* inputs
-    ) const {
-        Plain2d plain = encode_inputs(encoder, inputs);
-        return plain.encrypt_symmetric(encryptor, pool);
-    }
+    #define D_IMPL(adapter, dtype) \
+        template std::vector<dtype> Conv2dHelper::decrypt_outputs<adapter, dtype>( \
+            const adapter& encoder, const Decryptor& decryptor, const Cipher2d& outputs \
+        ) const;
+    D_IMPL_ALL
+    #undef D_IMPL
 
     Cipher2d Conv2dHelper::conv2d(const Evaluator& evaluator, const Cipher2d& a, const Plain2d& encoded_weights) const {
-
-        // Timer tim; auto t1 = tim.registerTimer("muladds");
-        // size_t muladds = 0;
-
-        size_t totalBatch_size = get_total_batch_size();
-        Cipher2d ret; ret.data().reserve(totalBatch_size);
-        for (size_t b = 0; b < totalBatch_size; b++) {
+        size_t total_batch_size = get_total_batch_size();
+        Cipher2d ret; ret.data().reserve(total_batch_size);
+        for (size_t b = 0; b < total_batch_size; b++) {
             size_t groupLen = ceil_div(output_channels, output_channel_block);
             std::vector<Ciphertext> group; group.reserve(groupLen);
             for (size_t oc = 0; oc < groupLen; oc++) {
                 Ciphertext cipher;
                 for (size_t i = 0; i < a[b].size(); i++) {
                     Ciphertext prod;
-                    // tim.tick(t1);
                     evaluator.multiply_plain(a[b][i], encoded_weights[oc][i], prod, pool);
-                    // muladds ++;
-                    // tim.tock(t1);
                     if (i==0) cipher = std::move(prod);
                     else evaluator.add_inplace(cipher, prod, pool);
                 }
@@ -187,14 +354,13 @@ namespace troy { namespace linear {
             }
             ret.data().push_back(std::move(group));
         }
-        // printTimer(tim.gather(muladds));
         return ret;
     }
 
     Cipher2d Conv2dHelper::conv2d_cipher(const Evaluator& evaluator, const Cipher2d& a, const Cipher2d& encoded_weights) const {
-        size_t totalBatch_size = get_total_batch_size();
-        Cipher2d ret; ret.data().reserve(totalBatch_size);
-        for (size_t b = 0; b < totalBatch_size; b++) {
+        size_t total_batch_size = get_total_batch_size();
+        Cipher2d ret; ret.data().reserve(total_batch_size);
+        for (size_t b = 0; b < total_batch_size; b++) {
             size_t groupLen = ceil_div(output_channels, output_channel_block);
             std::vector<Ciphertext> group; group.reserve(groupLen);
             for (size_t oc = 0; oc < groupLen; oc++) {
@@ -213,9 +379,9 @@ namespace troy { namespace linear {
     }
 
     Cipher2d Conv2dHelper::conv2d_reverse(const Evaluator& evaluator, const Plain2d& a, const Cipher2d& encoded_weights) const {
-        size_t totalBatch_size = get_total_batch_size();
-        Cipher2d ret; ret.data().reserve(totalBatch_size);
-        for (size_t b = 0; b < totalBatch_size; b++) {
+        size_t total_batch_size = get_total_batch_size();
+        Cipher2d ret; ret.data().reserve(total_batch_size);
+        for (size_t b = 0; b < total_batch_size; b++) {
             size_t groupLen = ceil_div(output_channels, output_channel_block);
             std::vector<Ciphertext> group; group.reserve(groupLen);
             for (size_t oc = 0; oc < groupLen; oc++) {
@@ -233,100 +399,8 @@ namespace troy { namespace linear {
         return ret;
     }
 
-    Plain2d Conv2dHelper::encode_outputs(
-        const BatchEncoder& encoder,
-        const uint64_t* outputs
-    ) const {
-        size_t interval = image_width_block * image_height_block;
-        std::vector<uint64_t> mask(slot_count, 0);
-        auto totalBatch_size = get_total_batch_size();
-        size_t yh = image_height_block - kernel_height + 1;
-        size_t yw = image_width_block  - kernel_width  + 1;
-        size_t oyh = image_height - kernel_height + 1;
-        size_t oyw = image_width - kernel_width + 1;
-        Plain2d ret; ret.data().reserve(totalBatch_size);
-        size_t kh = kernel_height - 1, kw = kernel_width - 1;
-        size_t sh = ceil_div(image_height - kh, image_height_block - kh);
-        size_t sw = ceil_div(image_width - kw, image_width_block - kw);
-        assert(totalBatch_size == ceil_div(batch_size, batch_block) * sh * sw);
-        Plaintext encoded;
-        std::vector<uint64_t> buffer;
-        for (size_t eb = 0; eb < totalBatch_size; eb++) {
-            size_t ob = eb / (sh * sw);
-            size_t si = (eb % (sh * sw)) / sw;
-            size_t sj = eb % sw;
-            size_t lb = ob * batch_block, ub = std::min(lb + batch_block, batch_size);
-            std::vector<Plaintext> group; group.reserve(ceil_div(output_channels, output_channel_block));
-            for (size_t lc = 0; lc < output_channels; lc += output_channel_block) {
-                size_t uc = std::min(lc + output_channel_block, output_channels);
-                for (size_t b = lb; b < ub; b++) {
-                    for (size_t c = lc; c < uc; c++) {
-                        for (size_t i = 0; i < yh; i++) {
-                            for (size_t j = 0; j < yw; j++) {
-                                size_t mask_index = ((b - lb) * input_channel_block * output_channel_block + (c - lc) * input_channel_block + input_channel_block - 1) * interval + (image_height_block - yh + i) * image_width_block + (image_width_block - yw + j);
-                                size_t originalIndex = b * output_channels * oyh * oyw + c * oyh * oyw + (si * yh + i) * oyw + (sj * yw + j);
-                                if (si * yh + i < oyh && sj * yw + j < oyw)  mask[mask_index] = outputs[originalIndex];
-                            }
-                        }
-                    }
-                }
-                Plaintext encoded; encoder.encode_polynomial(mask, encoded, pool);
-                group.push_back(std::move(encoded));
-            }
-            ret.data().push_back(std::move(group));
-        }
-        return ret;
-    }
-
-    std::vector<uint64_t> Conv2dHelper::decrypt_outputs(
-        const BatchEncoder& encoder,
-        const Decryptor& decryptor,
-        const Cipher2d& outputs
-    ) const {
-        size_t interval = image_width_block * image_height_block;
-        auto totalBatch_size = get_total_batch_size();
-        size_t yh = image_height_block - kernel_height + 1;
-        size_t yw = image_width_block  - kernel_width  + 1;
-        size_t oyh = image_height - kernel_height + 1;
-        size_t oyw = image_width - kernel_width + 1;
-        std::vector<uint64_t> ret(batch_size * output_channels * oyh * oyw, 0);
-        size_t kh = kernel_height - 1, kw = kernel_width - 1;
-        size_t sh = ceil_div(image_height - kh, image_height_block - kh);
-        size_t sw = ceil_div(image_width - kw, image_width_block - kw);
-        assert(totalBatch_size == ceil_div(batch_size, batch_block) * sh * sw);
-        Plaintext encoded;
-        std::vector<uint64_t> buffer;
-        for (size_t eb = 0; eb < totalBatch_size; eb++) {
-            size_t ob = eb / (sh * sw);
-            size_t si = (eb % (sh * sw)) / sw;
-            size_t sj = eb % sw;
-            size_t lb = ob * batch_block, ub = std::min(lb + batch_block, batch_size);
-            for (size_t lc = 0; lc < output_channels; lc += output_channel_block) {
-                size_t uc = std::min(lc + output_channel_block, output_channels);
-                // printf("Decrypting block [%lu][%lu]\n", eb, lc / output_channel_block);
-                decryptor.decrypt(outputs[eb][lc / output_channel_block], encoded, pool);
-                encoder.decode_polynomial(encoded, buffer);
-                for (size_t b = lb; b < ub; b++) {
-                    for (size_t c = lc; c < uc; c++) {
-                        for (size_t i = 0; i < yh; i++) {
-                            for (size_t j = 0; j < yw; j++) {
-                                size_t mask_index = ((b - lb) * input_channel_block * output_channel_block + (c - lc) * input_channel_block + input_channel_block - 1) * interval + (image_height_block - yh + i) * image_width_block + (image_width_block - yw + j);
-                                size_t originalIndex = b * output_channels * oyh * oyw + c * oyh * oyw + (si * yh + i) * oyw + (sj * yw + j);
-                                // printf("Original[%lu][%lu][%lu][%lu] <- idx[%lu]\n", b, c, si * yh + i, sj * yw + j, mask_index);
-                                if (si * yh + i < oyh && sj * yw + j < oyw) {
-                                    ret[originalIndex] = buffer[mask_index];
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        return ret;
-    }
-
-    void Conv2dHelper::serialize_outputs(const Evaluator &evaluator, const Cipher2d& x, std::ostream& stream) const {
-        auto totalBatch_size = get_total_batch_size();
+    void Conv2dHelper::serialize_outputs(const Evaluator &evaluator, const Cipher2d& x, std::ostream& stream, CompressionMode mode) const {
+        auto total_batch_size = get_total_batch_size();
         size_t interval = image_width_block * image_height_block;
         
         size_t yh = image_height_block - kernel_height + 1;
@@ -346,14 +420,14 @@ namespace troy { namespace linear {
             }
         }
 
-        for (size_t b = 0; b < totalBatch_size; b++) {
+        for (size_t b = 0; b < total_batch_size; b++) {
             for (size_t oc = 0; oc < ceil_div(output_channels, output_channel_block); oc++) 
-                x[b][oc].save_terms(stream, evaluator.context(), required);
+                x[b][oc].save_terms(stream, evaluator.context(), required, pool, mode);
         }
     }
 
     Cipher2d Conv2dHelper::deserialize_outputs(const Evaluator &evaluator, std::istream& stream) const {
-        auto totalBatch_size = get_total_batch_size();
+        auto total_batch_size = get_total_batch_size();
         size_t interval = image_width_block * image_height_block;
         
         size_t yh = image_height_block - kernel_height + 1;
@@ -373,8 +447,8 @@ namespace troy { namespace linear {
             }
         }
 
-        Cipher2d ret; ret.data().reserve(totalBatch_size);
-        for (size_t b = 0; b < totalBatch_size; b++) {
+        Cipher2d ret; ret.data().reserve(total_batch_size);
+        for (size_t b = 0; b < total_batch_size; b++) {
             std::vector<Ciphertext> row(output_channels);
             for (size_t oc = 0; oc < ceil_div(output_channels, output_channel_block); oc++) 
                 row[oc].load_terms(stream, evaluator.context(), required, pool);
@@ -382,5 +456,162 @@ namespace troy { namespace linear {
         }
         return ret;
     }
+
+    #undef D_IMPL_ALL
     
+
+    // ------------------ adapters -----------------------
+
+
+    Plain2d Conv2dHelper::encode_weights_uint64s(const BatchEncoder& encoder, const uint64_t* weights) const {
+        BatchEncoderAdapter adapter(encoder); Plain2d ret;
+        encode_weights(adapter, nullptr, weights, false, &ret, nullptr);
+        return ret;
+    }
+    Plain2d Conv2dHelper::encode_weights_doubles(const CKKSEncoder& encoder, const double* weights, std::optional<ParmsID> parms_id, double scale) const {
+        CKKSEncoderAdapter adapter(encoder, parms_id, scale); Plain2d ret;
+        encode_weights(adapter, nullptr, weights, false, &ret, nullptr);
+        return ret;
+    }
+    template <typename T>
+    Plain2d Conv2dHelper::encode_weights_ring2k(const PolynomialEncoderRing2k<T>& encoder, const T* weights, std::optional<ParmsID> parms_id, bool for_cipher) const {
+        PolynomialEncoderRing2kAdapter<T> adapter(encoder, parms_id); Plain2d ret;
+        encode_weights(adapter, nullptr, weights, for_cipher, &ret, nullptr);
+        return ret;
+    }
+    template Plain2d Conv2dHelper::encode_weights_ring2k<uint32_t>(
+        const PolynomialEncoderRing2k<uint32_t>& encoder, const uint32_t* weights, std::optional<ParmsID> parms_id, bool for_cipher
+    ) const;
+    template Plain2d Conv2dHelper::encode_weights_ring2k<uint64_t>(
+        const PolynomialEncoderRing2k<uint64_t>& encoder, const uint64_t* weights, std::optional<ParmsID> parms_id, bool for_cipher
+    ) const;
+    template Plain2d Conv2dHelper::encode_weights_ring2k<uint128_t>(
+        const PolynomialEncoderRing2k<uint128_t>& encoder, const uint128_t* weights, std::optional<ParmsID> parms_id, bool for_cipher
+    ) const;
+
+    Plain2d Conv2dHelper::encode_inputs_uint64s(const BatchEncoder& encoder, const uint64_t* inputs) const {
+        BatchEncoderAdapter adapter(encoder); Plain2d ret;
+        encode_inputs(adapter, nullptr, inputs, true, &ret, nullptr);
+        return ret;
+    }
+    Plain2d Conv2dHelper::encode_inputs_doubles(const CKKSEncoder& encoder, const double* inputs, std::optional<ParmsID> parms_id, double scale) const {
+        CKKSEncoderAdapter adapter(encoder, parms_id, scale); Plain2d ret;
+        encode_inputs(adapter, nullptr, inputs, true, &ret, nullptr);
+        return ret;
+    }
+    template <typename T>
+    Plain2d Conv2dHelper::encode_inputs_ring2k(const PolynomialEncoderRing2k<T>& encoder, const T* inputs, std::optional<ParmsID> parms_id, bool for_cipher) const {
+        PolynomialEncoderRing2kAdapter<T> adapter(encoder, parms_id); Plain2d ret;
+        encode_inputs(adapter, nullptr, inputs, for_cipher, &ret, nullptr);
+        return ret;
+    }
+    template Plain2d Conv2dHelper::encode_inputs_ring2k<uint32_t>(
+        const PolynomialEncoderRing2k<uint32_t>& encoder, const uint32_t* inputs, std::optional<ParmsID> parms_id, bool for_cipher
+    ) const;
+    template Plain2d Conv2dHelper::encode_inputs_ring2k<uint64_t>(
+        const PolynomialEncoderRing2k<uint64_t>& encoder, const uint64_t* inputs, std::optional<ParmsID> parms_id, bool for_cipher
+    ) const;
+    template Plain2d Conv2dHelper::encode_inputs_ring2k<uint128_t>(
+        const PolynomialEncoderRing2k<uint128_t>& encoder, const uint128_t* inputs, std::optional<ParmsID> parms_id, bool for_cipher
+    ) const;
+
+    Cipher2d Conv2dHelper::encrypt_inputs_uint64s(const Encryptor& encryptor, const BatchEncoder& encoder, const uint64_t* inputs) const {
+        BatchEncoderAdapter adapter(encoder); Cipher2d ret;
+        encode_inputs(adapter, &encryptor, inputs, true, nullptr, &ret);
+        return ret;
+    }
+    Cipher2d Conv2dHelper::encrypt_inputs_doubles(const Encryptor& encryptor, const CKKSEncoder& encoder, const double* inputs, std::optional<ParmsID> parms_id, double scale) const {
+        CKKSEncoderAdapter adapter(encoder, parms_id, scale); Cipher2d ret;
+        encode_inputs(adapter, &encryptor, inputs, true, nullptr, &ret);
+        return ret;
+    }
+    template <typename T>
+    Cipher2d Conv2dHelper::encrypt_inputs_ring2k(const Encryptor& encryptor, const PolynomialEncoderRing2k<T>& encoder, const T* inputs, std::optional<ParmsID> parms_id) const {
+        PolynomialEncoderRing2kAdapter<T> adapter(encoder, parms_id); Cipher2d ret;
+        encode_inputs(adapter, &encryptor, inputs, true, nullptr, &ret);
+        return ret;
+    }
+    template Cipher2d Conv2dHelper::encrypt_inputs_ring2k<uint32_t>(
+        const Encryptor& encryptor, const PolynomialEncoderRing2k<uint32_t>& encoder, const uint32_t* inputs, std::optional<ParmsID> parms_id
+    ) const;
+    template Cipher2d Conv2dHelper::encrypt_inputs_ring2k<uint64_t>(
+        const Encryptor& encryptor, const PolynomialEncoderRing2k<uint64_t>& encoder, const uint64_t* inputs, std::optional<ParmsID> parms_id
+    ) const;
+    template Cipher2d Conv2dHelper::encrypt_inputs_ring2k<uint128_t>(
+        const Encryptor& encryptor, const PolynomialEncoderRing2k<uint128_t>& encoder, const uint128_t* inputs, std::optional<ParmsID> parms_id
+    ) const;
+
+
+    Cipher2d Conv2dHelper::encrypt_weights_uint64s(const Encryptor& encryptor, const BatchEncoder& encoder, const uint64_t* weights) const {
+        BatchEncoderAdapter adapter(encoder); Cipher2d ret;
+        encode_weights(adapter, &encryptor, weights, true, nullptr, &ret);
+        return ret;
+    }
+    Cipher2d Conv2dHelper::encrypt_weights_doubles(const Encryptor& encryptor, const CKKSEncoder& encoder, const double* weights, std::optional<ParmsID> parms_id, double scale) const {
+        CKKSEncoderAdapter adapter(encoder, parms_id, scale); Cipher2d ret;
+        encode_weights(adapter, &encryptor, weights, true, nullptr, &ret);
+        return ret;
+    }
+    template <typename T>
+    Cipher2d Conv2dHelper::encrypt_weights_ring2k(const Encryptor& encryptor, const PolynomialEncoderRing2k<T>& encoder, const T* inputs, std::optional<ParmsID> parms_id) const {
+        PolynomialEncoderRing2kAdapter<T> adapter(encoder, parms_id); Cipher2d ret;
+        encode_weights(adapter, &encryptor, inputs, true, nullptr, &ret);
+        return ret;
+    }
+    template Cipher2d Conv2dHelper::encrypt_weights_ring2k<uint32_t>(
+        const Encryptor& encryptor, const PolynomialEncoderRing2k<uint32_t>& encoder, const uint32_t* weights, std::optional<ParmsID> parms_id
+    ) const;
+    template Cipher2d Conv2dHelper::encrypt_weights_ring2k<uint64_t>(
+        const Encryptor& encryptor, const PolynomialEncoderRing2k<uint64_t>& encoder, const uint64_t* weights, std::optional<ParmsID> parms_id
+    ) const;
+    template Cipher2d Conv2dHelper::encrypt_weights_ring2k<uint128_t>(
+        const Encryptor& encryptor, const PolynomialEncoderRing2k<uint128_t>& encoder, const uint128_t* weights, std::optional<ParmsID> parms_id
+    ) const;
+
+    Plain2d Conv2dHelper::encode_outputs_uint64s(const BatchEncoder& encoder, const uint64_t* outputs) const {
+        BatchEncoderAdapter adapter(encoder);
+        return encode_outputs(adapter, outputs);
+    }
+    Plain2d Conv2dHelper::encode_outputs_doubles(const CKKSEncoder& encoder, const double* outputs, std::optional<ParmsID> parms_id, double scale) const {
+        CKKSEncoderAdapter adapter(encoder, parms_id, scale);
+        return encode_outputs(adapter, outputs);
+    }
+    template <typename T>
+    Plain2d Conv2dHelper::encode_outputs_ring2k(const PolynomialEncoderRing2k<T>& encoder, const T* outputs, std::optional<ParmsID> parms_id) const {
+        PolynomialEncoderRing2kAdapter<T> adapter(encoder, parms_id);
+        return encode_outputs(adapter, outputs);
+    }
+    template Plain2d Conv2dHelper::encode_outputs_ring2k<uint32_t>(
+        const PolynomialEncoderRing2k<uint32_t>& encoder, const uint32_t* outputs, std::optional<ParmsID> parms_id
+    ) const;
+    template Plain2d Conv2dHelper::encode_outputs_ring2k<uint64_t>(
+        const PolynomialEncoderRing2k<uint64_t>& encoder, const uint64_t* outputs, std::optional<ParmsID> parms_id
+    ) const;
+    template Plain2d Conv2dHelper::encode_outputs_ring2k<uint128_t>(
+        const PolynomialEncoderRing2k<uint128_t>& encoder, const uint128_t* outputs, std::optional<ParmsID> parms_id
+    ) const;
+
+    std::vector<uint64_t> Conv2dHelper::decrypt_outputs_uint64s(const BatchEncoder& encoder, const Decryptor& decryptor, const Cipher2d& outputs) const {
+        BatchEncoderAdapter adapter(encoder);
+        return decrypt_outputs<BatchEncoderAdapter, uint64_t>(adapter, decryptor, outputs);
+    }
+    std::vector<double> Conv2dHelper::decrypt_outputs_doubles(const CKKSEncoder& encoder, const Decryptor& decryptor, const Cipher2d& outputs) const {
+        CKKSEncoderAdapter adapter(encoder, std::nullopt, 0);
+        return decrypt_outputs<CKKSEncoderAdapter, double>(adapter, decryptor, outputs);
+    }
+    template <typename T>
+    std::vector<T> Conv2dHelper::decrypt_outputs_ring2k(const PolynomialEncoderRing2k<T>& encoder, const Decryptor& decryptor, const Cipher2d& outputs) const {
+        PolynomialEncoderRing2kAdapter<T> adapter(encoder, std::nullopt);
+        return decrypt_outputs<PolynomialEncoderRing2kAdapter<T>, T>(adapter, decryptor, outputs);
+    }
+    template std::vector<uint32_t> Conv2dHelper::decrypt_outputs_ring2k<uint32_t>(
+        const PolynomialEncoderRing2k<uint32_t>& encoder, const Decryptor& decryptor, const Cipher2d& outputs
+    ) const;
+    template std::vector<uint64_t> Conv2dHelper::decrypt_outputs_ring2k<uint64_t>(
+        const PolynomialEncoderRing2k<uint64_t>& encoder, const Decryptor& decryptor, const Cipher2d& outputs
+    ) const;
+    template std::vector<uint128_t> Conv2dHelper::decrypt_outputs_ring2k<uint128_t>(
+        const PolynomialEncoderRing2k<uint128_t>& encoder, const Decryptor& decryptor, const Cipher2d& outputs
+    ) const;
+
 }}

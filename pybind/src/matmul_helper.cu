@@ -1,5 +1,6 @@
 #include "header.h"
 
+#pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-local-typedefs"
 
 template<typename T>

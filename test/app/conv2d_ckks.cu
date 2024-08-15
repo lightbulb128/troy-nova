@@ -1,10 +1,11 @@
 #include <gtest/gtest.h>
 #include <sstream>
 #include "../test_adv.h"
-#include "../../src/app/matmul.h"
+#include "../../src/app/conv2d.h"
 #include "../test.h"
 
-namespace matmul_ckks {
+
+namespace conv2d_ckks {
 
     using namespace troy;
     using namespace troy::linear;
@@ -14,27 +15,30 @@ namespace matmul_ckks {
     using std::stringstream;
     using std::vector;
 
-    void test_matmul(const GeneralHeContext& context, size_t m, size_t r, size_t n, bool pack_lwe, bool mod_switch_to_next) {
+    void test_conv2d(
+        const GeneralHeContext& context, 
+        size_t bs, size_t ic, size_t oc, size_t ih, size_t iw, size_t kh, size_t kw,
+        bool mod_switch_to_next
+    ) {
         SchemeType scheme = context.params_host().scheme();
         if (scheme != SchemeType::CKKS) {
             throw std::runtime_error("[test_matmul] Unsupported scheme");
         }
         double scale = context.scale();
+        size_t oh = ih - kh + 1;
+        size_t ow = iw - kw + 1;
         
-        GeneralVector x = context.random_polynomial(m * r);
-        GeneralVector w = context.random_polynomial(r * n);
-        GeneralVector s = context.random_polynomial(m * n);
-        MatmulHelper helper(m, r, n, context.params_host().poly_modulus_degree(), MatmulObjective::EncryptLeft, pack_lwe);
+        GeneralVector x = context.random_polynomial(bs * ic * ih * iw);
+        GeneralVector w = context.random_polynomial(oc * ic * kh * kw);
+        GeneralVector s = context.random_polynomial(bs * oc * oh * ow);
+        Conv2dHelper helper(bs, ic, oc, ih, iw, kh, kw,
+            context.params_host().poly_modulus_degree(), MatmulObjective::EncryptLeft);
 
         HeContextPointer he = context.context();
         const CKKSEncoder& encoder = context.encoder().ckks();
         const Encryptor& encryptor = context.encryptor();
         const Evaluator& evaluator = context.evaluator();
         const Decryptor& decryptor = context.decryptor();
-        GaloisKeys automorphism_key;
-        if (pack_lwe) {
-            automorphism_key = context.key_generator().create_automorphism_keys(false);
-        }
         
         Plain2d x_encoded = helper.encode_inputs_doubles(encoder, x.doubles().data(), std::nullopt, scale);
         Plain2d w_encoded = helper.encode_weights_doubles(encoder, w.doubles().data(), std::nullopt, scale);
@@ -46,12 +50,9 @@ namespace matmul_ckks {
         x_encrypted.save(x_serialized, he);
         x_encrypted = Cipher2d::load_new(x_serialized, he);
 
-        Cipher2d y_encrypted = helper.matmul(evaluator, x_encrypted, w_encoded);
+        Cipher2d y_encrypted = helper.conv2d(evaluator, x_encrypted, w_encoded);
         if (mod_switch_to_next) {
             y_encrypted.mod_switch_to_next_inplace(evaluator);
-        }
-        if (pack_lwe) {
-            y_encrypted = helper.pack_outputs(evaluator, automorphism_key, y_encrypted);
         }
 
         y_encrypted.add_plain_inplace(evaluator, s_encoded);
@@ -62,13 +63,23 @@ namespace matmul_ckks {
 
         vector<double> y_decrypted = helper.decrypt_outputs_doubles(encoder, decryptor, y_encrypted);   
 
-        vector<double> y_truth(m * n, 0);
-        for (size_t i = 0; i < m; i++) {
-            for (size_t j = 0; j < n; j++) {
-                for (size_t k = 0; k < r; k++) {
-                    y_truth[i * n + j] += x.doubles()[i * r + k] * w.doubles()[k * n + j];
+        vector<double> y_truth(bs * oc * oh * ow, 0);
+        for (size_t b = 0; b < bs; b++) {
+            for (size_t o = 0; o < oc; o++) {
+                for (size_t i = 0; i < oh; i++) {
+                    for (size_t j = 0; j < ow; j++) {
+                        for (size_t c = 0; c < ic; c++) {
+                            for (size_t p = 0; p < kh; p++) {
+                                for (size_t q = 0; q < kw; q++) {
+                                    y_truth[b * oc * oh * ow + o * oh * ow + i * ow + j] +=
+                                        x.doubles()[b * ic * ih * iw + c * ih * iw + (i + p) * iw + (j + q)] *
+                                        w.doubles()[o * ic * kh * kw + c * kh * kw + p * kw + q];
+                                }
+                            }
+                        }
+                        y_truth[b * oc * oh * ow + o * oh * ow + i * ow + j] += s.doubles()[b * oc * oh * ow + o * oh * ow + i * ow + j];
+                    }
                 }
-                y_truth[i * n + j] += s.doubles()[i * n + j];
             }
         }
 
@@ -82,25 +93,19 @@ namespace matmul_ckks {
     }
 
 
-    TEST(MatmulTest, HostCKKSMatmul) {
+    TEST(Conv2dTest, HostCKKSConv2d) {
         GeneralHeContext ghe(false, SchemeType::CKKS, 1024, 0, { 60, 40, 40, 60 }, true, 0x123, 2, (double)(1<<20), 1e-2);
         srand(0);
-        test_matmul(ghe, 4, 5, 6, false, false);
-        test_matmul(ghe, 64, 128, 256, false, false);
-        test_matmul(ghe, 4, 5, 6, true, false);
-        test_matmul(ghe, 64, 128, 256, true, false);
+        test_conv2d(ghe, 2, 3, 6, 7, 9, 3, 5, false);
+        test_conv2d(ghe, 2, 3, 10, 56, 56, 10, 10, false);
     }
 
-    TEST(MatmulTest, DeviceCKKSMatmul) {
+    TEST(Conv2dTest, DeviceCKKSConv2d) {
         SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::CKKS, 1024, 0, { 60, 40, 40, 60 }, true, 0x123, 2, (double)(1<<20), 1e-2);
         srand(0);
-        test_matmul(ghe, 4, 5, 6, false, false);
-        test_matmul(ghe, 64, 128, 256, false, false);
-        // test_matmul(ghe, 400, 500, 600, false, false); // very slow!
-        test_matmul(ghe, 4, 5, 6, true, false);
-        test_matmul(ghe, 64, 128, 256, true, false);
-        // test_matmul(ghe, 400, 500, 600, true, false); // very slow!
+        test_conv2d(ghe, 2, 3, 6, 7, 9, 3, 5, false);
+        test_conv2d(ghe, 2, 3, 10, 56, 56, 10, 10, false);
     }
 
 }

@@ -3,6 +3,12 @@
 
 namespace troy { namespace linear {
 
+    std::ostream& operator<<(std::ostream& os, const MatmulHelper& helper) {
+        os << "MatmulHelper(batch_size=" << helper.batch_size << ", input_dims=" << helper.input_dims << ", output_dims=" << helper.output_dims
+           << ", slot_count=" << helper.slot_count << ", objective=" << helper.objective << ", pack_lwe=" << helper.pack_lwe << ")";
+        return os;
+    }
+
     using uint128_t = __uint128_t;
 
     #define D_IMPL_ALL                                               \
@@ -169,6 +175,8 @@ namespace troy { namespace linear {
 
     template <typename E, typename T>
     void MatmulHelper::encode_inputs(const E& encoder, const Encryptor* encryptor, const T* inputs, bool for_cipher, Plain2d* out_plain, Cipher2d* out_cipher) const {
+        // TODO: optimization available: could first copy all inputs to device, put them in encoding order with a kernel, then encode each with "scale_up_slice".
+        // in this way, we can avoid many small memory copies but use directly a large memory copy
         size_t vecsize = input_block;
         if (out_plain) {
             *out_plain = Plain2d();
