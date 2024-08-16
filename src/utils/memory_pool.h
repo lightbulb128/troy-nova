@@ -14,11 +14,18 @@ namespace troy {namespace utils {
         int count;
         cudaError_t status = cudaGetDeviceCount(&count);
         if (status != cudaSuccess) {
-            if (status == cudaErrorNoDevice) {
+            if (
+                status == cudaErrorNoDevice || 
+                status == cudaErrorInitializationError || 
+                status == cudaErrorInsufficientDriver || 
+                status == cudaErrorNotSupported || 
+                status == cudaErrorNotPermitted
+            ) {
                 return 0;
             }
             std::string msg = "[device_count] cudaGetDeviceCount failed: ";
             msg += cudaGetErrorString(status);
+            msg += "; perhaps report this issue.";
             throw std::runtime_error(msg);
         }
         return count;

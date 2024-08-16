@@ -9,7 +9,7 @@ We also include some utilities for privacy computing, including the matrix multi
 * **Requirements**: CUDA 11.7 and CMake 3.18.
 * **Tested environment**: Ubuntu 20.04 with CUDA 12.4, NVIDIA A100 and RTX 4090. g++ and gcc 11.4.
 
-### Build C++/CUDA.
+## Build C++/CUDA.
 
 ```
 mkdir build
@@ -20,7 +20,7 @@ make troy
 
 Note: You could set the CUDA architecture to suit your graphic card, by setting "CMAKE_CUDA_ARCHITECTURES" variable when calling cmake. For example, `cmake .. -DCMAKE_CUDA_ARCHITECTURES="80;89"`
 
-### Build python bindings
+## Build python bindings
 
 ```
 mkdir -p build     # ensure build folder exists.
@@ -30,7 +30,7 @@ bash develop.sh
 
 You will get a `pytroy*.whl` which could be installed.
 
-### Building examples
+## Building examples
 
 `cmake` with `TROY_EXAMPLES` set to true, and then make will give the examples in `build/examples`.
 
