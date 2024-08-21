@@ -59,6 +59,7 @@ namespace bfv_ring2k {
     template <typename T>
     void template_test_scale_up_down(bool device, vector<size_t> q_bits, vector<size_t> t_bits) {
         for (size_t t_bit_length: t_bits) {
+
             size_t poly_modulus_degree = 32;
             EncryptionParameters parms = EncryptionParameters(SchemeType::BFV);
             parms.set_plain_modulus(PlainModulus::batching(poly_modulus_degree, 30)); // this does not affect anything
@@ -87,6 +88,28 @@ namespace bfv_ring2k {
             plaintext = encoder.scale_up_new(message, second_parms_id);
             result = encoder.scale_down_new(plaintext);
             ASSERT_TRUE(same_vector(message, result));
+
+            // we should be able to scale down more than poly degree's slots
+            {
+                constexpr size_t n = 54;
+                auto message = random_sampler<T>(n, t_bit_length);
+                Plaintext total;
+                if (device) total.to_device_inplace();
+                total.resize_rns_partial(*he_context, he_context->first_parms_id(), n, false, false);
+                for (size_t i = 0; i < n; i += poly_modulus_degree) {
+                    size_t len = std::min(poly_modulus_degree, n - i);
+                    vector<T> partial_message(message.begin() + i, message.begin() + i + len);
+                    Plaintext plaintext = encoder.scale_up_new(partial_message, std::nullopt);
+                    ASSERT_TRUE(plaintext.coeff_count() == len);
+                    ASSERT_TRUE(plaintext.poly_modulus_degree() == poly_modulus_degree);
+                    ASSERT_TRUE(plaintext.data().size() == plaintext.coeff_modulus_size() * len);
+                    for (size_t j = 0; j < plaintext.coeff_modulus_size(); j++) {
+                        total.component(j).slice(i, i + len).copy_from_slice(plaintext.const_component(j));
+                    }
+                }
+                std::vector<T> result = encoder.scale_down_new(total);
+                ASSERT_TRUE(same_vector(message, result));
+            }
         }
     }
 

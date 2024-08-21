@@ -481,7 +481,6 @@ namespace troy::linear {
         }
         ContextDataPointer context_data = context.get_context_data(parms_id).value();
         const EncryptionParameters& parms = context_data->parms();
-        custom_assert(parms.poly_modulus_degree() >= destination.size());
         size_t num_modulus = parms.coeff_modulus().size();
         size_t coeff_count = destination.size();
         custom_assert(input.coeff_modulus_size() == num_modulus);
@@ -530,19 +529,6 @@ namespace troy::linear {
                 // 3-2 Then multiply with -Q^{-1} mod t
                 base_on_t = (base_on_t * neg_inv_Q_mod_t_) & mod_t_mask_;
 
-                // clang-format off
-                // 4 Correct sign: (base_on_t - [base_on_gamma]_gamma) * gamma^{-1} mod t
-                // NOTE(juhou):
-                // `base_on_gamma` and `base_on_t` together gives
-                // `gamma*(x + t*r) + round(gamma*v/q) - e` mod gamma*t for some unknown v and e.
-                // (Key point): Taking `base_on_gamma` along equals to
-                //    `round(gamma*v/q) - e mod gamma`
-                // When gamma > v, e, we can have the centered remainder
-                // [round(gamma*v/q) - e mod gamma]_gamma = round(gamma*v/q) - e.
-                // As a result, `base_on_t - [base_on_gamma]_gamma mod t` will cancel out the
-                // last term and gives `gamma*(x + t*r) mod t`.
-                // Finally, multiply with `gamma^{-1} mod t` gives `x mod t`.
-                // clang-format on
                 uint64_t gamma_div_2 = gamma_->value() >> 1;
                 uint64_t on_gamma = base_on_gamma[i];
                 // [0, gamma) -> [-gamma/2, gamma/2]
@@ -700,7 +686,6 @@ namespace troy::linear {
         }
         ContextDataPointer context_data = context.get_context_data(parms_id).value();
         const EncryptionParameters& parms = context_data->parms();
-        custom_assert(parms.poly_modulus_degree() >= destination.size());
         size_t num_modulus = parms.coeff_modulus().size();
         size_t coeff_count = destination.size();
         custom_assert(input.coeff_modulus_size() == num_modulus);
