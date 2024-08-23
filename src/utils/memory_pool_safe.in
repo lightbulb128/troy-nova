@@ -124,16 +124,18 @@ namespace troy::utils {
             return try_allocate(required);
         } else {
             void* ptr = iterator->second.first;
-            std::thread::id last_used_id = iterator->second.second;
-            if (last_used_id != std::this_thread::get_id()) {
-                // A new thread is now taking over the memory which was last used by another thread.
-                // To avoid data racing, we need to execute a cudaDeviceSync
-                // before returning the pointer.
-                cudaError_t status = cudaDeviceSynchronize();
-                if (status != cudaSuccess) {
-                    runtime_error("[MemoryPool(safe)::allocate] cudaDeviceSynchronize failed.", status);
+            #ifdef TROY_DEVICE_SYNCHRONIZE_ON_MULTIPLE_THREAD
+                std::thread::id last_used_id = iterator->second.second;
+                if (last_used_id != std::this_thread::get_id()) {
+                    // A new thread is now taking over the memory which was last used by another thread.
+                    // To avoid data racing, we need to execute a cudaDeviceSync
+                    // before returning the pointer.
+                    cudaError_t status = cudaDeviceSynchronize();
+                    if (status != cudaSuccess) {
+                        runtime_error("[MemoryPool(safe)::allocate] cudaDeviceSynchronize failed.", status);
+                    }
                 }
-            }
+            #endif
             impl_->unused.erase(iterator);
             return ptr;
         }

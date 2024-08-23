@@ -68,12 +68,12 @@ namespace troy {namespace utils {
                 }
                 int count = device_count();
                 has_device = count > 0;
-                established = true;
                 if (!has_device) {
                     return;
                 }
                 global_pool = std::make_shared<MemoryPool>(0);
                 global_pool->is_global_pool = true;
+                established = true;
             }
         }
         inline static void runtime_error(const char* prompt, cudaError_t status) {

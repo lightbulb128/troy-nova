@@ -8,5 +8,5 @@ binder/*.so
 gather_code.*
 .cache/
 .clangd
-test/custom.cu
+test/custom*.cu
 test/main.cu
