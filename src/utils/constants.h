@@ -2,6 +2,8 @@
 #include <cstdint>
 
 namespace troy {namespace utils {
+    
+    constexpr std::size_t BATCH_OP_THRESHOLD = 3;
 
     const std::size_t HE_MOD_BIT_COUNT_MAX = 61;
 

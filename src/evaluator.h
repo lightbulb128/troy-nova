@@ -26,7 +26,15 @@ namespace troy {
         ContextDataPointer get_context_data(const char* prompt, const ParmsID& encrypted) const;
 
         void translate_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, bool subtract, MemoryPoolHandle pool) const;
+        void translate_inplace_batched(
+            const std::vector<Ciphertext*>& encrypted1, const std::vector<const Ciphertext*>& encrypted2, bool subtract, MemoryPoolHandle pool
+        ) const;
         void translate(const Ciphertext& encrypted1, const Ciphertext& encrypted2, Ciphertext& destination, bool subtract, MemoryPoolHandle pool) const;
+        void translate_batched(
+            const std::vector<const Ciphertext*>& encrypted1, const std::vector<const Ciphertext*>& encrypted2, 
+            const std::vector<Ciphertext*>& destination,
+            bool subtract, MemoryPoolHandle pool
+        ) const;
         
         void bfv_multiply(const Ciphertext& encrypted1, const Ciphertext& encrypted2, Ciphertext& destination, MemoryPoolHandle pool) const;
         void ckks_multiply(const Ciphertext& encrypted1, const Ciphertext& encrypted2, Ciphertext& destination, MemoryPoolHandle pool) const;
@@ -78,24 +86,63 @@ namespace troy {
         inline void add_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             translate_inplace(encrypted1, encrypted2, false, pool);
         }
+        inline void add_inplace_batched(
+            std::vector<Ciphertext*>& encrypted1, const std::vector<const Ciphertext*>& encrypted2, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            translate_inplace_batched(encrypted1, encrypted2, false, pool);
+        }
         inline void add(const Ciphertext& encrypted1, const Ciphertext& encrypted2, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             translate(encrypted1, encrypted2, destination, false, pool);
         }
+        inline void add_batched(
+            const std::vector<const Ciphertext*>& encrypted1, const std::vector<const Ciphertext*>& encrypted2, 
+            std::vector<Ciphertext*>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            translate_batched(encrypted1, encrypted2, destination, false, pool);
+        }
+        
         inline Ciphertext add_new(const Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;
             add(encrypted1, encrypted2, destination, pool);
+            return destination;
+        }
+        inline std::vector<Ciphertext> add_new_batched(
+            const std::vector<const Ciphertext*>& encrypted1, const std::vector<const Ciphertext*>& encrypted2, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            std::vector<Ciphertext> destination(encrypted1.size());
+            std::vector<Ciphertext*> destination_ptr(encrypted1.size()); for (size_t i = 0; i < encrypted1.size(); i++) destination_ptr[i] = &destination[i];
+            add_batched(encrypted1, encrypted2, destination_ptr, pool);
             return destination;
         }
 
         inline void sub_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             translate_inplace(encrypted1, encrypted2, true, pool);
         }
+        inline void sub_inplace_batched(
+            std::vector<Ciphertext*>& encrypted1, const std::vector<const Ciphertext*>& encrypted2, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            translate_inplace_batched(encrypted1, encrypted2, true, pool);
+        }
         inline void sub(const Ciphertext& encrypted1, const Ciphertext& encrypted2, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             translate(encrypted1, encrypted2, destination, true, pool);
+        }
+        inline void sub_batched(
+            const std::vector<const Ciphertext*>& encrypted1, const std::vector<const Ciphertext*>& encrypted2, 
+            std::vector<Ciphertext*>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            translate_batched(encrypted1, encrypted2, destination, true, pool);
         }
         inline Ciphertext sub_new(const Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;
             sub(encrypted1, encrypted2, destination, pool);
+            return destination;
+        }
+        inline std::vector<Ciphertext> sub_new_batched(
+            const std::vector<const Ciphertext*>& encrypted1, const std::vector<const Ciphertext*>& encrypted2, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            std::vector<Ciphertext> destination(encrypted1.size());
+            std::vector<Ciphertext*> destination_ptr(encrypted1.size()); for (size_t i = 0; i < encrypted1.size(); i++) destination_ptr[i] = &destination[i];
+            sub_batched(encrypted1, encrypted2, destination_ptr, pool);
             return destination;
         }
 

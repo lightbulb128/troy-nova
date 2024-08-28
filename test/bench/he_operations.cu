@@ -26,6 +26,8 @@ namespace bench::he_operations {
         double scale = 1 << 30;
         double tolerance = 0.1;
         size_t repeat = 200;
+        size_t warm_up_repeat = 10;
+        size_t batch_size = 1;
         size_t threads = 1;
         bool multiple_pools = false;
         bool multiple_devices = false;
@@ -76,6 +78,8 @@ namespace bench::he_operations {
             scale = parser.get_float<double>("-s").value_or(parser.get_float<double>("--scale").value_or(scale));
             tolerance = parser.get_float<double>("-T").value_or(parser.get_float<double>("--tolerance").value_or(tolerance));
             repeat = parser.get_uint<size_t>("-R").value_or(parser.get_uint<size_t>("--repeat").value_or(repeat));
+            warm_up_repeat = parser.get_uint<size_t>("-W").value_or(parser.get_uint<size_t>("--warm-up-repeat").value_or(warm_up_repeat));
+            batch_size = parser.get_uint<size_t>("-B").value_or(parser.get_uint<size_t>("--batch-size").value_or(batch_size));
             threads = parser.get_uint<size_t>("-c").value_or(parser.get_uint<size_t>("--threads").value_or(threads));
 
             multiple_pools = parser.get_bool_store_true("-mp").value_or(parser.get_bool_store_true("--multiple-pools").value_or(false));
@@ -135,6 +139,8 @@ namespace bench::he_operations {
             std::cout << "  -s, --scale                 Scale (default: 1 << 20)" << std::endl;
             std::cout << "  -T, --tolerance             Tolerance (default: 1e-2)" << std::endl;
             std::cout << "  -R, --repeat                Repeat count (default: 200)" << std::endl;
+            std::cout << "  -W, --warm-up-repeat        Warm-up repeat count (default: 10)" << std::endl;
+            std::cout << "  -B, --batch-size            Batch size (default: 1)" << std::endl;
 
             std::cout << std::endl;
             std::cout << "  -c, --threads               Number of threads (default: 1)" << std::endl;
@@ -198,6 +204,8 @@ namespace bench::he_operations {
                 std::cout << "  tolerance           = " << tolerance << std::endl;
             }
             std::cout << "  repeat              = " << repeat << std::endl;
+            std::cout << "  warm-up-repeat      = " << warm_up_repeat << std::endl;
+            std::cout << "  batch-size          = " << batch_size << std::endl;
             std::cout << "  no-test-correct     = " << bool_to_string(no_test_correct) << std::endl;
         }
     };
@@ -222,6 +230,8 @@ namespace bench::he_operations {
         private:
             string name;
             size_t repeat;
+            size_t warm_up_repeat;
+            size_t batch_size;
             Arguments args;
             SchemeType scheme;
             bool device;
@@ -230,7 +240,7 @@ namespace bench::he_operations {
         public:
 
             Benchmark(bool device, const string& name, SchemeType scheme, const Arguments& args):
-                name(name), repeat(args.repeat), args(args), scheme(scheme), device(device)
+                name(name), repeat(args.repeat), warm_up_repeat(args.warm_up_repeat), batch_size(args.batch_size), args(args), scheme(scheme), device(device)
             {
                 GeneralHeContextParameters ghep(
                     device, scheme, args.poly_modulus_degree, args.log_t, args.log_q, true, args.seed, args.input_max,
@@ -251,11 +261,77 @@ namespace bench::he_operations {
                 return environment.get_divided(repeat, thread_id);
             }
 
+            vector<GeneralVector> batch_random_simd_full(const GeneralHeContext& context) {
+                vector<GeneralVector> batch;
+                for (size_t i = 0; i < batch_size; i++) {
+                    batch.push_back(context.random_simd_full());
+                }
+                return batch;
+            }
+
+            vector<GeneralVector> batch_random_polynomial_full(const GeneralHeContext& context) {
+                vector<GeneralVector> batch;
+                for (size_t i = 0; i < batch_size; i++) {
+                    batch.push_back(context.random_polynomial_full());
+                }
+                return batch;
+            }
+
+            vector<Plaintext> batch_encode_simd(const GeneralHeContext& context, const vector<GeneralVector>& batch, double scale, MemoryPoolHandle pool) {
+                vector<Plaintext> encoded;
+                for (size_t i = 0; i < batch_size; i++) {
+                    encoded.push_back(context.encoder().encode_simd(batch[i], std::nullopt, scale, pool));
+                }
+                return encoded;
+            }
+
+            vector<Plaintext> batch_encode_polynomial(const GeneralHeContext& context, const vector<GeneralVector>& batch, double scale, MemoryPoolHandle pool) {
+                vector<Plaintext> encoded;
+                for (size_t i = 0; i < batch_size; i++) {
+                    encoded.push_back(context.encoder().encode_polynomial(batch[i], std::nullopt, scale, pool));
+                }
+                return encoded;
+            }
+
+            vector<Ciphertext> batch_encrypt_asymmetric(const GeneralHeContext& context, const vector<Plaintext>& batch, MemoryPoolHandle pool) {
+                vector<Ciphertext> encrypted;
+                for (size_t i = 0; i < batch_size; i++) {
+                    encrypted.push_back(context.encryptor().encrypt_asymmetric_new(batch[i], nullptr, pool));
+                }
+                return encrypted;
+            }
+
+            vector<Plaintext> batch_decrypt(const GeneralHeContext& context, const vector<Ciphertext>& batch, MemoryPoolHandle pool) {
+                vector<Plaintext> decrypted;
+                for (size_t i = 0; i < batch_size; i++) {
+                    decrypted.push_back(context.decryptor().decrypt_new(batch[i], pool));
+                }
+                return decrypted;
+            }
+
+            vector<GeneralVector> batch_decode_simd(const GeneralHeContext& context, const vector<Plaintext>& batch, MemoryPoolHandle pool) {
+                vector<GeneralVector> decoded;
+                for (size_t i = 0; i < batch_size; i++) {
+                    decoded.push_back(context.encoder().decode_simd(batch[i], pool));
+                }
+                return decoded;
+            }
+
+            vector<GeneralVector> batch_decode_polynomial(const GeneralHeContext& context, const vector<Plaintext>& batch, MemoryPoolHandle pool) {
+                vector<GeneralVector> decoded;
+                for (size_t i = 0; i < batch_size; i++) {
+                    decoded.push_back(context.encoder().decode_polynomial(batch[i], pool));
+                }
+                return decoded;
+            }
+
+
+
             template <typename L>
             void run_threads_and_print_times(const L& lambda) {
                 if (args.threads == 1) {
                     Timer timer_single = lambda(0);
-                    timer_single.print_divided(repeat);
+                    timer_single.print_divided(repeat * batch_size);
                 } else {
                     std::vector<std::future<Timer>> futures;
                     for (size_t i = 0; i < args.threads; i++) {
@@ -265,7 +341,7 @@ namespace bench::he_operations {
                     for (size_t i = 0; i < args.threads; i++) {
                         timers.push_back(futures[i].get());
                     }
-                    TimerThreaded::PrintDivided(timers, repeat);
+                    TimerThreaded::PrintDivided(timers, repeat * batch_size);
                 }
             }
 
@@ -278,16 +354,16 @@ namespace bench::he_operations {
                     Timer timer;
                     size_t timer_encode = timer.register_timer(name + ".EncodeSimd");
                     size_t timer_decode = timer.register_timer(name + ".DecodeSimd");
-                    for (size_t i = 0; i < repeat; i++) {
+                    for (size_t i = 0; i < repeat + warm_up_repeat; i++) {
                         GeneralVector message = context.random_simd_full();
                         timer.tick(timer_encode);
                         Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
                         if (device) cudaStreamSynchronize(0);
-                        timer.tock(timer_encode);
+                        if (i >= warm_up_repeat) timer.tock(timer_encode);
                         timer.tick(timer_decode);
                         GeneralVector decoded = context.encoder().decode_simd(plain, pool);
                         if (device) cudaStreamSynchronize(0);
-                        timer.tock(timer_decode);
+                        if (i >= warm_up_repeat) timer.tock(timer_decode);
                         assert_true(context.near_equal(message, decoded), "test_encode_simd failed.");
                     }
                     return timer;
@@ -304,17 +380,17 @@ namespace bench::he_operations {
                     Timer timer;
                     size_t timer_encode = timer.register_timer(name + ".EncodePoly");
                     size_t timer_decode = timer.register_timer(name + ".DecodePoly");
-                    for (size_t i = 0; i < repeat; i++) {
+                    for (size_t i = 0; i < repeat + warm_up_repeat; i++) {
                         GeneralVector message = context.random_polynomial_full();
                         timer.tick(timer_encode);
                         Plaintext plain = context.encoder().encode_polynomial(message, std::nullopt, scale, pool);
                         if (device) cudaStreamSynchronize(0);
-                        timer.tock(timer_encode);
+                        if (i >= warm_up_repeat) timer.tock(timer_encode);
                         timer.tick(timer_decode);
                         GeneralVector decoded = context.encoder().decode_polynomial(plain, pool);
                         if (device) cudaStreamSynchronize(0);
-                        timer.tock(timer_decode);
-                        if (i == 0 && args.no_test_correct) {
+                        if (i >= warm_up_repeat) timer.tock(timer_decode);
+                        if (i == 0 && !args.no_test_correct) {
                             assert_true(context.near_equal(message, decoded), "test_encode_polynomial failed.");
                         }
                     }
@@ -335,21 +411,21 @@ namespace bench::he_operations {
                     size_t timer_dec = timer.register_timer(name + ".Decrypt");
                     GeneralVector message = context.random_simd_full();
                     Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
-                    for (size_t i = 0; i < repeat; i++) {
+                    for (size_t i = 0; i < repeat + warm_up_repeat; i++) {
                         timer.tick(timer_enc_asym);
                         Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain, nullptr, pool);
                         if (device) cudaStreamSynchronize(0);
-                        timer.tock(timer_enc_asym);
+                        if (i >= warm_up_repeat) timer.tock(timer_enc_asym);
                         timer.tick(timer_enc_sym);
                         Ciphertext cipher_sym = context.encryptor().encrypt_symmetric_new(plain, true, nullptr, pool);
                         if (device) cudaStreamSynchronize(0);
-                        timer.tock(timer_enc_sym);
+                        if (i >= warm_up_repeat) timer.tock(timer_enc_sym);
                         timer.tick(timer_dec);
                         Plaintext plain_dec = context.decryptor().decrypt_new(cipher, pool);
                         if (device) cudaStreamSynchronize(0);
-                        timer.tock(timer_dec);
+                        if (i >= warm_up_repeat) timer.tock(timer_dec);
                         
-                        if (i == 0 && args.no_test_correct) {
+                        if (i == 0 && !args.no_test_correct) {
                             auto decoded = context.encoder().decode_simd(plain_dec, pool);
                             assert_true(context.near_equal(message, decoded), "test_encrypt/asymmetric failed.");
                             cipher_sym.expand_seed(context.context());
@@ -374,13 +450,13 @@ namespace bench::he_operations {
                     Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
                     Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain, nullptr, pool);
                     Ciphertext result; 
-                    for (size_t i = 0; i < repeat; i++) {
+                    for (size_t i = 0; i < repeat + warm_up_repeat; i++) {
                         timer.tick(timer_neg);
                         Ciphertext cipher_neg = context.evaluator().negate_new(cipher, pool);
                         // context.evaluator().add(cipher, cipher, result);
                         if (device) cudaStreamSynchronize(0);
-                        timer.tock(timer_neg);
-                        if (i == 0 && args.no_test_correct) {
+                        if (i >= warm_up_repeat) timer.tock(timer_neg);
+                        if (i == 0 && !args.no_test_correct) {
                             auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_neg, pool), pool);
                             assert_true(context.near_equal(context.negate(message), decrypted), "test_negate failed.");
                         }
@@ -399,31 +475,54 @@ namespace bench::he_operations {
                     Timer timer;
                     size_t timer_add = timer.register_timer(name + ".Add");
                     size_t timer_sub = timer.register_timer(name + ".Sub");
-                    GeneralVector message = context.random_simd_full();
-                    Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
-                    Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain, nullptr, pool);
-                    Ciphertext result; 
-                    for (size_t i = 0; i < repeat; i++) {
+                    auto message = this->batch_random_simd_full(context);
+                    auto plain = this->batch_encode_simd(context, message, scale, pool);
+                    auto cipher = this->batch_encrypt_asymmetric(context, plain, pool);
+                    for (size_t i = 0; i < repeat + warm_up_repeat; i++) {
                         timer.tick(timer_add);
-                        Ciphertext cipher_add = context.evaluator().add_new(cipher, cipher, pool);
-                        // context.evaluator().add(cipher, cipher, result);
+                        vector<Ciphertext> cipher_add;
+                        if (batch_size == 1) {
+                            cipher_add.resize(1);
+                            cipher_add[0] = context.evaluator().add_new(cipher[0], cipher[0], pool);
+                        } else {
+                            vector<const Ciphertext*> cipher_ptrs; for (auto& c : cipher) cipher_ptrs.push_back(&c);
+                            cipher_add.resize(batch_size);
+                            vector<Ciphertext*> result_ptrs; for (auto& c : cipher_add) result_ptrs.push_back(&c);
+                            context.evaluator().add_batched(cipher_ptrs, cipher_ptrs, result_ptrs, pool);
+                        }
                         if (device) cudaStreamSynchronize(0);
-                        timer.tock(timer_add);
+                        if (i >= warm_up_repeat) timer.tock(timer_add);
                         timer.tick(timer_sub);
-                        Ciphertext cipher_sub = context.evaluator().sub_new(cipher, cipher, pool);
+                        vector<Ciphertext> cipher_sub;
+                        if (batch_size == 1) {
+                            cipher_sub.resize(1);
+                            cipher_sub[0] = context.evaluator().sub_new(cipher[0], cipher[0], pool);
+                        } else {
+                            vector<const Ciphertext*> cipher_ptrs; for (auto& c : cipher) cipher_ptrs.push_back(&c);
+                            cipher_sub.resize(batch_size);
+                            vector<Ciphertext*> result_ptrs; for (auto& c : cipher_sub) result_ptrs.push_back(&c);
+                            cipher_sub = context.evaluator().sub_new_batched(cipher_ptrs, cipher_ptrs, pool);
+                        }
                         if (device) cudaStreamSynchronize(0);
-                        timer.tock(timer_sub);
-                        if (i == 0 && args.no_test_correct) {
-                            auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_add, pool), pool);
-                            assert_true(context.near_equal(context.add(message, message), decrypted), "test_translate/add failed.");
-                            decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_sub, pool), pool);
-                            assert_true(context.near_equal(context.sub(message, message), decrypted), "test_translate/sub failed.");
+                        if (i >= warm_up_repeat) timer.tock(timer_sub);
+                        if (i == 0 && !args.no_test_correct) {
+                            auto decrypted = this->batch_decrypt(context, cipher_add, pool);
+                            auto decoded = this->batch_decode_simd(context, decrypted, pool);
+                            for (size_t j = 0; j < batch_size; j++) {
+                                assert_true(context.near_equal(context.add(message[j], message[j]), decoded[j]), "test_translate/add failed.");
+                            }
+                            decrypted = this->batch_decrypt(context, cipher_sub, pool);
+                            decoded = this->batch_decode_simd(context, decrypted, pool);
+                            for (size_t j = 0; j < batch_size; j++) {
+                                assert_true(context.near_equal(context.sub(message[j], message[j]), decoded[j]), "test_translate/sub failed.");
+                            }
                         }
                     }
                     return timer;
                 };
                 run_threads_and_print_times(thread_lambda);
             }
+            
 
             void test_translate_plain() {
                 auto thread_lambda = [this](size_t thread_index) {
@@ -437,16 +536,16 @@ namespace bench::he_operations {
                     GeneralVector message = context.random_simd_full();
                     Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
                     Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain, nullptr, pool);
-                    for (size_t i = 0; i < repeat; i++) {
+                    for (size_t i = 0; i < repeat + warm_up_repeat; i++) {
                         timer.tick(timer_add);
                         Ciphertext cipher_add = context.evaluator().add_plain_new(cipher, plain, pool);
                         if (device) cudaStreamSynchronize(0);
-                        timer.tock(timer_add);
+                        if (i >= warm_up_repeat) timer.tock(timer_add);
                         timer.tick(timer_sub);
                         Ciphertext cipher_sub = context.evaluator().sub_plain_new(cipher, plain, pool);
                         if (device) cudaStreamSynchronize(0);
-                        timer.tock(timer_sub);
-                        if (i == 0 && args.no_test_correct) {
+                        if (i >= warm_up_repeat) timer.tock(timer_sub);
+                        if (i == 0 && !args.no_test_correct) {
                             auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_add, pool), pool);
                             assert_true(context.near_equal(context.add(message, message), decrypted), "test_translate_plain/add failed.");
                             decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_sub, pool), pool);
@@ -472,20 +571,20 @@ namespace bench::he_operations {
                     GeneralVector message = context.random_simd_full();
                     Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
                     Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain, nullptr, pool);
-                    for (size_t i = 0; i < repeat; i++) {
+                    for (size_t i = 0; i < repeat + warm_up_repeat; i++) {
                         timer.tick(timer_mul);
                         Ciphertext cipher_mul = context.evaluator().multiply_new(cipher, cipher, pool);
                         if (device) cudaStreamSynchronize(0);
-                        timer.tock(timer_mul);
+                        if (i >= warm_up_repeat) timer.tock(timer_mul);
                         timer.tick(timer_square);
                         Ciphertext cipher_square = context.evaluator().square_new(cipher, pool);
                         if (device) cudaStreamSynchronize(0);
-                        timer.tock(timer_square);
+                        if (i >= warm_up_repeat) timer.tock(timer_square);
                         timer.tick(timer_relin);
                         Ciphertext cipher_relin = context.evaluator().relinearize_new(cipher_mul, relin_keys, pool);
                         if (device) cudaStreamSynchronize(0);
-                        timer.tock(timer_relin);
-                        if (i == 0 && args.no_test_correct) {
+                        if (i >= warm_up_repeat) timer.tock(timer_relin);
+                        if (i == 0 && !args.no_test_correct) {
                             auto truth = context.mul(message, message);
                             auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_mul, pool), pool);
                             assert_true(context.near_equal(truth, decrypted), "test_multiply_relinearize/multiply failed.");
@@ -511,12 +610,12 @@ namespace bench::he_operations {
                     GeneralVector message = context.random_simd_full();
                     Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
                     Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain, nullptr, pool);
-                    for (size_t i = 0; i < repeat; i++) {
+                    for (size_t i = 0; i < repeat + warm_up_repeat; i++) {
                         timer.tick(timer_mul);
                         Ciphertext cipher_mul = context.evaluator().multiply_plain_new(cipher, plain, pool);
                         if (device) cudaStreamSynchronize(0);
-                        timer.tock(timer_mul);
-                        if (i == 0 && args.no_test_correct) {
+                        if (i >= warm_up_repeat) timer.tock(timer_mul);
+                        if (i == 0 && !args.no_test_correct) {
                             auto truth = context.mul(message, message);
                             auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_mul, pool), pool);
                             assert_true(context.near_equal(truth, decrypted), "test_multiply_plain failed.");
@@ -540,12 +639,12 @@ namespace bench::he_operations {
                     GeneralVector message = context.random_simd_full();
                     Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
                     Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain, nullptr, pool);
-                    for (size_t i = 0; i < repeat; i++) {
+                    for (size_t i = 0; i < repeat + warm_up_repeat; i++) {
                         timer.tick(timer_mod);
                         Ciphertext cipher_mod = context.evaluator().mod_switch_to_next_new(cipher, pool);
                         if (device) cudaStreamSynchronize(0);
-                        timer.tock(timer_mod);
-                        if (i == 0 && args.no_test_correct) {
+                        if (i >= warm_up_repeat) timer.tock(timer_mod);
+                        if (i == 0 && !args.no_test_correct) {
                             auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_mod, pool), pool);
                             assert_true(context.near_equal(message, decrypted), "test_mod_switch_to_next failed.");
                         }
@@ -573,12 +672,12 @@ namespace bench::he_operations {
                     double expanded_scale = scale * coeff_modulus[coeff_modulus.size() - 2].value();
                     Plaintext plain = context.encoder().encode_simd(message, std::nullopt, expanded_scale, pool);
                     Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain, nullptr, pool);
-                    for (size_t i = 0; i < repeat; i++) {
+                    for (size_t i = 0; i < repeat + warm_up_repeat; i++) {
                         timer.tick(timer_rescale);
                         Ciphertext cipher_rescale = context.evaluator().rescale_to_next_new(cipher, pool);
                         if (device) cudaStreamSynchronize(0);
-                        timer.tock(timer_rescale);
-                        if (i == 0 && args.no_test_correct) {
+                        if (i >= warm_up_repeat) timer.tock(timer_rescale);
+                        if (i == 0 && !args.no_test_correct) {
                             auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_rescale, pool), pool);
                             assert_true(context.near_equal(message, decrypted), "test_rescale_to_next failed.");
                         }
@@ -602,12 +701,12 @@ namespace bench::he_operations {
                     GeneralVector message = context.random_simd_full();
                     Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
                     Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain, nullptr, pool);
-                    for (size_t i = 0; i < repeat; i++) {
+                    for (size_t i = 0; i < repeat + warm_up_repeat; i++) {
                         timer.tick(timer_rotate);
                         Ciphertext cipher_rotate = context.evaluator().rotate_rows_new(cipher, rotate_count, glk, pool);
                         if (device) cudaStreamSynchronize(0);
-                        timer.tock(timer_rotate);
-                        if (i == 0 && args.no_test_correct) {
+                        if (i >= warm_up_repeat) timer.tock(timer_rotate);
+                        if (i == 0 && !args.no_test_correct) {
                             auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_rotate, pool), pool);
                             assert_true(context.near_equal(message.rotate(rotate_count), decrypted), "test_rotate_rows failed.");
                         }
@@ -631,12 +730,12 @@ namespace bench::he_operations {
                     GeneralVector message = context.random_simd_full();
                     Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
                     Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain, nullptr, pool);
-                    for (size_t i = 0; i < repeat; i++) {
+                    for (size_t i = 0; i < repeat + warm_up_repeat; i++) {
                         timer.tick(timer_rotate);
                         Ciphertext cipher_rotate = context.evaluator().rotate_columns_new(cipher, glk, pool);
                         if (device) cudaStreamSynchronize(0);
-                        timer.tock(timer_rotate);
-                        if (i == 0 && args.no_test_correct) {
+                        if (i >= warm_up_repeat) timer.tock(timer_rotate);
+                        if (i == 0 && !args.no_test_correct) {
                             auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_rotate, pool), pool);
                             assert_true(context.near_equal(message.conjugate(), decrypted), "test_rotate_columns failed.");
                         }
@@ -660,12 +759,12 @@ namespace bench::he_operations {
                     GeneralVector message = context.random_simd_full();
                     Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
                     Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain, nullptr, pool);
-                    for (size_t i = 0; i < repeat; i++) {
+                    for (size_t i = 0; i < repeat + warm_up_repeat; i++) {
                         timer.tick(timer_rotate);
                         Ciphertext cipher_rotate = context.evaluator().rotate_vector_new(cipher, rotate_count, glk, pool);
                         if (device) cudaStreamSynchronize(0);
-                        timer.tock(timer_rotate);
-                        if (i == 0 && args.no_test_correct) {
+                        if (i >= warm_up_repeat) timer.tock(timer_rotate);
+                        if (i == 0 && !args.no_test_correct) {
                             auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_rotate, pool), pool);
                             assert_true(context.near_equal(message.rotate(rotate_count), decrypted), "test_rotate_vector failed.");
                         }
@@ -689,12 +788,12 @@ namespace bench::he_operations {
                     GeneralVector message = context.random_simd_full();
                     Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
                     Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain, nullptr, pool);
-                    for (size_t i = 0; i < repeat; i++) {
+                    for (size_t i = 0; i < repeat + warm_up_repeat; i++) {
                         timer.tick(timer_conj);
                         Ciphertext cipher_conj = context.evaluator().complex_conjugate_new(cipher, glk, pool);
                         if (device) cudaStreamSynchronize(0);
-                        timer.tock(timer_conj);
-                        if (i == 0 && args.no_test_correct) {
+                        if (i >= warm_up_repeat) timer.tock(timer_conj);
+                        if (i == 0 && !args.no_test_correct) {
                             auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_conj, pool), pool);
                             assert_true(context.near_equal(message.conjugate(), decrypted), "test_complex_conjugate failed.");
                         }

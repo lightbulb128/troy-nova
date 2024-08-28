@@ -277,11 +277,11 @@ namespace troy { namespace utils {
         __host__ __device__ ConstSlice<T> const_slice(size_t begin, size_t end) const { return ConstSlice<T>(pointer + begin, end - begin, device, memory_pool_handle_); }
         __host__ __device__ Slice<T> slice(size_t begin, size_t end) { return Slice<T>(pointer + begin, end - begin, device, memory_pool_handle_); }
         __host__ __device__ bool on_device() const { return device; }
-        __host__ __device__ T* raw_pointer() { return pointer; }
+        __host__ __device__ T* raw_pointer() const { return pointer; }
         __host__ __device__ static Slice<T> from_pointer(Pointer<T> pointer) {
             return Slice<T>(pointer.get(), 1, pointer.on_device(), pointer.pool());
         }
-        void copy_from_slice(ConstSlice<T> slice) {
+        void copy_from_slice(ConstSlice<T> slice) const {
             if (slice.size() != len) throw std::runtime_error("[Slice::copy_from_slice] Slice size does not match array size");
             if (!device && !slice.on_device()) {
                 memcpy(pointer, slice.raw_pointer(), len * sizeof(T));
