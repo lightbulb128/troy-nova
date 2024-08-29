@@ -101,6 +101,21 @@ namespace bench::he_operations {
             no_bench_rotate_vector = parser.get_bool_store_true("--no-bench-rotate-vector").value_or(false);
             no_bench_complex_conjugate = parser.get_bool_store_true("--no-bench-complex-conjugate").value_or(false);
 
+            if (batch_size > 1) {
+                std::cout << "Batch size is greater than 1. Some tests are disabled because those batch operations are not implemented yet.\n";
+                no_bench_encode = true;
+                no_bench_encrypt = true;
+                no_bench_negate = true;
+                no_bench_translate_plain = true;
+                no_bench_multiply_relinearize = true;
+                no_bench_mod_switch_to_next = true;
+                no_bench_rescale_to_next = true;
+                no_bench_rotate_rows = true;
+                no_bench_rotate_columns = true;
+                no_bench_rotate_vector = true;
+                no_bench_complex_conjugate = true;
+            }
+
             if (threads < 1) {
                 throw std::invalid_argument("threads must be at least 1");
             }
@@ -604,18 +619,28 @@ namespace bench::he_operations {
                     size_t repeat = get_repeat(thread_index);
                     Timer timer;
                     size_t timer_mul = timer.register_timer(name + ".MultiplyPlain");
-                    GeneralVector message = context.random_simd_full();
-                    Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
-                    Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain, nullptr, pool);
+                    auto message = this->batch_random_simd_full(context);
+                    auto plain = this->batch_encode_simd(context, message, scale, pool);
+                    auto cipher = this->batch_encrypt_asymmetric(context, plain, pool);
                     for (size_t i = 0; i < repeat + warm_up_repeat; i++) {
                         timer.tick(timer_mul);
-                        Ciphertext cipher_mul = context.evaluator().multiply_plain_new(cipher, plain, pool);
+                        vector<Ciphertext> cipher_mul;
+                        if (batch_size == 1) {
+                            cipher_mul.resize(1);
+                            cipher_mul[0] = context.evaluator().multiply_plain_new(cipher[0], plain[0], pool);
+                        } else {
+                            auto cipher_ptrs = batch_utils::collect_const_pointer(cipher);
+                            auto plain_ptrs = batch_utils::collect_const_pointer(plain);
+                            cipher_mul.resize(batch_size);
+                            auto result_ptrs = batch_utils::collect_pointer(cipher_mul);
+                            context.evaluator().multiply_plain_batched(cipher_ptrs, plain_ptrs, result_ptrs, pool);
+                        }
                         if (device) cudaStreamSynchronize(0);
                         if (i >= warm_up_repeat) timer.tock(timer_mul);
                         if (i == 0 && !args.no_test_correct) {
-                            auto truth = context.mul(message, message);
-                            auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_mul, pool), pool);
-                            assert_true(context.near_equal(truth, decrypted), "test_multiply_plain failed.");
+                            auto decrypted = this->batch_decrypt(context, cipher_mul, pool);
+                            auto decoded = this->batch_decode_simd(context, decrypted, pool);
+                            assert_true(context.batch_near_equal(context.batch_mul(message, message), decoded), "test_multiply_plain failed.");
                         }
                     }
                     return timer;

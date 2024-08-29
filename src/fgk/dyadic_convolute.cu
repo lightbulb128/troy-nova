@@ -149,12 +149,22 @@ namespace troy::utils::fgk::dyadic_convolute {
         }
     }
     
-    __global__ static void kernel_dyadic_broadcast_product_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> poly2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
+    __device__ static void device_dyadic_broadcast_product_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> poly2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
         if (idx < pcount * moduli.size() * degree) {
             size_t j = (idx / degree) % moduli.size();
             size_t poly2_idx = idx % (moduli.size() * degree);
             result[idx] = multiply_uint64_mod(polys1[idx], poly2[poly2_idx], moduli[j]);
+        }
+    }
+    
+    __global__ static void kernel_dyadic_broadcast_product_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> poly2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
+        device_dyadic_broadcast_product_ps(polys1, poly2, pcount, degree, moduli, result);
+    }
+
+    __global__ static void kernel_dyadic_broadcast_product_bps(ConstSliceArrayRef<uint64_t> polys1, ConstSliceArrayRef<uint64_t> poly2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, SliceArrayRef<uint64_t> result) {
+        for (size_t i = 0; i < result.size(); i++) {
+            device_dyadic_broadcast_product_ps(polys1[i], poly2[i], pcount, degree, moduli, result[i]);
         }
     }
 
@@ -181,5 +191,39 @@ namespace troy::utils::fgk::dyadic_convolute {
             }
         }
     }
+
+    void dyadic_broadcast_product_bps(
+        const ConstSliceVec<uint64_t>& op1,
+        const ConstSliceVec<uint64_t>& op2,
+        size_t op1_pcount,
+        size_t degree,
+        ConstSlice<Modulus> moduli,
+        const SliceVec<uint64_t>& result,
+        MemoryPoolHandle pool
+    ) {
+        if (op1.size() != op2.size() || op1.size() != result.size()) {
+            throw std::invalid_argument("[fgk::dyadic_broadcast_product_bps] Size mismatch");
+        }
+        if (result.size() == 0) return;
+        bool device = moduli.on_device();
+        if (!device || result.size() < BATCH_OP_THRESHOLD) {
+            for (size_t i = 0; i < result.size(); i++) {
+                dyadic_broadcast_product_ps(
+                    op1[i], op2[i], op1_pcount, degree, moduli, result[i]
+                );
+            }
+        } else {
+            size_t block_count = ceil_div<size_t>(op1_pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
+            auto op1_batch = batch_utils::construct_batch(op1, pool, moduli);
+            auto op2_batch = batch_utils::construct_batch(op2, pool, moduli);
+            auto result_batch = batch_utils::construct_batch(result, pool, moduli);
+            utils::set_device(moduli.device_index());
+            kernel_dyadic_broadcast_product_bps<<<block_count, KERNEL_THREAD_COUNT>>>(
+                op1_batch, op2_batch, op1_pcount, degree, moduli, result_batch
+            );
+            utils::stream_sync();
+        }
+    }
+    
 
 }

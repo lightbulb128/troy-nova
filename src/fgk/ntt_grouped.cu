@@ -1,4 +1,6 @@
 #include "ntt_grouped.h"
+#include "../utils/box_batch.h"
+#include "../batch_utils.h"
 #include <cassert>
 
 namespace troy::utils::fgk::ntt_grouped {
@@ -154,7 +156,7 @@ namespace troy::utils::fgk::ntt_grouped {
     }
     */
 
-    __global__ void kernel_ntt_transfer_to_rev_layers(
+    __device__ void device_ntt_transfer_to_rev_layers(
         size_t layer_lower, size_t layer_upper, 
         ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, 
         bool use_inv_root_powers, Slice<uint64_t> result,
@@ -229,6 +231,26 @@ namespace troy::utils::fgk::ntt_grouped {
         result[from_x_index] = sdata[to_x_index];
         result[from_y_index] = sdata[to_y_index];
     }
+    
+    __global__ void kernel_ntt_transfer_to_rev_layers(
+        size_t layer_lower, size_t layer_upper, 
+        ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, 
+        bool use_inv_root_powers, Slice<uint64_t> result,
+        NTTTableIndexer tables
+    ) {
+        device_ntt_transfer_to_rev_layers(layer_lower, layer_upper, operand, pcount, component_count, log_degree, use_inv_root_powers, result, tables);
+    }
+
+    __global__ void kernel_ntt_transfer_to_rev_layers_batched(
+        size_t layer_lower, size_t layer_upper, 
+        ConstSliceArrayRef<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, 
+        bool use_inv_root_powers, SliceArrayRef<uint64_t> result,
+        NTTTableIndexer tables
+    ) {
+        for (size_t i = 0; i < result.size(); i++) {
+            device_ntt_transfer_to_rev_layers(layer_lower, layer_upper, operand[i], pcount, component_count, log_degree, use_inv_root_powers, result[i], tables);
+        }
+    }
 
     void ntt(ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, Slice<uint64_t> result, NTTTableIndexer tables) {
         bool device = operand.on_device();
@@ -264,6 +286,53 @@ namespace troy::utils::fgk::ntt_grouped {
                     );
                     utils::stream_sync();
                     operand = result.as_const();
+                }
+            }
+        }
+    }
+
+    void ntt_batched(
+        const ConstSliceVec<uint64_t>& operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, 
+        const SliceVec<uint64_t>& result, NTTTableIndexer tables,
+        MemoryPoolHandle pool
+    ) {
+        if (operand.size() != result.size()) {
+            throw std::invalid_argument("[ntt_batched] Operand and result must have the same size.");
+        }
+        if (operand.size() == 0) return;
+        bool device = operand[0].on_device();
+        if (!device || operand.size() < BATCH_OP_THRESHOLD) {
+            for (size_t i = 0; i < operand.size(); i++) {
+                ntt(operand[i], pcount, component_count, log_degree, use_inv_root_powers, result[i], tables);
+            }
+        } else {
+            auto comp_ref = operand[0];
+            auto operand_batch = batch_utils::construct_batch(operand, pool, comp_ref);
+            auto result_batch = batch_utils::construct_batch(result, pool, comp_ref);
+            if (log_degree <= NTT_KERNEL_THREAD_COUNT_LOG2) {
+                size_t total = pcount * component_count * (1 << (log_degree - 1));
+                size_t thread_count = 1 << (log_degree - 1);
+                size_t block_count = ceil_div<size_t>(total, thread_count);
+                assert(block_count == total / thread_count);
+                utils::set_device(comp_ref.device_index());
+                kernel_ntt_transfer_to_rev_layers_batched<<<block_count, thread_count>>>(
+                    0, log_degree, operand_batch, pcount, component_count, log_degree, use_inv_root_powers, result_batch, tables
+                );
+                utils::stream_sync();
+            } else {
+                for (size_t layer_lower = 0; layer_lower < log_degree; layer_lower += NTT_KERNEL_THREAD_COUNT_LOG2) {
+                    size_t layer_upper = std::min(layer_lower + NTT_KERNEL_THREAD_COUNT_LOG2, log_degree);
+                    size_t total = pcount * component_count * (1 << (log_degree - 1));
+                    size_t block_count = ceil_div<size_t>(total, NTT_KERNEL_THREAD_COUNT);
+                    assert(block_count == total / NTT_KERNEL_THREAD_COUNT);
+                    utils::set_device(comp_ref.device_index());
+                    kernel_ntt_transfer_to_rev_layers_batched<<<block_count, NTT_KERNEL_THREAD_COUNT>>>(
+                        layer_lower, layer_upper, operand_batch, pcount, component_count, log_degree, use_inv_root_powers, result_batch, tables
+                    );
+                    utils::stream_sync();
+                    if (layer_lower == 0) {
+                        operand_batch = batch_utils::construct_batch(batch_utils::rcollect_as_const(result), pool, comp_ref);
+                    }
                 }
             }
         }
@@ -412,7 +481,7 @@ namespace troy::utils::fgk::ntt_grouped {
     }
     */
 
-    __global__ void kernel_ntt_transfer_from_rev_layers(
+    __device__ void device_ntt_transfer_from_rev_layers(
         size_t layer_lower, size_t layer_upper, 
         ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, 
         bool use_inv_root_powers, Slice<uint64_t> result,
@@ -501,6 +570,26 @@ namespace troy::utils::fgk::ntt_grouped {
         result[from_y_index] = sdata[to_y_index];
     }
 
+    __global__ void kernel_ntt_transfer_from_rev_layers(
+        size_t layer_lower, size_t layer_upper, 
+        ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, 
+        bool use_inv_root_powers, Slice<uint64_t> result,
+        NTTTableIndexer tables
+    ) {
+        device_ntt_transfer_from_rev_layers(layer_lower, layer_upper, operand, pcount, component_count, log_degree, use_inv_root_powers, result, tables);
+    }
+
+    __global__ void kernel_ntt_transfer_from_rev_layers_batched(
+        size_t layer_lower, size_t layer_upper, 
+        ConstSliceArrayRef<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, 
+        bool use_inv_root_powers, SliceArrayRef<uint64_t> result,
+        NTTTableIndexer tables
+    ) {
+        for (size_t i = 0; i < result.size(); i++) {
+            device_ntt_transfer_from_rev_layers(layer_lower, layer_upper, operand[i], pcount, component_count, log_degree, use_inv_root_powers, result[i], tables);
+        }
+    }
+
     void intt(ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, Slice<uint64_t> result, NTTTableIndexer tables) {
         bool device = operand.on_device();
         // same device
@@ -535,6 +624,55 @@ namespace troy::utils::fgk::ntt_grouped {
                     );
                     utils::stream_sync();
                     operand = result.as_const();
+                }
+            }
+        }
+    }
+    
+
+    void intt_batched(
+        const ConstSliceVec<uint64_t>& operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, 
+        const SliceVec<uint64_t>& result, NTTTableIndexer tables,
+        MemoryPoolHandle pool
+    ) {
+        
+        if (operand.size() != result.size()) {
+            throw std::invalid_argument("[ntt_batched] Operand and result must have the same size.");
+        }
+        if (operand.size() == 0) return;
+        bool device = operand[0].on_device();
+        if (!device || operand.size() < BATCH_OP_THRESHOLD) {
+            for (size_t i = 0; i < operand.size(); i++) {
+                intt(operand[i], pcount, component_count, log_degree, use_inv_root_powers, result[i], tables);
+            }
+        } else {
+            auto comp_ref = operand[0];
+            auto operand_batch = batch_utils::construct_batch(operand, pool, comp_ref);
+            auto result_batch = batch_utils::construct_batch(result, pool, comp_ref);
+            if (log_degree <= NTT_KERNEL_THREAD_COUNT_LOG2) {
+                size_t total = pcount * component_count * (1 << (log_degree - 1));
+                size_t thread_count = 1 << (log_degree - 1);
+                size_t block_count = ceil_div<size_t>(total, thread_count);
+                assert(block_count == total / thread_count);
+                utils::set_device(comp_ref.device_index());
+                kernel_ntt_transfer_from_rev_layers_batched<<<block_count, thread_count>>>(
+                    0, log_degree, operand_batch, pcount, component_count, log_degree, use_inv_root_powers, result_batch, tables
+                );
+                utils::stream_sync();
+            } else {
+                for (size_t layer_lower = 0; layer_lower < log_degree; layer_lower += NTT_KERNEL_THREAD_COUNT_LOG2) {
+                    size_t layer_upper = std::min(layer_lower + NTT_KERNEL_THREAD_COUNT_LOG2, log_degree);
+                    size_t total = pcount * component_count * (1 << (log_degree - 1));
+                    size_t block_count = ceil_div<size_t>(total, NTT_KERNEL_THREAD_COUNT);
+                    assert(block_count == total / NTT_KERNEL_THREAD_COUNT);
+                    utils::set_device(comp_ref.device_index());
+                    kernel_ntt_transfer_from_rev_layers_batched<<<block_count, NTT_KERNEL_THREAD_COUNT>>>(
+                        layer_lower, layer_upper, operand_batch, pcount, component_count, log_degree, use_inv_root_powers, result_batch, tables
+                    );
+                    utils::stream_sync();
+                    if (layer_lower == 0) {
+                        operand_batch = batch_utils::construct_batch(batch_utils::rcollect_as_const(result), pool, comp_ref);
+                    }
                 }
             }
         }

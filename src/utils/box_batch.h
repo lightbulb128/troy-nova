@@ -16,32 +16,33 @@ namespace troy::utils {
     */
     template <typename T>
     class ConstSliceArray {
-        Array<const T*> pointers;
+        Array<ConstSlice<T>> slices;
         bool inner_device_;
         size_t inner_device_index_;
-        size_t len; // this means the length of each slice, not the length of the array
         
         // Construction must be on host
         void initialize(const ConstSlice<T>* begin, size_t count) {
             if (count == 0) {
-                pointers = Array<const T*>(0, false);
+                slices = Array<ConstSlice<T>>(0, false);
                 inner_device_ = false;
                 inner_device_index_ = 0;
-                len = 0;
             } else {
-                len = begin[0].size();
-                inner_device_ = begin[0].on_device();
-                inner_device_index_ = inner_device_ ? begin[0].device_index() : 0;
-                pointers = Array<const T*>(count, false);
+                inner_device_ = false;
+                inner_device_index_ = 0;
                 for (size_t i = 0; i < count; i++) {
-                    pointers[i] = begin[i].raw_pointer();
-                    if (begin[i].size() != len) {
-                        throw std::runtime_error("[ConstSliceArray::ConstSliceArray] All slices must have the same length");
+                    if (begin[i].on_device()) {
+                        inner_device_ = true;
+                        inner_device_index_ = begin[i].device_index();
+                        break;
                     }
-                    if (begin[i].on_device() != inner_device_) {
+                }
+                slices = Array<ConstSlice<T>>(count, false);
+                for (size_t i = 0; i < count; i++) {
+                    slices[i] = begin[i];
+                    if (inner_device_ && !begin[i].on_device() && begin[i].raw_pointer()) {
                         throw std::runtime_error("[ConstSliceArray::ConstSliceArray] All slices must be on host or all on device");
                     }
-                    if (inner_device_ && begin[i].device_index() != inner_device_index_) {
+                    if (inner_device_ && begin[i].on_device() && begin[i].device_index() != inner_device_index_) {
                         throw std::runtime_error("[ConstSliceArray::ConstSliceArray] All slices must be on the same device");
                     }
                 }
@@ -49,22 +50,19 @@ namespace troy::utils {
         }
 
     public:
-        MemoryPoolHandle pool() const { return pointers.pool(); }
-        bool on_device() const { return pointers.on_device(); }
+        MemoryPoolHandle pool() const { return slices.pool(); }
+        bool on_device() const { return slices.on_device(); }
         bool inner_on_device() const { return inner_device_; }
-        size_t device_index() const { return pointers.device_index(); }
+        size_t device_index() const { return slices.device_index(); }
         size_t inner_device_index() const { return inner_device_index_; }
-        const T* const* raw_pointer() const {
-            return pointers.raw_pointer(); 
+        const ConstSlice<T>* raw_pointer() const {
+            return slices.raw_pointer(); 
         }
 
         // How many slices are there in the collection
-        size_t count() const { return pointers.size(); }
+        size_t size() const { return slices.size(); }
 
-        // Length of each slice
-        size_t length() const { return len; }
-
-        ConstSliceArray(): pointers(), len(0), inner_device_(false), inner_device_index_(0) {}
+        ConstSliceArray(): slices(), inner_device_(false), inner_device_index_(0) {}
 
         ConstSliceArray(const ConstSlice<T>* begin, size_t count) {
             initialize(begin, count);
@@ -73,19 +71,30 @@ namespace troy::utils {
             ConstSliceArray(vec.data(), vec.size()) {}
 
         void to_device_inplace(MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
-            pointers.to_device_inplace(pool);
+            slices.to_device_inplace(pool);
         }
 
         // The slices returned by this function does not have memory pool
         ConstSlice<T> operator[](size_t index) const {
-            if (pointers.on_device()) {
+            if (slices.on_device()) {
                 throw std::runtime_error("[ConstSliceArray::operator[]] Cannot access slices on device");
             }
-            return ConstSlice<T>(pointers[index], len, inner_device_, nullptr);
+            return slices[index];
         }
 
         template <typename U>
         bool device_compatible(const U& other) const {
+            if (slices.on_device()) {
+                throw std::runtime_error("[ConstSliceArray::device_compatible] Cannot access slices on device");
+            }
+            if (other.on_device() && !inner_device_) {
+                // all slices must be nullptr
+                for (size_t i = 0; i < slices.size(); i++) {
+                    if (slices[i].raw_pointer()) {
+                        return false;
+                    }
+                }
+            }
             if (inner_device_ != other.on_device()) {
                 return false;
             }
@@ -101,51 +110,49 @@ namespace troy::utils {
 
     template <typename T>
     class SliceArray {
-        Array<T*> pointers;
+        Array<Slice<T>> slices;
         bool inner_device_;
         size_t inner_device_index_;
-        size_t len; // this means the length of each slice, not the length of the array
         // Construction must be on host.
         void initialize(const Slice<T>* begin, size_t count) {
             if (count == 0) {
-                pointers = Array<T*>(0, false);
+                slices = Array<Slice<T>>(0, false);
                 inner_device_ = false;
                 inner_device_index_ = 0;
-                len = 0;
             } else {
-                len = begin[0].size();
-                inner_device_ = begin[0].on_device();
-                inner_device_index_ = inner_device_ ? begin[0].device_index() : 0;
-                pointers = Array<T*>(count, false);
+                inner_device_ = false;
+                inner_device_index_ = 0;
                 for (size_t i = 0; i < count; i++) {
-                    pointers[i] = begin[i].raw_pointer();
-                    if (begin[i].size() != len) {
-                        throw std::runtime_error("[SliceArray::SliceArray] All slices must have the same length");
+                    if (begin[i].on_device()) {
+                        inner_device_ = true;
+                        inner_device_index_ = begin[i].device_index();
+                        break;
                     }
-                    if (begin[i].on_device() != inner_device_) {
-                        throw std::runtime_error("[SliceArray::SliceArray] All slices must be on host or all on device");
+                }
+                slices = Array<Slice<T>>(count, false);
+                for (size_t i = 0; i < count; i++) {
+                    slices[i] = begin[i];
+                    if (inner_device_ && !begin[i].on_device() && begin[i].raw_pointer()) {
+                        throw std::runtime_error("[ConstSliceArray::ConstSliceArray] All slices must be on host or all on device");
                     }
-                    if (inner_device_ && begin[i].device_index() != inner_device_index_) {
-                        throw std::runtime_error("[SliceArray::SliceArray] All slices must be on the same device");
+                    if (inner_device_ && begin[i].on_device() && begin[i].device_index() != inner_device_index_) {
+                        throw std::runtime_error("[ConstSliceArray::ConstSliceArray] All slices must be on the same device");
                     }
                 }
             }
         }
     public:
-        MemoryPoolHandle pool() const { return pointers.pool(); }
-        bool on_device() const { return pointers.on_device(); }
+        MemoryPoolHandle pool() const { return slices.pool(); }
+        bool on_device() const { return slices.on_device(); }
         bool inner_on_device() const { return inner_device_; }
-        size_t device_index() const { return pointers.device_index(); }
+        size_t device_index() const { return slices.device_index(); }
         size_t inner_device_index() const { return inner_device_index_; }
-        T* const* raw_pointer() const { return pointers.raw_pointer(); }
+        const Slice<T>* raw_pointer() const { return slices.raw_pointer(); }
 
         // How many slices are there in the collection
-        size_t count() const { return pointers.size(); }
+        size_t size() const { return slices.size(); }
 
-        // Length of each slice
-        size_t length() const { return len; }
-
-        SliceArray(): pointers(), len(0), inner_device_(false), inner_device_index_(0) {}
+        SliceArray(): slices(), inner_device_(false), inner_device_index_(0) {}
 
         SliceArray(const Slice<T>* begin, size_t count) {
             initialize(begin, count);
@@ -154,19 +161,30 @@ namespace troy::utils {
             SliceArray(vec.data(), vec.size()) {}
 
         void to_device_inplace(MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
-            pointers.to_device_inplace(pool);
+            slices.to_device_inplace(pool);
         }
 
         // The slices returned by this function does not have memory pool
         Slice<T> operator[](size_t index) const {
-            if (pointers.on_device()) {
+            if (slices.on_device()) {
                 throw std::runtime_error("[SliceArray::operator[]] Cannot access slices on device");
             }
-            return Slice<T>(pointers[index], len, inner_device_, nullptr);
+            return slices[index];
         }
 
         template <typename U>
         bool device_compatible(const U& other) const {
+            if (slices.on_device()) {
+                throw std::runtime_error("[SliceArray::device_compatible] Cannot access slices on device");
+            }
+            if (other.on_device() && !inner_device_) {
+                // all slices must be nullptr
+                for (size_t i = 0; i < slices.size(); i++) {
+                    if (slices[i].raw_pointer()) {
+                        return false;
+                    }
+                }
+            }
             if (inner_device_ != other.on_device()) {
                 return false;
             }
@@ -182,34 +200,199 @@ namespace troy::utils {
 
     template <typename T>
     class ConstSliceArrayRef {
-        const T* const* pointers;
+        const ConstSlice<T>* pointers;
         size_t count_;
-        size_t len;
         bool inner_device;
     public:
         ConstSliceArrayRef(const ConstSliceArray<T>& array):
-            pointers(array.raw_pointer()), count_(array.count()), len(array.length()), inner_device(array.inner_on_device()) {}
-        __host__ __device__ size_t count() const { return count_; }
-        __host__ __device__ size_t length() const { return len; }
+            pointers(array.raw_pointer()), count_(array.size()), inner_device(array.inner_on_device()) {}
+        __host__ __device__ size_t size() const { return count_; }
         __host__ __device__ ConstSlice<T> operator[](size_t index) const {
-            return ConstSlice<T>(pointers[index], len, inner_device, nullptr);
+            return pointers[index];
         }
     };
 
     template <typename T>
     class SliceArrayRef {
-        T* const* pointers;
+        const Slice<T>* pointers;
         size_t count_;
-        size_t len;
         bool inner_device;
     public:
         SliceArrayRef(const SliceArray<T>& array):
-            pointers(array.raw_pointer()), count_(array.count()), len(array.length()), inner_device(array.inner_on_device()) {}
-        __host__ __device__ size_t count() const { return count_; }
-        __host__ __device__ size_t length() const { return len; }
+            pointers(array.raw_pointer()), count_(array.size()), inner_device(array.inner_on_device()) {}
+        __host__ __device__ size_t size() const { return count_; }
         __host__ __device__ Slice<T> operator[](size_t index) const {
-            return Slice<T>(pointers[index], len, inner_device, nullptr);
+            return pointers[index];
         }
     };
+
+    
+
+    template <typename T, typename U>
+    utils::ConstSliceArray<T> construct_batch(const utils::ConstSliceVec<T>& vec, const MemoryPoolHandle& pool, const U& comp_ref) {
+        utils::ConstSliceArray<uint64_t> arr(vec);
+        if (!arr.device_compatible(comp_ref)) {
+            throw std::runtime_error("[construct_batch] All inputs must be on the same device as comp_ref");
+        }
+        if (pool->get_device() != comp_ref.device_index()) {
+            throw std::runtime_error("[construct_batch] All inputs must be on the same device as the pool");
+        }
+        arr.to_device_inplace(pool);
+        return arr;
+    }
+
+    template <typename T, typename U>
+    utils::SliceArray<T> construct_batch(const utils::SliceVec<T>& vec, const MemoryPoolHandle& pool, const U& comp_ref) {
+        utils::SliceArray<uint64_t> arr(vec);
+        if (!arr.device_compatible(comp_ref)) {
+            throw std::runtime_error("[construct_batch] All inputs must be on the same device as comp_ref");
+        }
+        if (pool->get_device() != comp_ref.device_index()) {
+            throw std::runtime_error("[construct_batch] All inputs must be on the same device as the pool");
+        }
+        arr.to_device_inplace(pool);
+        return arr;
+    }
+
+
+    template <typename T>
+    inline utils::ConstSliceVec<T> rcollect_as_const(const utils::SliceVec<T>& vec) {
+        std::vector<utils::ConstSlice<T>> result;
+        result.reserve(vec.size());
+        for (const utils::Slice<T>& item : vec) {
+            result.push_back(item.as_const());
+        }
+        return result;
+    }
+
+    template <typename T>
+    inline std::vector<const T*> pcollect_const_pointer(const std::vector<T*>& vec) {
+        std::vector<const T*> result;
+        result.reserve(vec.size());
+        for (T* item : vec) {
+            result.push_back(item);
+        }
+        return result;
+    }
+
+    template <typename T>
+    std::vector<T> clone(const std::vector<T>& vec) {
+        std::vector<T> result;
+        result.reserve(vec.size());
+        for (const T& item : vec) {
+            result.push_back(item.clone());
+        }
+        return result;
+    }
+
+    template <typename T>
+    std::vector<T> pclone(const std::vector<T*>& vec) {
+        std::vector<T> result;
+        result.reserve(vec.size());
+        for (T* item : vec) {
+            result.push_back(item->clone());
+        }
+        return result;
+    }
+
+    template <typename T>
+    std::vector<T*> collect_pointer(std::vector<T>& vec) {
+        std::vector<T*> result;
+        result.reserve(vec.size());
+        for (T& item : vec) {
+            result.push_back(&item);
+        }
+        return result;
+    }
+
+    template <typename T>
+    std::vector<const T*> collect_const_pointer(const std::vector<T>& vec) {
+        std::vector<const T*> result;
+        result.reserve(vec.size());
+        for (const T& item : vec) {
+            result.push_back(&item);
+        }
+        return result;
+    }
+
+    template <typename T, typename U = uint64_t>
+    std::vector<utils::ConstSlice<U>> pcollect_const_reference(const std::vector<const T*>& vec) {
+        std::vector<utils::ConstSlice<U>> result;
+        result.reserve(vec.size());
+        for (const T* item : vec) {
+            result.push_back(item->const_reference());
+        }
+        return result;
+    }
+
+    template <typename T, typename U = uint64_t>
+    std::vector<utils::ConstSlice<U>> rcollect_const_reference(const std::vector<T>& vec) {
+        std::vector<utils::ConstSlice<U>> result;
+        result.reserve(vec.size());
+        for (const T& item : vec) {
+            result.push_back(item.const_reference());
+        }
+        return result;
+    }
+
+    template <typename T, typename U = uint64_t>
+    std::vector<utils::Slice<U>> pcollect_reference(const std::vector<T*>& vec) {
+        std::vector<utils::Slice<U>> result;
+        result.reserve(vec.size());
+        for (T* item : vec) {
+            result.push_back(item->reference());
+        }
+        return result;
+    }
+
+    template <typename T, typename U = uint64_t>
+    std::vector<utils::Slice<U>> rcollect_reference(std::vector<T>& vec) {
+        std::vector<utils::Slice<U>> result;
+        result.reserve(vec.size());
+        for (T& item : vec) {
+            result.push_back(item.reference());
+        }
+        return result;
+    }
+
+    template <typename T, typename U = uint64_t>
+    std::vector<utils::ConstSlice<T>> pcollect_const_slice(const std::vector<const T*> vec, size_t begin, size_t end) {
+        std::vector<utils::ConstSlice<T>> result;
+        result.reserve(vec.size());
+        for (T* item : vec) {
+            result.push_back(item->const_slice(begin, end));
+        }
+        return result;
+    }
+
+    template <typename T, typename U = uint64_t>
+    std::vector<utils::ConstSlice<T>> rcollect_const_slice(const std::vector<T>& vec, size_t begin, size_t end) {
+        std::vector<utils::ConstSlice<T>> result;
+        result.reserve(vec.size());
+        for (T& item : vec) {
+            result.push_back(item.const_slice(begin, end));
+        }
+        return result;
+    }
+
+    template <typename T, typename U = uint64_t>
+    std::vector<utils::Slice<T>> pcollect_slice(std::vector<T*> vec, size_t begin, size_t end) {
+        std::vector<utils::Slice<T>> result;
+        result.reserve(vec.size());
+        for (T* item : vec) {
+            result.push_back(item->slice(begin, end));
+        }
+        return result;
+    }
+
+    template <typename T, typename U = uint64_t>
+    std::vector<utils::Slice<T>> rcollect_slice(std::vector<T>& vec, size_t begin, size_t end) {
+        std::vector<utils::Slice<T>> result;
+        result.reserve(vec.size());
+        for (T& item : vec) {
+            result.push_back(item.slice(begin, end));
+        }
+        return result;
+    }
 
 }

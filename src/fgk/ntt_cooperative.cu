@@ -37,7 +37,7 @@ namespace troy::utils::fgk::ntt_cooperative {
         device_properties_initialized = true;
     }
 
-    __global__ void kernel_ntt(ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, Slice<uint64_t> result, NTTTableIndexer tables) {
+    __device__ void device_ntt(ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, Slice<uint64_t> result, NTTTableIndexer tables) {
 
         unsigned int global_index = blockIdx.x * blockDim.x + threadIdx.x;
         unsigned int coeff_modulus_size = component_count;
@@ -127,6 +127,16 @@ namespace troy::utils::fgk::ntt_cooperative {
 
     }
 
+    __global__ void kernel_ntt(ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, Slice<uint64_t> result, NTTTableIndexer tables) {
+        device_ntt(operand, pcount, component_count, log_degree, use_inv_root_powers, result, tables);
+    }
+
+    __global__ void kernel_ntt_batched(ConstSliceArrayRef<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, SliceArrayRef<uint64_t> result, NTTTableIndexer tables) {
+        for (size_t i = 0; i < result.size(); i++) {
+            device_ntt(operand[i], pcount, component_count, log_degree, use_inv_root_powers, result[i], tables);
+        }
+    }
+
     void ntt(ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, Slice<uint64_t> result, NTTTableIndexer tables) {
         bool device = operand.on_device();
         // same device
@@ -165,9 +175,57 @@ namespace troy::utils::fgk::ntt_cooperative {
         }
     }
 
+    void ntt_batched(
+        const ConstSliceVec<uint64_t>& operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, 
+        const SliceVec<uint64_t>& result, NTTTableIndexer tables,
+        MemoryPoolHandle pool
+    ) {
+        if (operand.size() != result.size()) {
+            throw std::invalid_argument("[ntt_transfer_to_rev_batched] Operand and result must have the same size.");
+        }
+        if (operand.empty()) return;
+        bool device = operand[0].on_device();
+        if (!device || operand.size() < BATCH_OP_THRESHOLD) {
+            for (size_t i = 0; i < operand.size(); i++) {
+                ntt(operand[i], pcount, component_count, log_degree, use_inv_root_powers, result[i], tables);
+            }
+        } else {
+            auto comp_ref = operand[0];
+
+            size_t degree = static_cast<size_t>(1) << log_degree;
+            size_t thread_count = std::min(NTT_KERNEL_THREAD_COUNT, degree / 2);
+            size_t total = pcount * component_count * (degree / 2);
+            size_t block_count = ceil_div<size_t>(total, thread_count);
+            assert(block_count == total / thread_count);
+
+            ensure_device_properties();
+            int device_index = comp_ref.device_index();
+            const cudaDeviceProp& prop = device_properties[device_index];
+
+            if (static_cast<int>(block_count) > prop.multiProcessorCount && prop.cooperativeLaunch) {
+                // directly use ntt_grouped's ntt.
+                ntt_grouped::ntt_batched(operand, pcount, component_count, log_degree, use_inv_root_powers, result, tables);
+            } else {
+                auto operand_batch = batch_utils::construct_batch(operand, pool, comp_ref);
+                auto result_batch = batch_utils::construct_batch(result, pool, comp_ref);
+                void* kernel_args[] = {
+                    &operand_batch, &pcount, &component_count, &log_degree, &use_inv_root_powers, &result_batch, &tables
+                };
+                utils::set_device(device_index);
+                cudaLaunchCooperativeKernel(
+                    (void*)kernel_ntt_batched,
+                    block_count, thread_count,
+                    kernel_args
+                );
+                utils::stream_sync();
+            }
+        }
+    }
+    
 
 
-    __global__ void kernel_intt(ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, Slice<uint64_t> result, NTTTableIndexer tables) {
+
+    __device__ void device_intt(ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, Slice<uint64_t> result, NTTTableIndexer tables) {
         unsigned int global_index = blockIdx.x * blockDim.x + threadIdx.x;
         unsigned int i_upperbound = 1 << (log_degree - 1);
         unsigned int coeff_modulus_size = component_count;
@@ -267,6 +325,16 @@ namespace troy::utils::fgk::ntt_cooperative {
         }
     }
 
+    __global__ void kernel_intt(ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, Slice<uint64_t> result, NTTTableIndexer tables) {
+        device_intt(operand, pcount, component_count, log_degree, use_inv_root_powers, result, tables);
+    }
+
+    __global__ void kernel_intt_batched(ConstSliceArrayRef<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, SliceArrayRef<uint64_t> result, NTTTableIndexer tables) {
+        for (size_t i = 0; i < result.size(); i++) {
+            device_intt(operand[i], pcount, component_count, log_degree, use_inv_root_powers, result[i], tables);
+        }
+    }
+
     void intt(ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, Slice<uint64_t> result, NTTTableIndexer tables) {
         bool device = operand.on_device();
         // same device
@@ -304,6 +372,52 @@ namespace troy::utils::fgk::ntt_cooperative {
         }
     }
 
+    void intt_batched(
+        const ConstSliceVec<uint64_t>& operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, 
+        const SliceVec<uint64_t>& result, NTTTableIndexer tables,
+        MemoryPoolHandle pool
+    ) {
+        if (operand.size() != result.size()) {
+            throw std::invalid_argument("[ntt_transfer_to_rev_batched] Operand and result must have the same size.");
+        }
+        if (operand.empty()) return;
+        bool device = operand[0].on_device();
+        if (!device || operand.size() < BATCH_OP_THRESHOLD) {
+            for (size_t i = 0; i < operand.size(); i++) {
+                intt(operand[i], pcount, component_count, log_degree, use_inv_root_powers, result[i], tables);
+            }
+        } else {
+            auto comp_ref = operand[0];
+
+            size_t degree = static_cast<size_t>(1) << log_degree;
+            size_t thread_count = std::min(NTT_KERNEL_THREAD_COUNT, degree / 2);
+            size_t total = pcount * component_count * (degree / 2);
+            size_t block_count = ceil_div<size_t>(total, thread_count);
+            assert(block_count == total / thread_count);
+
+            ensure_device_properties();
+            int device_index = comp_ref.device_index();
+            const cudaDeviceProp& prop = device_properties[device_index];
+
+            if (static_cast<int>(block_count) > prop.multiProcessorCount && prop.cooperativeLaunch) {
+                // directly use ntt_grouped's ntt.
+                ntt_grouped::intt_batched(operand, pcount, component_count, log_degree, use_inv_root_powers, result, tables);
+            } else {
+                auto operand_batch = batch_utils::construct_batch(operand, pool, comp_ref);
+                auto result_batch = batch_utils::construct_batch(result, pool, comp_ref);
+                void* kernel_args[] = {
+                    &operand_batch, &pcount, &component_count, &log_degree, &use_inv_root_powers, &result_batch, &tables
+                };
+                utils::set_device(device_index);
+                cudaLaunchCooperativeKernel(
+                    (void*)kernel_intt_batched,
+                    block_count, thread_count,
+                    kernel_args
+                );
+                utils::stream_sync();
+            }
+        }
+    }
 
 
 }

@@ -110,4 +110,318 @@ namespace evaluator_batched {
         utils::MemoryPool::Destroy();
     }
 
+
+
+    void test_multiply_plain(const GeneralHeContext& context) {
+        double scale = context.scale();
+
+        // native multiply
+        {
+            auto message1 = context.batch_random_simd_full(batch_size);
+            auto message2 = context.batch_random_simd_full(batch_size);
+
+            auto encoded1 = context.encoder().batch_encode_simd(message1, std::nullopt, scale);
+            auto encoded2 = context.encoder().batch_encode_simd(message2, std::nullopt, scale);
+            auto encrypted1 = context.batch_encrypt_asymmetric(encoded1);
+
+            auto e1_cptrs = batch_utils::collect_const_pointer(encrypted1);
+            auto e1_ptrs = batch_utils::collect_pointer(encrypted1);
+            auto p2_cptrs = batch_utils::collect_const_pointer(encoded2);
+            auto p2_ptrs = batch_utils::collect_pointer(encoded2);
+
+            auto multiplied = context.evaluator().multiply_plain_new_batched(e1_cptrs, p2_cptrs);
+            auto decrypted = context.batch_decrypt(multiplied);
+            auto result = context.encoder().batch_decode_simd(decrypted);
+            auto truth = context.batch_mul(message1, message2);
+            ASSERT_TRUE(context.batch_near_equal(truth, result));
+
+            // if encrypted is not ntt
+            if (!encrypted1[0].is_ntt_form()) {
+                context.evaluator().transform_to_ntt_inplace_batched(e1_ptrs);
+                context.evaluator().transform_plain_to_ntt_inplace_batched(p2_ptrs, encrypted1[0].parms_id());
+                auto multiplied = context.evaluator().multiply_plain_new_batched(e1_cptrs, p2_cptrs);
+                auto multiplied_ptrs = batch_utils::collect_pointer(multiplied);
+                context.evaluator().transform_from_ntt_inplace_batched(multiplied_ptrs);
+                auto decrypted = context.batch_decrypt(multiplied);
+                auto result = context.encoder().batch_decode_simd(decrypted);
+                ASSERT_TRUE(context.batch_near_equal(truth, result));
+            } else {
+                context.evaluator().transform_from_ntt_inplace_batched(e1_ptrs);
+                context.evaluator().transform_to_ntt_inplace_batched(e1_ptrs);
+                auto multiplied = context.evaluator().multiply_plain_new_batched(e1_cptrs, p2_cptrs);
+                auto decrypted = context.batch_decrypt(multiplied);
+                auto result = context.encoder().batch_decode_simd(decrypted);
+                ASSERT_TRUE(context.batch_near_equal(truth, result));
+            }
+        }
+
+        {
+            size_t n = context.params_host().poly_modulus_degree();
+            size_t cc = n / 3;
+            auto message1 = context.batch_random_polynomial(batch_size, cc);
+            auto message2 = context.batch_random_polynomial(batch_size, cc);
+            auto encoded1 = context.encoder().batch_encode_polynomial(message1, std::nullopt, scale);
+            auto encoded2 = context.encoder().batch_encode_polynomial(message2, std::nullopt, scale);
+            auto encrypted1 = context.batch_encrypt_asymmetric(encoded1);
+            
+            auto e1_cptrs = batch_utils::collect_const_pointer(encrypted1);
+            auto e1_ptrs = batch_utils::collect_pointer(encrypted1);
+            auto p2_cptrs = batch_utils::collect_const_pointer(encoded2);
+            auto p2_ptrs = batch_utils::collect_pointer(encoded2);
+
+            auto multiplied = context.evaluator().multiply_plain_new_batched(e1_cptrs, p2_cptrs);
+            auto decrypted = context.batch_decrypt(multiplied);
+            auto result = context.encoder().batch_decode_polynomial(decrypted);
+            auto truth = context.batch_mul_poly(message1, message2); 
+            for (auto& item: truth) item.resize(n);
+            ASSERT_TRUE(context.batch_near_equal(truth, result));
+
+            // if encrypted is not ntt
+            if (!encrypted1[0].is_ntt_form()) {
+                context.evaluator().transform_to_ntt_inplace_batched(e1_ptrs);
+                context.evaluator().transform_plain_to_ntt_inplace_batched(p2_ptrs, encrypted1[0].parms_id());
+                auto multiplied = context.evaluator().multiply_plain_new_batched(e1_cptrs, p2_cptrs);
+                auto multiplied_ptrs = batch_utils::collect_pointer(multiplied);
+                context.evaluator().transform_from_ntt_inplace_batched(multiplied_ptrs);
+                auto decrypted = context.batch_decrypt(multiplied);
+                auto result = context.encoder().batch_decode_polynomial(decrypted);
+                ASSERT_TRUE(context.batch_near_equal(truth, result));
+            } else {
+                context.evaluator().transform_from_ntt_inplace_batched(e1_ptrs);
+                context.evaluator().transform_to_ntt_inplace_batched(e1_ptrs);
+                auto multiplied = context.evaluator().multiply_plain_new_batched(e1_cptrs, p2_cptrs);
+                auto decrypted = context.batch_decrypt(multiplied);
+                auto result = context.encoder().batch_decode_polynomial(decrypted);
+                ASSERT_TRUE(context.batch_near_equal(truth, result));
+            }
+        }
+    }
+
+    TEST(EvaluatorBatchTest, HostBFVMultiplyPlain) {
+        GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_multiply_plain(ghe);
+    }
+    TEST(EvaluatorBatchTest, HostBGVMultiplyPlain) {
+        GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_multiply_plain(ghe);
+    }
+    TEST(EvaluatorBatchTest, HostCKKSMultiplyPlain) {
+        GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1ull<<20, 1e-2);
+        test_multiply_plain(ghe);
+    }
+    TEST(EvaluatorBatchTest, DeviceBFVMultiplyPlain) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_multiply_plain(ghe);
+        utils::MemoryPool::Destroy();
+    }
+    TEST(EvaluatorBatchTest, DeviceBGVMultiplyPlain) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_multiply_plain(ghe);
+        utils::MemoryPool::Destroy();
+    }
+    TEST(EvaluatorBatchTest, DeviceCKKSMultiplyPlain) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1ull<<20, 1e-2);
+        test_multiply_plain(ghe);
+        utils::MemoryPool::Destroy();
+    }
+
+    void test_multiply_plain_ntt(const GeneralHeContext& context) {
+        double scale = context.scale();
+
+        // native multiply
+        {
+            auto message1 = context.batch_random_simd_full(batch_size);
+            auto message2 = context.batch_random_simd_full(batch_size);
+
+            auto encoded1 = context.encoder().batch_encode_simd(message1, std::nullopt, scale);
+            auto encoded2 = context.encoder().batch_encode_simd(message2, std::nullopt, scale);
+            auto encrypted1 = context.batch_encrypt_asymmetric(encoded1);
+
+            auto e1_cptrs = batch_utils::collect_const_pointer(encrypted1);
+            auto e1_ptrs = batch_utils::collect_pointer(encrypted1);
+            auto p2_cptrs = batch_utils::collect_const_pointer(encoded2);
+            auto p2_ptrs = batch_utils::collect_pointer(encoded2);
+
+            context.evaluator().transform_plain_to_ntt_inplace_batched(p2_ptrs, encrypted1[0].parms_id());
+            auto multiplied = context.evaluator().multiply_plain_new_batched(e1_cptrs, p2_cptrs);
+            auto decrypted = context.batch_decrypt(multiplied);
+            auto result = context.encoder().batch_decode_simd(decrypted);
+            auto truth = context.batch_mul(message1, message2);
+            ASSERT_TRUE(context.batch_near_equal(truth, result));
+        }
+
+        {
+            size_t n = context.params_host().poly_modulus_degree();
+            size_t cc = n / 3;
+
+
+            auto message1 = context.batch_random_polynomial(batch_size, cc);
+            auto message2 = context.batch_random_polynomial(batch_size, cc);
+            auto encoded1 = context.encoder().batch_encode_polynomial(message1, std::nullopt, scale);
+            for (auto& item: encoded1) {
+                ASSERT_EQ(item.coeff_count(), cc);
+            }
+            auto encoded2 = context.encoder().batch_encode_polynomial(message2, std::nullopt, scale);
+            for (auto& item: encoded2) {
+                ASSERT_EQ(item.coeff_count(), cc);
+            }
+            auto encrypted1 = context.batch_encrypt_asymmetric(encoded1);
+            
+            auto e1_cptrs = batch_utils::collect_const_pointer(encrypted1);
+            auto e1_ptrs = batch_utils::collect_pointer(encrypted1);
+            auto p2_cptrs = batch_utils::collect_const_pointer(encoded2);
+            auto p2_ptrs = batch_utils::collect_pointer(encoded2);
+
+            context.evaluator().transform_plain_to_ntt_inplace_batched(p2_ptrs, encrypted1[0].parms_id());
+            for (auto& item: p2_cptrs) {
+                ASSERT_EQ(item->coeff_count(), n);
+                ASSERT_EQ(item->poly_modulus_degree(), n);
+                ASSERT_EQ(item->data().size(), item->coeff_modulus_size() * n);
+            }
+            auto multiplied = context.evaluator().multiply_plain_new_batched(e1_cptrs, p2_cptrs);
+            auto decrypted = context.batch_decrypt(multiplied);
+            auto result = context.encoder().batch_decode_polynomial(decrypted);
+            auto truth = context.batch_mul_poly(message1, message2); 
+            for (auto& item: truth) item.resize(n);
+            ASSERT_TRUE(context.batch_near_equal(truth, result));
+        }
+    }
+
+    TEST(EvaluatorBatchTest, HostBFVMultiplyPlainNTT) {
+        GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_multiply_plain_ntt(ghe);
+    }
+    TEST(EvaluatorBatchTest, HostBGVMultiplyPlainNTT) {
+        GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_multiply_plain_ntt(ghe);
+    }
+    TEST(EvaluatorBatchTest, DeviceBFVMultiplyPlainNTT) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_multiply_plain_ntt(ghe);
+        utils::MemoryPool::Destroy();
+    }
+    TEST(EvaluatorBatchTest, DeviceBGVMultiplyPlainNTT) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_multiply_plain_ntt(ghe);
+        utils::MemoryPool::Destroy();
+    }
+
+    void test_multiply_plain_centralized(const GeneralHeContext& context) {
+        uint64_t t = context.t();
+        double scale = context.scale();
+        double tolerance = context.tolerance();
+
+        {
+            auto message1 = context.batch_random_simd_full(batch_size);
+            auto message2 = context.batch_random_simd_full(batch_size);
+
+            auto encoded1 = context.encoder().batch_encode_simd(message1, std::nullopt, scale);
+            auto encoded2 = context.encoder().batch_encode_simd(message2, std::nullopt, scale);
+            auto encrypted1 = context.batch_encrypt_asymmetric(encoded1);
+
+            auto e1_cptrs = batch_utils::collect_const_pointer(encrypted1);
+            auto e1_ptrs = batch_utils::collect_pointer(encrypted1);
+            auto p2_cptrs = batch_utils::collect_const_pointer(encoded2);
+            auto p2_ptrs = batch_utils::collect_pointer(encoded2);
+
+            for (auto item: p2_ptrs) {
+                context.encoder().batch().centralize_inplace(*item, std::nullopt);
+            }
+            auto multiplied = context.evaluator().multiply_plain_new_batched(e1_cptrs, p2_cptrs);
+            auto decrypted = context.batch_decrypt(multiplied);
+            auto result = context.encoder().batch_decode_simd(decrypted);
+            auto truth = context.batch_mul(message1, message2);
+            ASSERT_TRUE(context.batch_near_equal(truth, result));
+        }
+
+        {
+            size_t n = context.encoder().slot_count();
+            size_t cc = n / 3;
+            {
+                auto message1 = context.batch_random_polynomial(batch_size, n);
+                auto message2 = context.batch_random_polynomial(batch_size, n);
+                auto encoded1 = context.encoder().batch_encode_polynomial(message1, std::nullopt, scale);
+                for (auto& item: encoded1) {
+                    ASSERT_EQ(item.coeff_count(), n);
+                }
+                auto encoded2 = context.encoder().batch_encode_polynomial(message2, std::nullopt, scale);
+                for (auto& item: encoded2) {
+                    ASSERT_EQ(item.coeff_count(), n);
+                }
+                auto encrypted1 = context.batch_encrypt_asymmetric(encoded1);
+                
+                auto e1_cptrs = batch_utils::collect_const_pointer(encrypted1);
+                auto e1_ptrs = batch_utils::collect_pointer(encrypted1);
+                auto p2_cptrs = batch_utils::collect_const_pointer(encoded2);
+                auto p2_ptrs = batch_utils::collect_pointer(encoded2);
+
+                for (auto item: p2_ptrs) {
+                    context.encoder().batch().centralize_inplace(*item, std::nullopt);
+                }
+                for (auto& item: p2_cptrs) {
+                    ASSERT_EQ(item->coeff_count(), n);
+                    ASSERT_EQ(item->poly_modulus_degree(), n);
+                    ASSERT_EQ(item->data().size(), item->coeff_modulus_size() * n);
+                }
+                auto multiplied = context.evaluator().multiply_plain_new_batched(e1_cptrs, p2_cptrs);
+                auto decrypted = context.batch_decrypt(multiplied);
+                auto result = context.encoder().batch_decode_polynomial(decrypted);
+                auto truth = context.batch_mul_poly(message1, message2); 
+                for (auto& item: truth) item.resize(n);
+                ASSERT_TRUE(context.batch_near_equal(truth, result));
+            }
+            {
+                auto message1 = context.batch_random_polynomial(batch_size, cc);
+                auto message2 = context.batch_random_polynomial(batch_size, cc);
+                auto encoded1 = context.encoder().batch_encode_polynomial(message1, std::nullopt, scale);
+                for (auto& item: encoded1) {
+                    ASSERT_EQ(item.coeff_count(), cc);
+                }
+                auto encoded2 = context.encoder().batch_encode_polynomial(message2, std::nullopt, scale);
+                for (auto& item: encoded2) {
+                    ASSERT_EQ(item.coeff_count(), cc);
+                }
+                auto encrypted1 = context.batch_encrypt_asymmetric(encoded1);
+                
+                auto e1_cptrs = batch_utils::collect_const_pointer(encrypted1);
+                auto e1_ptrs = batch_utils::collect_pointer(encrypted1);
+                auto p2_cptrs = batch_utils::collect_const_pointer(encoded2);
+                auto p2_ptrs = batch_utils::collect_pointer(encoded2);
+
+                for (auto item: p2_ptrs) {
+                    context.encoder().batch().centralize_inplace(*item, std::nullopt);
+                }
+                for (auto& item: p2_cptrs) {
+                    ASSERT_EQ(item->coeff_count(), cc);
+                    ASSERT_EQ(item->poly_modulus_degree(), n);
+                    ASSERT_EQ(item->data().size(), item->coeff_modulus_size() * cc);
+                }
+                auto multiplied = context.evaluator().multiply_plain_new_batched(e1_cptrs, p2_cptrs);
+                auto decrypted = context.batch_decrypt(multiplied);
+                auto result = context.encoder().batch_decode_polynomial(decrypted);
+                auto truth = context.batch_mul_poly(message1, message2); 
+                for (auto& item: truth) item.resize(n);
+                ASSERT_TRUE(context.batch_near_equal(truth, result));
+            }
+        }
+    }
+
+    TEST(EvaluatorBatchTest, HostBFVMultiplyPlainCentralized) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_multiply_plain_centralized(ghe);
+    }
+    TEST(EvaluatorBatchTest, DeviceBFVMultiplyPlainCentralized) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_multiply_plain_centralized(ghe);
+        utils::MemoryPool::Destroy();
+    }
+
+
 }

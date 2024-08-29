@@ -1,3 +1,4 @@
+#include "constants.h"
 #include "rns_base.h"
 #include "polynomial_buffer.h"
 
@@ -129,7 +130,7 @@ namespace troy {namespace utils {
         }
     } 
 
-    __global__ void kernel_rnsbase_decompose_array(ConstSlice<Modulus> base, ConstSlice<uint64_t> from, Slice<uint64_t> result) {
+    __device__ void device_rnsbase_decompose_array(ConstSlice<Modulus> base, ConstSlice<uint64_t> from, Slice<uint64_t> result) {
         size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
         if (global_index >= result.size()) {
             return;
@@ -142,6 +143,14 @@ namespace troy {namespace utils {
             from.const_slice(single_index * n, (single_index + 1) * n),
             base[base_index]
         );
+    }
+    __global__ void kernel_rnsbase_decompose_array(ConstSlice<Modulus> base, ConstSlice<uint64_t> from, Slice<uint64_t> result) {
+        device_rnsbase_decompose_array(base, from, result);
+    }
+    __global__ void kernel_rnsbase_decompose_array_batched(ConstSlice<Modulus> base, ConstSliceArrayRef<uint64_t> from, SliceArrayRef<uint64_t> result) {
+        for (size_t i = 0; i < from.size(); i++) {
+            device_rnsbase_decompose_array(base, from[i], result[i]);
+        }
     }
 
     void rnsbase_decompose_array(const RNSBase& self, ConstSlice<uint64_t> from, Slice<uint64_t> result) {
@@ -158,6 +167,26 @@ namespace troy {namespace utils {
             host_rnsbase_decompose_array(self, from, result);
         }
     } 
+    
+    void rnsbase_decompose_array_batched(const RNSBase& self, const ConstSliceVec<uint64_t>& from, const SliceVec<uint64_t>& result, MemoryPoolHandle pool) {
+        if (from.size() != result.size()) {
+            throw std::invalid_argument("[rnsbase_decompose_array_batched] Input and output sizes must be the same.");
+        }
+        if (from.empty()) return;
+        bool device = self.on_device();
+        if (!device || from.size() < BATCH_OP_THRESHOLD) {
+            for (size_t i = 0; i < from.size(); i++) {
+                rnsbase_decompose_array(self, from[i], result[i]);
+            }
+        } else {
+            size_t block_count = ceil_div<size_t>(from.size(), KERNEL_THREAD_COUNT);
+            auto from_batched = utils::construct_batch(from, pool, self);
+            auto result_batched = utils::construct_batch(result, pool, self);
+            utils::set_device(self.device_index());
+            kernel_rnsbase_decompose_array_batched<<<block_count, KERNEL_THREAD_COUNT>>>(self.base(), from_batched, result_batched);
+            utils::stream_sync();
+        }
+    } 
 
     void RNSBase::decompose_array(Slice<uint64_t> value, MemoryPoolHandle pool) const {
         if (value.size() % this->size() != 0) {
@@ -168,6 +197,23 @@ namespace troy {namespace utils {
         }
         Array<uint64_t> cloned = Array<uint64_t>::create_and_copy_from_slice(value.as_const(), pool);
         rnsbase_decompose_array(*this, cloned.const_reference(), value);
+    }
+
+    void RNSBase::decompose_array_batched(const SliceVec<uint64_t>& value, MemoryPoolHandle pool) const {
+        for (size_t i = 0; i < value.size(); i++) {
+            if (value[i].size() % this->size() != 0) {
+                throw std::invalid_argument("[RNSBase::decompose_array] Value size must be a multiple of RNSBase size.");
+            }
+        }
+        if (this->size() == 1) {
+            return; // nothing to do;
+        }
+        std::vector<Array<uint64_t>> cloned(value.size());
+        for (size_t i = 0; i < value.size(); i++) {
+            cloned[i] = Array<uint64_t>::create_and_copy_from_slice(value[i].as_const(), pool);
+        }
+        auto cloned_batched = utils::rcollect_const_reference(cloned);
+        rnsbase_decompose_array_batched(*this, cloned_batched, value, pool);
     }
 
     void RNSBase::compose_single(Slice<uint64_t> value) const {

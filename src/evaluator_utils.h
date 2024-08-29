@@ -10,6 +10,13 @@ namespace troy {
         }
     }
 
+    template <typename C>
+    inline void check_no_seed_vec(const char* prompt, const std::vector<C*>& c) {
+        for (const C* item : c) {
+            check_no_seed(prompt, *item);
+        }
+    }
+
     inline void check_ciphertext(const char* prompt, const Ciphertext& ciphertext) {
         check_no_seed(prompt, ciphertext);
     }
@@ -145,7 +152,7 @@ namespace troy {
 
     template<typename C1>
     inline void check_is_ntt_form_vec(const char* prompt, const std::vector<C1*>& a) {
-        for (const Ciphertext* c : a) {
+        for (const C1* c : a) {
             check_is_ntt_form(prompt, *c);
         }
     }
@@ -159,7 +166,7 @@ namespace troy {
 
     template<typename C1>
     inline void check_is_not_ntt_form_vec(const char* prompt, const std::vector<C1*>& a) {
-        for (const Ciphertext* c : a) {
+        for (C1* c : a) {
             check_is_not_ntt_form(prompt, *c);
         }
     }
@@ -174,11 +181,45 @@ namespace troy {
     }
 
     template <typename T>
+    inline bool get_is_ntt_form_vec(const std::vector<T*>& vec) {
+        if (vec.size() == 0) {
+            throw std::invalid_argument("[get_is_ntt_form] Empty vector.");
+        }
+        bool r = vec[0]->is_ntt_form();
+        for (size_t i = 1; i < vec.size(); i++) {
+            if (vec[i]->is_ntt_form() != r) {
+                throw std::invalid_argument("[get_is_ntt_form] Arguments have different NTT forms.");
+            }
+        }
+        return r;
+    }
+
+    template <typename T>
+    inline size_t get_vec_coeff_count(const std::vector<T*>& vec) {
+        if (vec.size() == 0) {
+            throw std::invalid_argument("[get_vec_coeff_count] Empty vector.");
+        }
+        size_t r = vec[0]->coeff_count();
+        for (size_t i = 1; i < vec.size(); i++) {
+            if (vec[i]->coeff_count() != r) {
+                throw std::invalid_argument("[get_vec_coeff_count] Arguments have different coefficient counts.");
+            }
+        }
+        return r;
+    }
+
+    template <typename T>
     inline size_t get_vec_polynomial_count(const std::vector<T*>& vec) {
         if (vec.size() == 0) {
             throw std::invalid_argument("[get_vec_polynomial_count] Empty vector.");
         }
-        return vec[0]->polynomial_count();
+        size_t r = vec[0]->polynomial_count();
+        for (size_t i = 1; i < vec.size(); i++) {
+            if (vec[i]->polynomial_count() != r) {
+                throw std::invalid_argument("[get_vec_polynomial_count] Arguments have different polynomial counts.");
+            }
+        }
+        return r;
     }
 
     template <typename T>
@@ -186,7 +227,13 @@ namespace troy {
         if (vec.size() == 0) {
             throw std::invalid_argument("[get_vec_scale] Empty vector.");
         }
-        return vec[0]->scale();
+        double s = vec[0]->scale();
+        for (size_t i = 1; i < vec.size(); i++) {
+            if (!utils::are_close_double(vec[i]->scale(), s)) {
+                throw std::invalid_argument("[get_vec_scale] Arguments have different scales.");
+            }
+        }
+        return s;
     }
 
     template <typename T>
@@ -194,7 +241,13 @@ namespace troy {
         if (vec.size() == 0) {
             throw std::invalid_argument("[get_vec_correction_factor] Empty vector.");
         }
-        return vec[0]->correction_factor();
+        uint64_t r = vec[0]->correction_factor();
+        for (size_t i = 1; i < vec.size(); i++) {
+            if (vec[i]->correction_factor() != r) {
+                throw std::invalid_argument("[get_vec_correction_factor] Arguments have different correction factors.");
+            }
+        }        
+        return r;
     }
 
 

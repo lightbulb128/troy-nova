@@ -1,4 +1,5 @@
 #pragma once
+#include "batch_utils.h"
 #include "encryption_parameters.h"
 #include "he_context.h"
 #include "plaintext.h"
@@ -64,7 +65,15 @@ namespace troy {
         void translate_plain(const Ciphertext& encrypted, const Plaintext& plain, Ciphertext& destination, bool subtract, MemoryPoolHandle pool) const;
 
         void multiply_plain_normal(const Ciphertext& encrypted, const Plaintext& plain, Ciphertext& destination, MemoryPoolHandle pool) const;
+        void multiply_plain_normal_batched(
+            const std::vector<const Ciphertext*>& encrypted, const std::vector<const Plaintext*>& plain, 
+            const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool
+        ) const;
         void multiply_plain_ntt(const Ciphertext& encrypted, const Plaintext& plain, Ciphertext& destination, MemoryPoolHandle pool) const;
+        void multiply_plain_ntt_batched(
+            const std::vector<const Ciphertext*>& encrypted, const std::vector<const Plaintext*>& plain, 
+            const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool
+        ) const;
         void multiply_plain_ntt_inplace(Ciphertext& encrypted, const Plaintext& plain) const;
 
         void rotate_internal(const Ciphertext& encrypted, int steps, const GaloisKeys& galois_keys, Ciphertext& destination, MemoryPoolHandle pool) const;
@@ -75,6 +84,14 @@ namespace troy {
         inline HeContextPointer context() const { return context_; }
         inline bool on_device() const {return this->context()->on_device();}
 
+
+
+
+
+        // ==================================
+        //                negate
+        // ==================================
+
         void negate_inplace(Ciphertext& encrypted) const;
         void negate(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline Ciphertext negate_new(const Ciphertext& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
@@ -83,11 +100,21 @@ namespace troy {
             return destination;
         }
 
+
+
+
+
+
+
+        // ==================================
+        //                add
+        // ==================================
+
         inline void add_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             translate_inplace(encrypted1, encrypted2, false, pool);
         }
         inline void add_inplace_batched(
-            std::vector<Ciphertext*>& encrypted1, const std::vector<const Ciphertext*>& encrypted2, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+            const std::vector<Ciphertext*>& encrypted1, const std::vector<const Ciphertext*>& encrypted2, MemoryPoolHandle pool = MemoryPool::GlobalPool()
         ) const {
             translate_inplace_batched(encrypted1, encrypted2, false, pool);
         }
@@ -96,7 +123,7 @@ namespace troy {
         }
         inline void add_batched(
             const std::vector<const Ciphertext*>& encrypted1, const std::vector<const Ciphertext*>& encrypted2, 
-            std::vector<Ciphertext*>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+            const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()
         ) const {
             translate_batched(encrypted1, encrypted2, destination, false, pool);
         }
@@ -114,6 +141,18 @@ namespace troy {
             add_batched(encrypted1, encrypted2, destination_ptr, pool);
             return destination;
         }
+
+
+
+
+
+
+
+
+
+        // ==================================
+        //                subtract
+        // ==================================
 
         inline void sub_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             translate_inplace(encrypted1, encrypted2, true, pool);
@@ -146,6 +185,18 @@ namespace troy {
             return destination;
         }
 
+
+
+
+
+
+
+
+
+        // ==================================
+        //                multiply
+        // ==================================
+
         void multiply(const Ciphertext& encrypted1, const Ciphertext& encrypted2, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline void multiply_inplace(Ciphertext& encrypted1, const Ciphertext& encrypted2, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination; multiply(encrypted1, encrypted2, destination, pool);
@@ -156,6 +207,18 @@ namespace troy {
             multiply(encrypted1, encrypted2, destination, pool);
             return destination;
         }
+
+
+
+
+
+
+
+        
+
+        // ==================================
+        //                square
+        // ==================================
 
         void square(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline void square_inplace(Ciphertext& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
@@ -168,6 +231,14 @@ namespace troy {
             return destination;
         }
 
+
+
+
+
+        // ==================================
+        //             keyswitching
+        // ==================================
+
         void apply_keyswitching_inplace(Ciphertext& encrypted, const KSwitchKeys& kswitch_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         void apply_keyswitching(const Ciphertext& encrypted, const KSwitchKeys& kswitch_keys, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline Ciphertext apply_keyswitching_new(const Ciphertext& encrypted, const KSwitchKeys& kswitch_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
@@ -175,6 +246,15 @@ namespace troy {
             apply_keyswitching(encrypted, kswitch_keys, destination, pool);
             return destination;
         }
+
+
+
+
+
+
+        // ==================================
+        //             relin
+        // ==================================
 
         inline void relinearize_inplace(Ciphertext& encrypted, const RelinKeys& relin_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             relinearize_inplace_internal(encrypted, relin_keys, 2, pool);
@@ -187,6 +267,14 @@ namespace troy {
             relinearize(encrypted, relin_keys, destination, pool);
             return destination;
         }
+
+
+
+
+
+        // ==================================
+        //             modswitch
+        // ==================================
 
         void mod_switch_to_next(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline void mod_switch_to_next_inplace(Ciphertext& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
@@ -243,6 +331,15 @@ namespace troy {
             return destination;
         }
 
+
+
+
+
+
+        // ==================================
+        //             rescale
+        // ==================================
+
         void rescale_to_next(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline void rescale_to_next_inplace(Ciphertext& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;
@@ -267,6 +364,15 @@ namespace troy {
             return destination;
         }
 
+
+
+
+
+
+        // ==================================
+        //             add plain
+        // ==================================
+
         inline void add_plain_inplace(Ciphertext& encrypted, const Plaintext& plain, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             translate_plain_inplace(encrypted, plain, false, pool);
         }
@@ -278,6 +384,14 @@ namespace troy {
             add_plain(encrypted, plain, destination, pool);
             return destination;
         }
+
+
+
+
+
+        // ==================================
+        //             sub plain
+        // ==================================
 
         inline void sub_plain_inplace(Ciphertext& encrypted, const Plaintext& plain, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             translate_plain_inplace(encrypted, plain, true, pool);
@@ -291,6 +405,15 @@ namespace troy {
             return destination;
         }
 
+
+
+
+
+
+        // ==================================
+        //             multiply plain
+        // ==================================
+
         void multiply_plain(const Ciphertext& encrypted, const Plaintext& plain, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline void multiply_plain_inplace(Ciphertext& encrypted, const Plaintext& plain, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext c; multiply_plain(encrypted, plain, c, pool);
@@ -302,11 +425,65 @@ namespace troy {
             return destination;
         }
 
+        void multiply_plain_batched(
+            const std::vector<const Ciphertext*>& encrypted, 
+            const std::vector<const Plaintext*>& plain, 
+            const std::vector<Ciphertext*>& destination, 
+            MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const;
+        inline void multiply_plain_inplace_batched(
+            const std::vector<Ciphertext*>& encrypted, 
+            const std::vector<const Plaintext*>& plain, 
+            MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            std::vector<Ciphertext> destination(encrypted.size());
+            auto destination_ptrs = batch_utils::collect_pointer(destination);
+            auto encrypted_const_ptrs = batch_utils::pcollect_const_pointer(encrypted);
+            multiply_plain_batched(encrypted_const_ptrs, plain, destination_ptrs, pool);
+            for (size_t i = 0; i < encrypted.size(); i++) *encrypted[i] = std::move(destination[i]);
+        }
+        inline std::vector<Ciphertext> multiply_plain_new_batched(
+            const std::vector<const Ciphertext*>& encrypted, 
+            const std::vector<const Plaintext*>& plain, 
+            MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            std::vector<Ciphertext> destination(encrypted.size());
+            auto destination_ptrs = batch_utils::collect_pointer(destination);
+            multiply_plain_batched(encrypted, plain, destination_ptrs, pool);
+            return destination;
+        }
+
+
+
+
+
+
+
+
+
+        // ==================================
+        //       transform plain ntt
+        // ==================================
+
         void transform_plain_to_ntt_inplace(Plaintext& plain, const ParmsID& parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         void transform_plain_to_ntt(const Plaintext& plain, const ParmsID& parms_id, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline Plaintext transform_plain_to_ntt_new(const Plaintext& plain, const ParmsID& parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Plaintext destination;
             transform_plain_to_ntt(plain, parms_id, destination, pool);
+            return destination;
+        }
+        void transform_plain_to_ntt_inplace_batched(
+            const std::vector<Plaintext*>& plain, const ParmsID& parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const;
+        void transform_plain_to_ntt_batched(
+            const std::vector<const Plaintext*>& plain, const ParmsID& parms_id, 
+            const std::vector<Plaintext*>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const;
+        inline std::vector<Plaintext> transform_plain_to_ntt_new_batched(
+            const std::vector<const Plaintext*>& plain, const ParmsID& parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            std::vector<Plaintext> destination(plain.size()); auto destination_ptrs = batch_utils::collect_pointer(destination);
+            transform_plain_to_ntt_batched(plain, parms_id, destination_ptrs, pool);
             return destination;
         }
 
@@ -317,12 +494,48 @@ namespace troy {
             transform_plain_from_ntt(plain, destination, pool);
             return destination;
         }
+        void transform_plain_from_ntt_inplace_batched(
+            const std::vector<Plaintext*>& plain, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const;
+        void transform_plain_from_ntt_batched(
+            const std::vector<const Plaintext*>& plain, const std::vector<Plaintext*>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const;
+        inline std::vector<Plaintext> transform_plain_from_ntt_new_batched(
+            const std::vector<const Plaintext*>& plain, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            std::vector<Plaintext> destination(plain.size()); auto destination_ptrs = batch_utils::collect_pointer(destination);
+            transform_plain_from_ntt_batched(plain, destination_ptrs, pool);
+            return destination;
+        }
+
+
+
+
+
+
+
+        // ==================================
+        //       transform cipher ntt
+        // ==================================
 
         void transform_to_ntt_inplace(Ciphertext& encrypted) const;
         void transform_to_ntt(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline Ciphertext transform_to_ntt_new(const Ciphertext& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;
             transform_to_ntt(encrypted, destination, pool);
+            return destination;
+        }
+        void transform_to_ntt_inplace_batched(
+            const std::vector<Ciphertext*>& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const;
+        void transform_to_ntt_batched(
+            const std::vector<const Ciphertext*>& encrypted, const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const;
+        inline std::vector<Ciphertext> transform_to_ntt_new_batched(
+            const std::vector<const Ciphertext*>& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            std::vector<Ciphertext> destination(encrypted.size()); auto destination_ptrs = batch_utils::collect_pointer(destination);
+            transform_to_ntt_batched(encrypted, destination_ptrs, pool);
             return destination;
         }
 
@@ -333,6 +546,27 @@ namespace troy {
             transform_from_ntt(encrypted, destination, pool);
             return destination;
         }
+        void transform_from_ntt_inplace_batched(
+            const std::vector<Ciphertext*>& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const;
+        void transform_from_ntt_batched(
+            const std::vector<const Ciphertext*>& encrypted, const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const;
+        inline std::vector<Ciphertext> transform_from_ntt_new_batched(
+            const std::vector<const Ciphertext*>& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            std::vector<Ciphertext> destination(encrypted.size()); auto destination_ptrs = batch_utils::collect_pointer(destination);
+            transform_from_ntt_batched(encrypted, destination_ptrs, pool);
+            return destination;
+        }
+
+
+
+
+
+        // ==================================
+        //       apply galois
+        // ==================================
 
         void apply_galois(const Ciphertext& encrypted, size_t galois_element, const GaloisKeys& galois_keys, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline void apply_galois_inplace(Ciphertext& encrypted, size_t galois_element, const GaloisKeys& galois_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
@@ -357,6 +591,17 @@ namespace troy {
             apply_galois_plain(plain, galois_element, destination, pool);
             return destination;
         }
+
+
+
+
+
+
+
+
+        // ==================================
+        //         rotate
+        // ==================================
 
         void rotate_rows(const Ciphertext& encrypted, int steps, const GaloisKeys& galois_keys, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             SchemeType scheme = this->context()->key_context_data().value()->parms().scheme();
@@ -433,6 +678,14 @@ namespace troy {
             complex_conjugate(encrypted, galois_keys, destination, pool);
             return destination;
         }
+
+
+
+
+
+
+
+
 
         // Pack LWE utilities
 

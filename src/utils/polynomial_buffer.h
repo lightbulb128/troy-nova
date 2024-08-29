@@ -18,6 +18,7 @@ namespace troy {namespace utils {
         Buffer(size_t coeff_modulus_size, size_t coeff_count, bool device, MemoryPoolHandle pool): 
             Buffer(1, coeff_modulus_size, coeff_count, device, pool) {}
         Buffer(size_t coeff_count, bool device, MemoryPoolHandle pool): Buffer(1, 1, coeff_count, device, pool) {}
+        Buffer(): Buffer(0, false, nullptr) {}
 
         void resize(size_t poly_count, size_t coeff_modulus_size, size_t coeff_count) {
             poly_count_ = poly_count;

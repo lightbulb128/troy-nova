@@ -228,15 +228,9 @@ namespace troy { namespace linear {
         }
         for (size_t i = 0; i < w.data().size(); i++) {
             for (size_t j = 0; j < w[i].size(); j++) {
-                const Plaintext* w_ptr = &w[i][j];
-                Plaintext w_cloned;
-                if (evaluator.on_device() && !w_ptr->on_device()) {
-                    w_cloned = w_ptr->clone(pool);
-                    w_ptr = &w_cloned;
-                }
                 for (size_t b = 0; b < ceil_div(batch_size, batch_block); b++) {
                     Ciphertext prod;
-                    evaluator.multiply_plain(a[b][i], *w_ptr, prod, pool);
+                    evaluator.multiply_plain(a[b][i], w[i][j], prod, pool);
                     if (i==0) ret[b][j] = std::move(prod);
                     else {
                         evaluator.add_inplace(ret[b][j], prod, pool);
@@ -285,15 +279,9 @@ namespace troy { namespace linear {
         for (size_t b = 0; b < ceil_div(batch_size, batch_block); b++) {
             std::vector<Ciphertext> outVecs(outputVectorCount);
             for (size_t i = 0; i < w.data().size(); i++) {
-                const Plaintext* a_ptr = &a[b][i];
-                Plaintext a_cloned;
-                if (!a_ptr->on_device() && evaluator.on_device()) {
-                    a_cloned = a_ptr->clone(pool);
-                    a_ptr = &a_cloned;
-                }
                 for (size_t j = 0; j < w[i].size(); j++) {
                     Ciphertext prod;
-                    evaluator.multiply_plain(w[i][j], *a_ptr, prod, pool);
+                    evaluator.multiply_plain(w[i][j], a[b][i], prod, pool);
                     if (i==0) outVecs[j] = std::move(prod);
                     else {
                         evaluator.add_inplace(outVecs[j], prod, pool);
@@ -379,13 +367,7 @@ namespace troy { namespace linear {
                 size_t dj = 0;
                 for (size_t lj = 0; lj < output_dims; lj += vecsize) {
                     size_t uj = (lj + vecsize > output_dims) ? output_dims : (lj + vecsize);
-                    const Ciphertext* c = &outputs[di][dj];
-                    Ciphertext c_cloned;
-                    if (decryptor.on_device() && !c->on_device()) {
-                        c_cloned = c->clone(pool);
-                        c = &c_cloned;
-                    }
-                    std::vector<T> buffer = encoder.decrypt_outputs(decryptor, *c, pool);
+                    std::vector<T> buffer = encoder.decrypt_outputs(decryptor, outputs[di][dj], pool);
                     for (size_t i = li; i < ui; i++)
                         for (size_t j = lj; j < uj; j++) 
                             dec[i * output_dims + j] = buffer[(i - li) * input_block * output_block + (j - lj) * input_block + input_block - 1];
@@ -396,13 +378,7 @@ namespace troy { namespace linear {
         } else {
             std::vector<std::vector<T>> buffer;
             for (size_t i = 0; i < outputs.data()[0].size(); i++) {
-                const Ciphertext* c = &outputs[0][i];
-                Ciphertext c_cloned;
-                if (decryptor.on_device() && !c->on_device()) {
-                    c_cloned = c->clone(pool);
-                    c = &c_cloned;
-                }
-                buffer.push_back(encoder.decrypt_outputs(decryptor, *c, pool));
+                buffer.push_back(encoder.decrypt_outputs(decryptor, outputs[0][i], pool));
             }
             size_t li = 0; size_t di = 0; while (li < this->batch_size) {
                 size_t ui = std::min(this->batch_size, li + this->batch_block);

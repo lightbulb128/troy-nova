@@ -86,7 +86,7 @@ namespace troy { namespace utils {
         Box(T* object, bool device, MemoryPoolHandle memory_pool_handle = MemoryPool::GlobalPool()) : pointer(object), device(device), memory_pool_handle_(device ? memory_pool_handle : nullptr) {
             if (device && !memory_pool_handle_) throw std::runtime_error("[Box::Box] Memory pool handle is required for device memory");
         }
-        Box(Box&& other) : pointer(other.pointer), device(other.device), memory_pool_handle_(other.memory_pool_handle_) { other.pointer = nullptr;}
+        Box(Box&& other): pointer(other.pointer), device(other.device), memory_pool_handle_(other.memory_pool_handle_) { other.pointer = nullptr;}
 
         __host__ __device__ bool on_device() const { return device; }
         __host__ __device__ bool is_null() const { return pointer == nullptr; }
@@ -387,7 +387,7 @@ namespace troy { namespace utils {
         __host__ __device__ T* raw_pointer() { return pointer; }
         __host__ __device__ const T* raw_pointer() const { return pointer; }
 
-        Array(Array&& other) : pointer(other.pointer), len(other.len), device(other.device), memory_pool_handle_(other.memory_pool_handle_) { 
+        Array(Array&& other): pointer(other.pointer), len(other.len), device(other.device), memory_pool_handle_(other.memory_pool_handle_) { 
             other.pointer = nullptr;
             other.memory_pool_handle_ = nullptr;
             other.len = 0; 

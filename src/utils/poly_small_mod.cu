@@ -1,38 +1,17 @@
 #include "poly_small_mod.h"
+#include "../batch_utils.h"
 
 namespace troy {namespace utils {
 
-    template <typename T, typename U>
-    static ConstSliceArray<T> construct_batch(const ConstSliceVec<T>& vec, const MemoryPoolHandle& pool, const U& comp_ref) {
-        ConstSliceArray<uint64_t> arr(vec);
-        if (!arr.device_compatible(comp_ref)) {
-            throw std::runtime_error("[construct_batch] All inputs must be on the same device as comp_ref");
-        }
-        if (pool->get_device() != comp_ref.device_index()) {
-            throw std::runtime_error("[construct_batch] All inputs must be on the same device as the pool");
-        }
-        arr.to_device_inplace(pool);
-        return arr;
-    }
-
-    template <typename T, typename U>
-    static SliceArray<T> construct_batch(const SliceVec<T>& vec, const MemoryPoolHandle& pool, const U& comp_ref) {
-        SliceArray<uint64_t> arr(vec);
-        if (!arr.device_compatible(comp_ref)) {
-            throw std::runtime_error("[construct_batch] All inputs must be on the same device as comp_ref");
-        }
-        if (pool->get_device() != comp_ref.device_index()) {
-            throw std::runtime_error("[construct_batch] All inputs must be on the same device as the pool");
-        }
-        arr.to_device_inplace(pool);
-        return arr;
-    }
+    using batch_utils::construct_batch;
 
     static __global__ void kernel_copy_slice_b(ConstSliceArrayRef<uint64_t> from, SliceArrayRef<uint64_t> to) {
         size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-        if (idx < from.length()) {
-            for (size_t i = 0; i < from.count(); i++) {
-                to[i][idx] = from[i][idx];
+        for (size_t i = 0; i < from.size(); i++) {
+            ConstSlice<uint64_t> from_i = from[i];
+            Slice<uint64_t> to_i = to[i];
+            if (idx < from_i.size()) {
+                to_i[idx] = from_i[idx];
             }
         }
     }
@@ -82,7 +61,7 @@ namespace troy {namespace utils {
         device_modulo_ps(polys, pcount, degree, moduli, result);
     }
     static __global__ void kernel_modulo_bps(ConstSliceArrayRef<uint64_t> polys, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, SliceArrayRef<uint64_t> result) {
-        for (size_t i = 0; i < polys.count(); i++) {
+        for (size_t i = 0; i < polys.size(); i++) {
             device_modulo_ps(polys[i], pcount, degree, moduli, result[i]);
         }
     }
@@ -142,7 +121,7 @@ namespace troy {namespace utils {
         device_negate_ps(polys, pcount, degree, moduli, result);
     }
     static __global__ void kernel_negate_bps(ConstSliceArrayRef<uint64_t> polys, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, SliceArrayRef<uint64_t> result) {
-        for (size_t i = 0; i < polys.count(); i++) {
+        for (size_t i = 0; i < polys.size(); i++) {
             device_negate_ps(polys[i], pcount, degree, moduli, result[i]);
         }
     }
@@ -206,7 +185,7 @@ namespace troy {namespace utils {
         device_add_ps(polys1, polys2, pcount, degree, moduli, result);
     }
     static __global__ void kernel_add_bps(ConstSliceArrayRef<uint64_t> polys1, ConstSliceArrayRef<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, SliceArrayRef<uint64_t> result) {
-        for (size_t i = 0; i < polys1.count(); i++) {
+        for (size_t i = 0; i < polys1.size(); i++) {
             device_add_ps(polys1[i], polys2[i], pcount, degree, moduli, result[i]);
         }
     }
@@ -267,7 +246,7 @@ namespace troy {namespace utils {
         device_sub_ps(polys1, polys2, pcount, degree, moduli, result);
     }
     static __global__ void kernel_sub_bps(ConstSliceArrayRef<uint64_t> polys1, ConstSliceArrayRef<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, SliceArrayRef<uint64_t> result) {
-        for (size_t i = 0; i < polys1.count(); i++) {
+        for (size_t i = 0; i < polys1.size(); i++) {
             device_sub_ps(polys1[i], polys2[i], pcount, degree, moduli, result[i]);
         }
     }
@@ -340,7 +319,7 @@ namespace troy {namespace utils {
         device_add_partial_ps(polys1, polys2, pcount, degree1, degree2, moduli, result, degree_result);
     }
     static __global__ void kernel_add_partial_bps(ConstSliceArrayRef<uint64_t> polys1, ConstSliceArrayRef<uint64_t> polys2, size_t pcount, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, SliceArrayRef<uint64_t> result, size_t degree_result) {
-        for (size_t i = 0; i < polys1.count(); i++) {
+        for (size_t i = 0; i < polys1.size(); i++) {
             device_add_partial_ps(polys1[i], polys2[i], pcount, degree1, degree2, moduli, result[i], degree_result);
         }
     }
@@ -413,7 +392,7 @@ namespace troy {namespace utils {
         device_sub_partial_ps(polys1, polys2, pcount, degree1, degree2, moduli, result, degree_result);
     }
     static __global__ void kernel_sub_partial_bps(ConstSliceArrayRef<uint64_t> polys1, ConstSliceArrayRef<uint64_t> polys2, size_t pcount, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, SliceArrayRef<uint64_t> result, size_t degree_result) {
-        for (size_t i = 0; i < polys1.count(); i++) {
+        for (size_t i = 0; i < polys1.size(); i++) {
             device_sub_partial_ps(polys1[i], polys2[i], pcount, degree1, degree2, moduli, result[i], degree_result);
         }
     }
@@ -480,7 +459,7 @@ namespace troy {namespace utils {
         device_scatter_partial_ps(source_polys, pcount, source_degree, destination_degree, moduli_size, destination);
     }
     static __global__ void kernel_scatter_partial_bps(ConstSliceArrayRef<uint64_t> source_polys, size_t pcount, size_t source_degree, size_t destination_degree, size_t moduli_size, SliceArrayRef<uint64_t> destination) {
-        for (size_t i = 0; i < source_polys.count(); i++) {
+        for (size_t i = 0; i < source_polys.size(); i++) {
             device_scatter_partial_ps(source_polys[i], pcount, source_degree, destination_degree, moduli_size, destination[i]);
         }
     }
@@ -614,7 +593,7 @@ namespace troy {namespace utils {
         device_multiply_scalar_ps(polys, scalar, pcount, degree, moduli, result);
     }
     __global__ void kernel_multiply_scalar_bps(ConstSliceArrayRef<uint64_t> polys, uint64_t scalar, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, SliceArrayRef<uint64_t> result) {
-        for (size_t i = 0; i < polys.count(); i++) {
+        for (size_t i = 0; i < polys.size(); i++) {
             device_multiply_scalar_ps(polys[i], scalar, pcount, degree, moduli, result[i]);
         }
     }

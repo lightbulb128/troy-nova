@@ -2,6 +2,7 @@
 #include "../modulus.h"
 #include "uint_small_mod.h"
 #include "number_theory.h"
+#include "box_batch.h"
 
 namespace troy {namespace utils {
 
@@ -117,6 +118,8 @@ namespace troy {namespace utils {
         void decompose_single(Slice<uint64_t> value) const;
 
         void decompose_array(Slice<uint64_t> values, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        
+        void decompose_array_batched(const SliceVec<uint64_t>& values, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
 
         void compose_single(Slice<uint64_t> value) const;
 
