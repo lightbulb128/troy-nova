@@ -1,6 +1,7 @@
 #include "../test_multithread.h"
 #include "../argparse.h"
 #include "../../src/utils/timer.h"
+#include "../../src/batch_utils.h"
 #include "argument_helper.h"
 #include <iostream>
 #include <thread>
@@ -485,9 +486,9 @@ namespace bench::he_operations {
                             cipher_add.resize(1);
                             cipher_add[0] = context.evaluator().add_new(cipher[0], cipher[0], pool);
                         } else {
-                            vector<const Ciphertext*> cipher_ptrs; for (auto& c : cipher) cipher_ptrs.push_back(&c);
+                            auto cipher_ptrs = batch_utils::collect_const_pointer(cipher);
                             cipher_add.resize(batch_size);
-                            vector<Ciphertext*> result_ptrs; for (auto& c : cipher_add) result_ptrs.push_back(&c);
+                            auto result_ptrs = batch_utils::collect_pointer(cipher_add);
                             context.evaluator().add_batched(cipher_ptrs, cipher_ptrs, result_ptrs, pool);
                         }
                         if (device) cudaStreamSynchronize(0);
@@ -498,24 +499,20 @@ namespace bench::he_operations {
                             cipher_sub.resize(1);
                             cipher_sub[0] = context.evaluator().sub_new(cipher[0], cipher[0], pool);
                         } else {
-                            vector<const Ciphertext*> cipher_ptrs; for (auto& c : cipher) cipher_ptrs.push_back(&c);
+                            auto cipher_ptrs = batch_utils::collect_const_pointer(cipher);
                             cipher_sub.resize(batch_size);
-                            vector<Ciphertext*> result_ptrs; for (auto& c : cipher_sub) result_ptrs.push_back(&c);
-                            cipher_sub = context.evaluator().sub_new_batched(cipher_ptrs, cipher_ptrs, pool);
+                            auto result_ptrs = batch_utils::collect_pointer(cipher_sub);
+                            context.evaluator().sub_batched(cipher_ptrs, cipher_ptrs, result_ptrs, pool);
                         }
                         if (device) cudaStreamSynchronize(0);
                         if (i >= warm_up_repeat) timer.tock(timer_sub);
                         if (i == 0 && !args.no_test_correct) {
                             auto decrypted = this->batch_decrypt(context, cipher_add, pool);
                             auto decoded = this->batch_decode_simd(context, decrypted, pool);
-                            for (size_t j = 0; j < batch_size; j++) {
-                                assert_true(context.near_equal(context.add(message[j], message[j]), decoded[j]), "test_translate/add failed.");
-                            }
+                            assert_true(context.batch_near_equal(context.batch_add(message, message), decoded), "test_translate/add failed.");
                             decrypted = this->batch_decrypt(context, cipher_sub, pool);
                             decoded = this->batch_decode_simd(context, decrypted, pool);
-                            for (size_t j = 0; j < batch_size; j++) {
-                                assert_true(context.near_equal(context.sub(message[j], message[j]), decoded[j]), "test_translate/sub failed.");
-                            }
+                            assert_true(context.batch_near_equal(context.batch_sub(message, message), decoded), "test_translate/sub failed.");
                         }
                     }
                     return timer;

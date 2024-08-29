@@ -1,3 +1,4 @@
+#pragma once
 #include "ciphertext.h"
 
 namespace troy {

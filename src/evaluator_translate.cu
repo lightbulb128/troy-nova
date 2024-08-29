@@ -1,5 +1,7 @@
 #include "evaluator.h"
 #include "evaluator_utils.h"
+#include "batch_utils.h"
+#include "utils/constants.h"
 
 namespace troy {
 
@@ -105,8 +107,8 @@ namespace troy {
 
             for (size_t i = 0; i < destination.size(); i++) *destination[i] = Ciphertext::like(*encrypted1[i], enc1_size, false, pool);
             {
-                utils::ConstSliceVec<uint64_t> arg1; arg1.reserve(encrypted1.size()); for (const Ciphertext* c : encrypted1) {arg1.push_back(c->data().const_reference());}
-                utils::SliceVec<uint64_t> arg2; arg2.reserve(encrypted1.size()); for (Ciphertext* c : destination) {arg2.push_back(c->data().reference());}
+                auto arg1 = batch_utils::pcollect_const_reference(encrypted1);
+                auto arg2 = batch_utils::pcollect_reference(destination);
                 utils::multiply_scalar_bps(arg1, f1, enc1_size, coeff_count, coeff_modulus, arg2);
             }
 
@@ -114,10 +116,8 @@ namespace troy {
             for (const Ciphertext* c: encrypted2) encrypted2_copy.push_back(Ciphertext::like(*c, false, pool));
 
             {
-                utils::ConstSliceVec<uint64_t> arg1; arg1.reserve(encrypted2.size());
-                for (const Ciphertext* c: encrypted2) arg1.push_back(c->data().const_reference());
-                utils::SliceVec<uint64_t> arg2; arg2.reserve(encrypted2.size());
-                for (Ciphertext& c: encrypted2_copy) arg2.push_back(c.data().reference());
+                auto arg1 = batch_utils::pcollect_const_reference(encrypted2);
+                auto arg2 = batch_utils::rcollect_reference(encrypted2_copy);
                 utils::multiply_scalar_bps(arg1, f2, enc2_size, coeff_count, coeff_modulus, arg2);
             }
             
@@ -126,8 +126,7 @@ namespace troy {
             for (Ciphertext& c: encrypted2_copy) c.correction_factor() = f0;
 
             {
-                std::vector<const Ciphertext*> arg; arg.reserve(encrypted2_copy.size());
-                for (const Ciphertext& c: encrypted2_copy) arg.push_back(&c);
+                auto arg = batch_utils::collect_const_pointer(encrypted2_copy);
                 this->translate_inplace_batched(destination, arg, subtract, pool);
             }
 
@@ -135,15 +134,12 @@ namespace troy {
 
             // Prepare destination
             for (size_t i = 0; i < destination.size(); i++) 
-                destination[i]->resize(this->context(), context_data->parms_id(), max_size, false);
-            
+                *destination[i] = Ciphertext::like(*encrypted1[i], max_size, false, pool);
+
             {
-                utils::ConstSliceVec<uint64_t> arg1; arg1.reserve(encrypted1.size());
-                for (const Ciphertext* c: encrypted1) arg1.push_back(c->data().const_reference());
-                utils::ConstSliceVec<uint64_t> arg2; arg2.reserve(encrypted2.size());
-                for (const Ciphertext* c: encrypted2) arg2.push_back(c->data().const_reference());
-                utils::SliceVec<uint64_t> arg3; arg3.reserve(destination.size());
-                for (Ciphertext* c: destination) arg3.push_back(c->data().reference());
+                auto arg1 = batch_utils::pcollect_const_reference(encrypted1);
+                auto arg2 = batch_utils::pcollect_const_reference(encrypted2);
+                auto arg3 = batch_utils::pcollect_reference(destination);
                 if (!subtract) {
                     utils::add_bps(arg1, arg2, min_size, coeff_count, coeff_modulus, arg3);
                 } else {
@@ -153,10 +149,9 @@ namespace troy {
 
             // Copy the remainding polys of the array with larger count into encrypted1
             {
-                utils::SliceVec<uint64_t> arg1; arg1.reserve(destination.size());
-                for (Ciphertext* c: destination) arg1.push_back(c->polys(enc1_size, enc2_size));
-                utils::ConstSliceVec<uint64_t> arg2; arg2.reserve(encrypted2.size());
                 if (enc1_size < enc2_size) {
+                    auto arg1 = batch_utils::pcollect_polys(destination, enc1_size, enc2_size);
+                    auto arg2 = batch_utils::pcollect_const_polys(encrypted2, enc1_size, enc2_size);
                     for (const Ciphertext* c: encrypted2) arg2.push_back(c->polys(enc1_size, enc2_size));
                     if (!subtract) {
                         utils::copy_slice_b(arg2, arg1);
@@ -164,7 +159,8 @@ namespace troy {
                         utils::negate_bps(arg2, enc2_size - enc1_size, coeff_count, coeff_modulus, arg1);
                     }
                 } else if (enc1_size > enc2_size) {
-                    for (const Ciphertext* c: encrypted1) arg2.push_back(c->polys(enc2_size, enc1_size));
+                    auto arg1 = batch_utils::pcollect_polys(destination, enc2_size, enc1_size);
+                    auto arg2 = batch_utils::pcollect_const_polys(encrypted1, enc2_size, enc1_size);
                     utils::copy_slice_b(arg2, arg1);
                 }
             }
@@ -256,7 +252,7 @@ namespace troy {
             );
             
             {
-                utils::SliceVec<uint64_t> arg; arg.reserve(encrypted1.size()); for (Ciphertext* c : encrypted1) {arg.push_back(c->data().reference());}
+                auto arg = batch_utils::pcollect_reference(encrypted1);
                 utils::multiply_scalar_inplace_bps(arg, f1, enc1_size, coeff_count, coeff_modulus);
             }
 
@@ -264,10 +260,8 @@ namespace troy {
             for (const Ciphertext* c : encrypted2) encrypted2_copy.push_back(Ciphertext::like(*c, false, pool));
 
             {
-                utils::ConstSliceVec<uint64_t> arg1; arg1.reserve(encrypted2.size());
-                for (const Ciphertext* c: encrypted2) arg1.push_back(c->data().const_reference());
-                utils::SliceVec<uint64_t> arg2; arg2.reserve(encrypted2.size());
-                for (Ciphertext& c: encrypted2_copy) arg2.push_back(c.data().reference());
+                auto arg1 = batch_utils::pcollect_const_reference(encrypted2);
+                auto arg2 = batch_utils::rcollect_reference(encrypted2_copy);
                 utils::multiply_scalar_bps(arg1, f2, enc2_size, coeff_count, coeff_modulus, arg2);
             }
             
@@ -276,8 +270,7 @@ namespace troy {
             for (Ciphertext& c: encrypted2_copy) c.correction_factor() = f0;
 
             {
-                std::vector<const Ciphertext*> arg; arg.reserve(encrypted2_copy.size());
-                for (const Ciphertext& c: encrypted2_copy) arg.push_back(&c);
+                auto arg = batch_utils::collect_const_pointer(encrypted2_copy);
                 this->translate_inplace_batched(encrypted1, arg, subtract, pool);
             }
 
@@ -286,10 +279,8 @@ namespace troy {
             // Prepare destination
             for (Ciphertext* c: encrypted1) c->resize(this->context(), context_data->parms_id(), max_size, false);
             {
-                utils::SliceVec<uint64_t> arg1; arg1.reserve(encrypted1.size());
-                for (Ciphertext* c: encrypted1) arg1.push_back(c->data().reference());
-                utils::ConstSliceVec<uint64_t> arg2; arg2.reserve(encrypted2.size());
-                for (const Ciphertext* c: encrypted2) arg2.push_back(c->data().const_reference());
+                auto arg1 = batch_utils::pcollect_reference(encrypted1);
+                auto arg2 = batch_utils::pcollect_const_reference(encrypted2);
                 if (!subtract) {
                     utils::add_inplace_bps(arg1, arg2, min_size, coeff_count, coeff_modulus);
                 } else {
@@ -299,11 +290,9 @@ namespace troy {
 
             // Copy the remainding polys of the array with larger count into encrypted1
             {
-                utils::SliceVec<uint64_t> arg1; arg1.reserve(encrypted1.size());
-                for (Ciphertext* c: encrypted1) arg1.push_back(c->polys(enc1_size, enc2_size));
-                utils::ConstSliceVec<uint64_t> arg2; arg2.reserve(encrypted2.size());
-                for (const Ciphertext* c: encrypted2) arg2.push_back(c->polys(enc1_size, enc2_size));
                 if (enc1_size < enc2_size) {
+                    auto arg1 = batch_utils::pcollect_polys(encrypted1, enc1_size, enc2_size);
+                    auto arg2 = batch_utils::pcollect_const_polys(encrypted2, enc1_size, enc2_size);
                     if (!subtract) {
                         utils::copy_slice_b(arg2, arg1);
                     } else {

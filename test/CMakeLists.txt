@@ -44,6 +44,8 @@ if(TROY_TEST)
 
         multithread.cu
         # temp.cu
+
+        evaluator_batched.cu
     )
 
     if(TROY_ZSTD)

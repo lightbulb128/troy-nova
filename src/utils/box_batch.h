@@ -1,3 +1,4 @@
+#pragma once
 #include "box.h"
 #include <cstddef>
 

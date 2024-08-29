@@ -729,6 +729,14 @@ namespace tool {
             }
         }
 
+        inline std::vector<Plaintext> batch_encode_simd(const std::vector<GeneralVector>& vecs, std::optional<ParmsID> parms_id = std::nullopt, double scale = 1<<20, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            std::vector<Plaintext> result;
+            for (const auto& vec : vecs) {
+                result.push_back(encode_simd(vec, parms_id, scale, pool));
+            }
+            return result;
+        }
+
         inline Plaintext encode_polynomial(const GeneralVector& vec, std::optional<ParmsID> parms_id = std::nullopt, double scale = 1<<20, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             if (vec.is_doubles()) {
                 return this->ckks().encode_float64_polynomial_new(vec.doubles(), parms_id, scale, pool);
@@ -745,6 +753,14 @@ namespace tool {
             }
         }
 
+        inline std::vector<Plaintext> batch_encode_polynomial(const std::vector<GeneralVector>& vecs, std::optional<ParmsID> parms_id = std::nullopt, double scale = 1<<20, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            std::vector<Plaintext> result;
+            for (const auto& vec : vecs) {
+                result.push_back(encode_polynomial(vec, parms_id, scale, pool));
+            }
+            return result;
+        }
+
         inline Plaintext encode_polynomial_centralized(const GeneralVector& vec, std::optional<ParmsID> parms_id = std::nullopt, double scale = 1<<20, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             if (vec.is_uint32s()) {
                 return this->poly32().centralize_new(vec.uint32s(), parms_id, pool);
@@ -757,6 +773,14 @@ namespace tool {
             }
         }
 
+        inline std::vector<Plaintext> batch_encode_polynomial_centralized(const std::vector<GeneralVector>& vecs, std::optional<ParmsID> parms_id = std::nullopt, double scale = 1<<20, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            std::vector<Plaintext> result;
+            for (const auto& vec : vecs) {
+                result.push_back(encode_polynomial_centralized(vec, parms_id, scale, pool));
+            }
+            return result;
+        }
+
         inline GeneralVector decode_simd(const Plaintext& plain, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             if (batch_) {
                 return GeneralVector(batch_->decode_new(plain, pool), false);
@@ -765,6 +789,14 @@ namespace tool {
             } else {
                 throw std::invalid_argument("[GeneralEncoder::decode] Encoder not initialized");
             }
+        }
+
+        inline std::vector<GeneralVector> batch_decode_simd(const std::vector<Plaintext>& plains, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            std::vector<GeneralVector> result;
+            for (const auto& plain : plains) {
+                result.push_back(decode_simd(plain, pool));
+            }
+            return result;
         }
 
         inline GeneralVector decode_polynomial(const Plaintext& plain, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
@@ -781,6 +813,14 @@ namespace tool {
             } else {
                 throw std::invalid_argument("[GeneralEncoder::decode] Encoder not initialized");
             }
+        }
+
+        inline std::vector<GeneralVector> batch_decode_polynomial(const std::vector<Plaintext>& plains, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            std::vector<GeneralVector> result;
+            for (const auto& plain : plains) {
+                result.push_back(decode_polynomial(plain, pool));
+            }
+            return result;
         }
         
         inline GeneralVector random_simd(size_t size, uint64_t t, double max) const {
@@ -1015,6 +1055,9 @@ namespace tool {
         inline double tolerance() const {
             return tolerance_;
         }
+
+        // create vectors
+
         inline GeneralVector random_simd(size_t size) const {
             return encoder_->random_simd(size, t_, input_max_);
         }
@@ -1046,6 +1089,78 @@ namespace tool {
             return encoder_->zeros_simd();
         }
 
+        // batch create vectors
+        inline std::vector<GeneralVector> batch_random_simd(size_t batch, size_t size) const {
+            std::vector<GeneralVector> ret; ret.reserve(batch);
+            for (size_t i = 0; i < batch; i++) ret.push_back(random_simd(size));
+            return ret;
+        }
+        inline std::vector<GeneralVector> batch_random_simd_full(size_t batch) const {
+            std::vector<GeneralVector> ret; ret.reserve(batch);
+            for (size_t i = 0; i < batch; i++) ret.push_back(random_simd_full());
+            return ret;
+        }
+        inline std::vector<GeneralVector> batch_random_polynomial(size_t batch, size_t size) const {
+            std::vector<GeneralVector> ret; ret.reserve(batch);
+            for (size_t i = 0; i < batch; i++) ret.push_back(random_polynomial(size));
+            return ret;
+        }
+        inline std::vector<GeneralVector> batch_random_polynomial_full(size_t batch) const {
+            std::vector<GeneralVector> ret; ret.reserve(batch);
+            for (size_t i = 0; i < batch; i++) ret.push_back(random_polynomial_full());
+            return ret;
+        }
+        inline std::vector<GeneralVector> batch_random_coefficient_repeated(size_t batch, size_t size) const {
+            std::vector<GeneralVector> ret; ret.reserve(batch);
+            for (size_t i = 0; i < batch; i++) ret.push_back(random_coefficient_repeated(size));
+            return ret;
+        }
+        inline std::vector<GeneralVector> batch_random_coefficient_repeated_full(size_t batch) const {
+            std::vector<GeneralVector> ret; ret.reserve(batch);
+            for (size_t i = 0; i < batch; i++) ret.push_back(random_coefficient_repeated_full());
+            return ret;
+        }
+        inline std::vector<GeneralVector> batch_random_slot_repeated(size_t batch, size_t size) const {
+            std::vector<GeneralVector> ret; ret.reserve(batch);
+            for (size_t i = 0; i < batch; i++) ret.push_back(random_slot_repeated(size));
+            return ret;
+        }
+        inline std::vector<GeneralVector> batch_random_slot_repeated_full(size_t batch) const {
+            std::vector<GeneralVector> ret; ret.reserve(batch);
+            for (size_t i = 0; i < batch; i++) ret.push_back(random_slot_repeated_full());
+            return ret;
+        }
+        inline std::vector<GeneralVector> batch_zeros_polynomial(size_t batch) const {
+            std::vector<GeneralVector> ret; ret.reserve(batch);
+            for (size_t i = 0; i < batch; i++) ret.push_back(zeros_polynomial());
+            return ret;
+        }
+        inline std::vector<GeneralVector> batch_zeros_simd(size_t batch) const {
+            std::vector<GeneralVector> ret; ret.reserve(batch);
+            for (size_t i = 0; i < batch; i++) ret.push_back(zeros_simd());
+            return ret;
+        }
+
+        inline std::vector<Ciphertext> batch_encrypt_symmetric(const std::vector<Plaintext>& vecs, bool save_seed) const {
+            std::vector<Ciphertext> ret; ret.reserve(vecs.size());
+            for (const auto& vec: vecs) ret.push_back(encryptor_->encrypt_symmetric_new(vec, save_seed));
+            return ret;
+        }
+
+        inline std::vector<Ciphertext> batch_encrypt_asymmetric(const std::vector<Plaintext>& vecs) const {
+            std::vector<Ciphertext> ret; ret.reserve(vecs.size());
+            for (const auto& vec: vecs) ret.push_back(encryptor_->encrypt_asymmetric_new(vec));
+            return ret;
+        }
+
+        inline std::vector<Plaintext> batch_decrypt(const std::vector<Ciphertext>& vecs) const {
+            std::vector<Plaintext> ret; ret.reserve(vecs.size());
+            for (const auto& vec: vecs) ret.push_back(decryptor_->decrypt_new(vec));
+            return ret;
+        }
+
+        // arithmetic
+
         inline GeneralVector negate(const GeneralVector& vec) const {
             if (ring_mask_ == 0) return vec.negate(t_);
             else {
@@ -1059,6 +1174,11 @@ namespace tool {
                     throw std::invalid_argument("[GeneralHeContext::negate] Unsupported type");
                 }
             }
+        }
+        inline std::vector<GeneralVector> batch_negate(const std::vector<GeneralVector>& vecs) const {
+            std::vector<GeneralVector> ret; ret.reserve(vecs.size());
+            for (const auto& vec: vecs) ret.push_back(negate(vec));
+            return ret;
         }
         inline GeneralVector add(const GeneralVector& vec1, const GeneralVector& vec2) const {
             if (ring_mask_ == 0) return vec1.add(vec2, t_);
@@ -1074,6 +1194,11 @@ namespace tool {
                 }
             }
         }
+        inline std::vector<GeneralVector> batch_add(const std::vector<GeneralVector>& vecs1, const std::vector<GeneralVector>& vecs2) const {
+            std::vector<GeneralVector> ret; ret.reserve(vecs1.size());
+            for (size_t i = 0; i < vecs1.size(); i++) ret.push_back(add(vecs1[i], vecs2[i]));
+            return ret;
+        }
         inline GeneralVector sub(const GeneralVector& vec1, const GeneralVector& vec2) const {
             if (ring_mask_ == 0) return vec1.sub(vec2, t_);
             else {
@@ -1088,6 +1213,11 @@ namespace tool {
                 }
             }
         }
+        inline std::vector<GeneralVector> batch_sub(const std::vector<GeneralVector>& vecs1, const std::vector<GeneralVector>& vecs2) const {
+            std::vector<GeneralVector> ret; ret.reserve(vecs1.size());
+            for (size_t i = 0; i < vecs1.size(); i++) ret.push_back(sub(vecs1[i], vecs2[i]));
+            return ret;
+        }
         inline GeneralVector mul(const GeneralVector& vec1, const GeneralVector& vec2) const {
             if (ring_mask_ == 0) return vec1.mul(vec2, t_);
             else {
@@ -1101,6 +1231,11 @@ namespace tool {
                     throw std::invalid_argument("[GeneralHeContext::mul] Unsupported type");
                 }
             }
+        }
+        inline std::vector<GeneralVector> batch_mul(const std::vector<GeneralVector>& vecs1, const std::vector<GeneralVector>& vecs2) const {
+            std::vector<GeneralVector> ret; ret.reserve(vecs1.size());
+            for (size_t i = 0; i < vecs1.size(); i++) ret.push_back(mul(vecs1[i], vecs2[i]));
+            return ret;
         }
         inline GeneralVector mul_poly(const GeneralVector& vec1, const GeneralVector& vec2) const {
             size_t degree = params_host_.poly_modulus_degree();
@@ -1117,6 +1252,11 @@ namespace tool {
                 }
             }
         }
+        inline std::vector<GeneralVector> batch_mul_poly(const std::vector<GeneralVector>& vecs1, const std::vector<GeneralVector>& vecs2) const {
+            std::vector<GeneralVector> ret; ret.reserve(vecs1.size());
+            for (size_t i = 0; i < vecs1.size(); i++) ret.push_back(mul_poly(vecs1[i], vecs2[i]));
+            return ret;
+        }
         inline GeneralVector square(const GeneralVector& vec) const {
             if (ring_mask_ == 0) return vec.square(t_);
             else {
@@ -1131,9 +1271,24 @@ namespace tool {
                 }
             }
         }
+        inline std::vector<GeneralVector> batch_square(const std::vector<GeneralVector>& vecs) const {
+            std::vector<GeneralVector> ret; ret.reserve(vecs.size());
+            for (const auto& vec: vecs) ret.push_back(square(vec));
+            return ret;
+        }
         inline bool near_equal(const GeneralVector& vec1, const GeneralVector& vec2) const {
             return vec1.near_equal(vec2, tolerance_);
         }
+        inline std::vector<bool> batch_near_equal_every(const std::vector<GeneralVector>& vecs1, const std::vector<GeneralVector>& vecs2) const {
+            std::vector<bool> ret; ret.reserve(vecs1.size());
+            for (size_t i = 0; i < vecs1.size(); i++) ret.push_back(near_equal(vecs1[i], vecs2[i]));
+            return ret;
+        }
+        inline bool batch_near_equal(const std::vector<GeneralVector>& vecs1, const std::vector<GeneralVector>& vecs2) const {
+            for (size_t i = 0; i < vecs1.size(); i++) if (!near_equal(vecs1[i], vecs2[i])) return false;
+            return true;
+        }
+
         inline size_t coeff_count() const {
             return encoder_->coeff_count();
         }
