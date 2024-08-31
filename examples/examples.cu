@@ -28,7 +28,9 @@ int main()
         cout << "| 12. LWEs                   | 12_lwes.cu                 |" << endl;
         cout << "| 13. Ring2k                 | 13_ring2k.cu               |" << endl;
         cout << "| 14. BFV Conv2d             | 14_bfv_conv2d.cu           |" << endl;
+        cout << "| 15. Batched Operation      | 15_batched_operation.cu    |" << endl;
         cout << "| 20. Memory Pools           | 20_memory_pools.cu         |" << endl;
+        cout << "| 30. Issue of Multithread   | 30_issue_multithread.cu    |" << endl;
         cout << "| 99. Quickstart             | 99_quickstart.cu           |" << endl;
         cout << "+----------------------------+----------------------------+" << endl;
 
@@ -103,8 +105,16 @@ int main()
             example_bfv_conv2d();
             break;
 
+        case 15:
+            example_batched_operation();
+            break;
+
         case 20:
             example_memory_pools();
+            break;
+
+        case 30:
+            example_issue_multithread();
             break;
 
         case 99:

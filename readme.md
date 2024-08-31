@@ -134,6 +134,10 @@ You can disable the management of device memory by memory pools by applying `TRO
 
 Some programs could benefit from multithreading, but running multiple threads with memory pools could be tricky. You could implement your multithread application with the following paradigms, and for example you can see `examples/20_memory_pools.cu`.
 
+### Multithreading issue
+
+Please note that, all kernels in this library runs on the default stream, and by default we compile with `per-thread default streams`. That is, if two kernels is triggered from two different threads, one cannot guarantee their finish order is the same as launch order. It is **your duty** to ensure that the data racing is handled when using multithreading. We illustrate this issue by an example when this is not handled properly. See `examples/30_issue_multithread.cu`.
+
 ### Multithreading with a single device
 
 1. **Lazy** - just use one global memory pool shared by all threads, that is, you don't bother to specify any memory pools in the API. When allocation and deallocation occurs, the memory pool will be locked to ensure thread safety. When a piece of allocated memory previously used by one thread is taken by another thread, a `cudaDeviceSynchronize` will be executed, to prevent data racing (because kernel calls by the previous thread might still not be finished, as the default stream of different threads are not synchronous). This might lead to minor efficiency drop.

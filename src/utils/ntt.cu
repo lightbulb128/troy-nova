@@ -7,7 +7,7 @@
 
 namespace troy {namespace utils {
 
-    static constexpr bool NTT_USE_COOPERATIVE = true;
+    static constexpr bool NTT_USE_COOPERATIVE = false;
 
     NTTTables::NTTTables(size_t coeff_count_power, const Modulus& modulus) {
 

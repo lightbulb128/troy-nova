@@ -34,6 +34,8 @@ void example_lwes();
 void example_ring2k();
 void example_memory_pools();
 void example_bfv_conv2d();
+void example_issue_multithread();
+void example_batched_operation();
 
 /*
 Helper function: Prints the name of the example in a fancy banner.
