@@ -63,4 +63,8 @@ namespace troy::utils {
     }
 
 
+    void MemoryPool::force_set_thread_id(std::thread::id id) {
+        // do nothing
+    }
+
 }

@@ -198,4 +198,11 @@ namespace troy::utils {
         impl_->destroyed = true;
     }
 
+    void MemoryPool::force_set_thread_id(std::thread::id id) {
+        std::unique_lock lock(impl_->mutex);
+        for (auto it = impl_->unused.begin(); it != impl_->unused.end(); ++it) {
+            it->second.second = id;
+        }
+    }
+
 }

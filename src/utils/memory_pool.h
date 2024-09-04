@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <iostream>
 #include <set>
+#include <thread>
 
 namespace troy {namespace utils {
 
@@ -104,6 +105,7 @@ namespace troy {namespace utils {
         void release(void* ptr);
         void destroy();
         void release_unused();
+        void force_set_thread_id(std::thread::id id);
         inline static void* Allocate(size_t required) {
             ensure_global_pool();
             return global_pool->allocate(required);
