@@ -71,6 +71,12 @@ namespace troy::utils {
             throw std::runtime_error("[MemoryPool(unsafe)::release] The pointer is not in the allocated set.");
         }
         size_t size = iterator->second;
+        #ifdef TROY_STREAM_SYNC_ON_RETURN_TO_MEMORY_POOL
+            cudaError_t status = cudaStreamSynchronize(0);
+            if (status != cudaSuccess) {
+                runtime_error("[MemoryPool(safe)::release] cudaStreamSynchronize failed.", status);
+            }
+        #endif
         impl_->unused.insert(std::make_pair(size, std::make_pair(ptr, std::this_thread::get_id())));
     }
 

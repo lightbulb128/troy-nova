@@ -33,6 +33,7 @@ troy_add_compile_definition_if(TROY_MEMORY_POOL)
 troy_add_compile_definition_if(TROY_MEMORY_POOL_UNSAFE)
 troy_add_compile_definition_if(TROY_ZSTD)
 troy_add_compile_definition_if(TROY_DEVICE_SYNCHRONIZE_ON_MULTIPLE_THREAD)
+troy_add_compile_definition_if(TROY_STREAM_SYNC_ON_RETURN_TO_MEMORY_POOL)
 
 if(TROY_ZSTD)
   target_link_libraries(troy        PRIVATE ${TROY_ZSTD_STATIC_LINK_NAME})
