@@ -1,4 +1,5 @@
 #include "constants.h"
+#include "poly_small_mod.h"
 #include "rns_base.h"
 #include "polynomial_buffer.h"
 
@@ -179,7 +180,7 @@ namespace troy {namespace utils {
                 rnsbase_decompose_array(self, from[i], result[i]);
             }
         } else {
-            size_t block_count = ceil_div<size_t>(from.size(), KERNEL_THREAD_COUNT);
+            size_t block_count = ceil_div<size_t>(from[0].size(), KERNEL_THREAD_COUNT);
             auto from_batched = utils::construct_batch(from, pool, self);
             auto result_batched = utils::construct_batch(result, pool, self);
             utils::set_device(self.device_index());
@@ -210,9 +211,10 @@ namespace troy {namespace utils {
         }
         std::vector<Array<uint64_t>> cloned(value.size());
         for (size_t i = 0; i < value.size(); i++) {
-            cloned[i] = Array<uint64_t>::create_and_copy_from_slice(value[i].as_const(), pool);
+            cloned[i] = Array<uint64_t>::create_uninitialized(value[i].size(), true, pool);
         }
         auto cloned_batched = utils::rcollect_const_reference(cloned);
+        utils::copy_slice_b(utils::rcollect_as_const(value), utils::rcollect_reference(cloned));
         rnsbase_decompose_array_batched(*this, cloned_batched, value, pool);
     }
 

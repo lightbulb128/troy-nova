@@ -241,53 +241,22 @@ namespace troy { namespace linear {
             }
         } else {
             using std::vector;
-            vector<vector<vector<Ciphertext>>> prod;
             size_t input_split = ceil_div(input_dims, input_block);
             size_t output_split = ceil_div(output_dims, output_block);
             size_t batch_split = ceil_div(batch_size, batch_block);
             vector<const Ciphertext*> a_ptrs; a_ptrs.reserve(input_split * output_split * batch_split);
             vector<const Plaintext*> w_ptrs; w_ptrs.reserve(input_split * output_split * batch_split);
-            vector<Ciphertext*> prod_ptrs; prod_ptrs.reserve(input_split * output_split * batch_split);
-            prod.resize(input_split);
+            vector<Ciphertext*> r_ptrs; r_ptrs.reserve(input_split * output_split * batch_split);
             for (size_t i = 0; i < input_split; i++) {
-                prod[i].resize(output_split);
                 for (size_t j = 0; j < output_split; j++) {
-                    prod[i][j].resize(batch_split);
                     for (size_t b = 0; b < batch_split; b++) {
                         a_ptrs.push_back(&a[b][i]);
                         w_ptrs.push_back(&w[i][j]);
-                        prod_ptrs.push_back(&prod[i][j][b]);
+                        r_ptrs.push_back(&ret[b][j]);
                     }
                 }
             }
-            std::cerr << "total " << input_split * output_split * batch_split << " multiplications" << std::endl;
-            evaluator.multiply_plain_batched(a_ptrs, w_ptrs, prod_ptrs, pool);
-            
-            for (size_t i = 0; i < input_split; i++) {
-                for (size_t j = 0; j < output_split; j++) {
-                    for (size_t b = 0; b < batch_split; b++) {
-                        auto mul = evaluator.multiply_plain_new(a[b][i], w[i][j], pool);
-                        auto r = utils::Array<uint64_t>::create_and_copy_from_slice(mul.data().const_reference(), false);
-                        auto s = utils::Array<uint64_t>::create_and_copy_from_slice(prod[i][j][b].data().const_reference(), false);
-                        for (size_t k = 0; k < r.size(); k++) {
-                            if (r[k] != s[k]) {
-                                std::cerr << "error at " << k << " " << r[k] << " " << s[k] << std::endl;
-                                // exit(1);
-                            }
-                        }
-
-                    }
-                }
-            }
-
-            for (size_t i = 0; i < input_split; i++) {
-                for (size_t j = 0; j < output_split; j++) {
-                    for (size_t b = 0; b < batch_split; b++) {
-                        if (i == 0) ret[b][j] = std::move(prod[i][j][b]);
-                        else evaluator.add_inplace(ret[b][j], prod[i][j][b], pool);
-                    }
-                }
-            }
+            evaluator.multiply_plain_accumulate(a_ptrs, w_ptrs, r_ptrs, true, pool);
         }
         return ret;
     }
