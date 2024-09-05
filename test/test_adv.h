@@ -38,6 +38,7 @@ namespace tool {
         optional<vector<uint128_t>> uint128s_;
     public:
 
+        inline GeneralVector() {}
         inline GeneralVector(vector<complex<double>>&& complexes): complexes_(std::move(complexes)) {}
         inline GeneralVector(vector<uint64_t>&& integers, bool is_ring) {
             if (is_ring) {

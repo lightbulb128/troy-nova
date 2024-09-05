@@ -149,22 +149,24 @@ namespace troy::utils::fgk::dyadic_convolute {
         }
     }
     
-    __device__ static void device_dyadic_broadcast_product_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> poly2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
+    __device__ static void device_dyadic_broadcast_product_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> poly2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result, bool accumulate) {
         size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
         if (idx < pcount * moduli.size() * degree) {
             size_t j = (idx / degree) % moduli.size();
             size_t poly2_idx = idx % (moduli.size() * degree);
-            result[idx] = multiply_uint64_mod(polys1[idx], poly2[poly2_idx], moduli[j]);
+            uint64_t r = multiply_uint64_mod(polys1[idx], poly2[poly2_idx], moduli[j]);
+            if (accumulate) result[idx] = add_uint64_mod(result[idx], r, moduli[j]);
+            else result[idx] = r;
         }
     }
-    
-    __global__ static void kernel_dyadic_broadcast_product_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> poly2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
-        device_dyadic_broadcast_product_ps(polys1, poly2, pcount, degree, moduli, result);
+
+    __global__ static void kernel_dyadic_broadcast_product_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> poly2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result, bool accumulate) {
+        device_dyadic_broadcast_product_ps(polys1, poly2, pcount, degree, moduli, result, accumulate);
     }
 
-    __global__ static void kernel_dyadic_broadcast_product_bps(ConstSliceArrayRef<uint64_t> polys1, ConstSliceArrayRef<uint64_t> poly2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, SliceArrayRef<uint64_t> result) {
+    __global__ static void kernel_dyadic_broadcast_product_bps(ConstSliceArrayRef<uint64_t> polys1, ConstSliceArrayRef<uint64_t> poly2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, SliceArrayRef<uint64_t> result, bool accumulate) {
         for (size_t i = 0; i < result.size(); i++) {
-            device_dyadic_broadcast_product_ps(polys1[i], poly2[i], pcount, degree, moduli, result[i]);
+            device_dyadic_broadcast_product_ps(polys1[i], poly2[i], pcount, degree, moduli, result[i], accumulate);
         }
     }
 
@@ -176,7 +178,7 @@ namespace troy::utils::fgk::dyadic_convolute {
         if (device) {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
             utils::set_device(result.device_index());
-            kernel_dyadic_broadcast_product_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys1, poly2, pcount, degree, moduli, result);
+            kernel_dyadic_broadcast_product_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys1, poly2, pcount, degree, moduli, result, false);
             utils::stream_sync();
         } else {
             size_t c = moduli.size() * degree;
@@ -187,6 +189,37 @@ namespace troy::utils::fgk::dyadic_convolute {
                     degree,
                     moduli,
                     result.slice(c * i, c * (i + 1))
+                );
+            }
+        }
+    }
+
+    void dyadic_broadcast_product_accumulate_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> poly2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
+        bool device = result.on_device();
+        if (!device_compatible(polys1, poly2, moduli, result)) {
+            throw std::runtime_error("[dyadic_product_ps] All inputs must be on the same device");
+        }
+        if (device) {
+            size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
+            utils::set_device(result.device_index());
+            kernel_dyadic_broadcast_product_ps<<<block_count, KERNEL_THREAD_COUNT>>>(polys1, poly2, pcount, degree, moduli, result, true);
+            utils::stream_sync();
+        } else {
+            size_t c = moduli.size() * degree;
+            Array<uint64_t> temp = Array<uint64_t>::create_uninitialized(c, false);
+            for (size_t i = 0; i < pcount; i++) {
+                dyadic_product_p(
+                    polys1.const_slice(c * i, c * (i + 1)),
+                    poly2,
+                    degree,
+                    moduli,
+                    temp.reference()
+                );
+                add_inplace_p(
+                    result.slice(c * i, c * (i + 1)),
+                    temp.const_reference(),
+                    degree,
+                    moduli
                 );
             }
         }
@@ -219,7 +252,40 @@ namespace troy::utils::fgk::dyadic_convolute {
             auto result_batch = batch_utils::construct_batch(result, pool, moduli);
             utils::set_device(moduli.device_index());
             kernel_dyadic_broadcast_product_bps<<<block_count, KERNEL_THREAD_COUNT>>>(
-                op1_batch, op2_batch, op1_pcount, degree, moduli, result_batch
+                op1_batch, op2_batch, op1_pcount, degree, moduli, result_batch, false
+            );
+            utils::stream_sync();
+        }
+    }
+    
+    void dyadic_broadcast_product_accumulate_bps(
+        const ConstSliceVec<uint64_t>& op1,
+        const ConstSliceVec<uint64_t>& op2,
+        size_t op1_pcount,
+        size_t degree,
+        ConstSlice<Modulus> moduli,
+        const SliceVec<uint64_t>& result,
+        MemoryPoolHandle pool
+    ) {
+        if (op1.size() != op2.size() || op1.size() != result.size()) {
+            throw std::invalid_argument("[fgk::dyadic_broadcast_product_bps] Size mismatch");
+        }
+        if (result.size() == 0) return;
+        bool device = moduli.on_device();
+        if (!device || result.size() < BATCH_OP_THRESHOLD) {
+            for (size_t i = 0; i < result.size(); i++) {
+                dyadic_broadcast_product_accumulate_ps(
+                    op1[i], op2[i], op1_pcount, degree, moduli, result[i]
+                );
+            }
+        } else {
+            size_t block_count = ceil_div<size_t>(op1_pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
+            auto op1_batch = batch_utils::construct_batch(op1, pool, moduli);
+            auto op2_batch = batch_utils::construct_batch(op2, pool, moduli);
+            auto result_batch = batch_utils::construct_batch(result, pool, moduli);
+            utils::set_device(moduli.device_index());
+            kernel_dyadic_broadcast_product_bps<<<block_count, KERNEL_THREAD_COUNT>>>(
+                op1_batch, op2_batch, op1_pcount, degree, moduli, result_batch, true
             );
             utils::stream_sync();
         }

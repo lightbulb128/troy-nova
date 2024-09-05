@@ -69,10 +69,18 @@ namespace troy {
             const std::vector<const Ciphertext*>& encrypted, const std::vector<const Plaintext*>& plain, 
             const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool
         ) const;
+        void multiply_plain_normal_accumulate(
+            const std::vector<const Ciphertext*>& encrypted, const std::vector<const Plaintext*>& plain, 
+            const std::vector<Ciphertext*>& destination, bool set_zero, MemoryPoolHandle pool
+        ) const;
         void multiply_plain_ntt(const Ciphertext& encrypted, const Plaintext& plain, Ciphertext& destination, MemoryPoolHandle pool) const;
         void multiply_plain_ntt_batched(
             const std::vector<const Ciphertext*>& encrypted, const std::vector<const Plaintext*>& plain, 
             const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool
+        ) const;
+        void multiply_plain_ntt_accumulate(
+            const std::vector<const Ciphertext*>& encrypted, const std::vector<const Plaintext*>& plain, 
+            const std::vector<Ciphertext*>& destination, bool set_zero, MemoryPoolHandle pool
         ) const;
         void multiply_plain_ntt_inplace(Ciphertext& encrypted, const Plaintext& plain) const;
 
@@ -429,6 +437,13 @@ namespace troy {
             const std::vector<const Ciphertext*>& encrypted, 
             const std::vector<const Plaintext*>& plain, 
             const std::vector<Ciphertext*>& destination, 
+            MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const;
+        void multiply_plain_accumulate(
+            const std::vector<const Ciphertext*>& encrypted,
+            const std::vector<const Plaintext*>& plain, 
+            const std::vector<Ciphertext*>& destination, 
+            bool set_zero = true,
             MemoryPoolHandle pool = MemoryPool::GlobalPool()
         ) const;
         inline void multiply_plain_inplace_batched(

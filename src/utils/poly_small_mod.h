@@ -15,6 +15,7 @@ namespace troy {namespace utils {
     }
 
     void copy_slice_b(const ConstSliceVec<uint64_t>& from, const SliceVec<uint64_t>& to, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+    void set_slice_b(const uint64_t value, const SliceVec<uint64_t>& to, MemoryPoolHandle pool = MemoryPool::GlobalPool());
 
     void modulo_ps(ConstSlice<uint64_t> polys, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result);
     void modulo_bps(const ConstSliceVec<uint64_t>& polys, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t> result, MemoryPoolHandle pool = MemoryPool::GlobalPool());

@@ -31,6 +31,15 @@ namespace troy::utils::fgk::dyadic_convolute {
         ConstSlice<Modulus> moduli,
         Slice<uint64_t> result
     );
+    
+    void dyadic_broadcast_product_accumulate_ps(
+        ConstSlice<uint64_t> op1,
+        ConstSlice<uint64_t> op2,
+        size_t op1_pcount,
+        size_t degree,
+        ConstSlice<Modulus> moduli,
+        Slice<uint64_t> result
+    );
 
     void dyadic_broadcast_product_bps(
         const ConstSliceVec<uint64_t>& op1,
@@ -62,5 +71,15 @@ namespace troy::utils::fgk::dyadic_convolute {
     ) {
         dyadic_broadcast_product_bps(batch_utils::rcollect_as_const(op1), op2, op1_pcount, degree, moduli, op1, pool);
     }
+
+    void dyadic_broadcast_product_accumulate_bps(
+        const ConstSliceVec<uint64_t>& op1,
+        const ConstSliceVec<uint64_t>& op2,
+        size_t op1_pcount,
+        size_t degree,
+        ConstSlice<Modulus> moduli,
+        const SliceVec<uint64_t>& result,
+        MemoryPoolHandle pool = MemoryPool::GlobalPool()
+    ); 
 
 }

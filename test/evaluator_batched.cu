@@ -15,7 +15,7 @@ namespace evaluator_batched {
     using tool::GeneralVector;
     using tool::GeneralHeContext;
 
-    constexpr int batch_size = 16;
+    constexpr int batch_size = 128;
 
     void test_add_subtract(const GeneralHeContext& context) {
         double scale = context.scale();
@@ -423,5 +423,81 @@ namespace evaluator_batched {
         utils::MemoryPool::Destroy();
     }
 
+
+
+    void test_multiply_plain_accumulate(const GeneralHeContext& context) {
+        double scale = context.scale();
+        constexpr size_t block = 8;
+        static_assert(batch_size % block == 0);
+
+        auto message1 = context.batch_random_simd_full(batch_size);
+        auto message2 = context.batch_random_simd_full(batch_size);
+
+        auto encoded1 = context.encoder().batch_encode_simd(message1, std::nullopt, scale);
+        auto encoded2 = context.encoder().batch_encode_simd(message2, std::nullopt, scale);
+        auto encrypted1 = context.batch_encrypt_asymmetric(encoded1);
+
+        auto e1_cptrs = batch_utils::collect_const_pointer(encrypted1);
+        auto e1_ptrs = batch_utils::collect_pointer(encrypted1);
+        auto p2_cptrs = batch_utils::collect_const_pointer(encoded2);
+        auto p2_ptrs = batch_utils::collect_pointer(encoded2);
+
+        std::vector<Ciphertext> destination(batch_size / block);
+        std::vector<Ciphertext*> destination_ptrs(batch_size);
+        for (size_t i = 0; i < destination_ptrs.size(); i++) {
+            destination_ptrs[i] = &destination[i % (batch_size / block)];
+        }
+
+        context.evaluator().multiply_plain_accumulate(e1_cptrs, p2_cptrs, destination_ptrs);
+
+        auto decrypted = context.batch_decrypt(destination);
+        auto result = context.encoder().batch_decode_simd(decrypted);
+
+        std::vector<GeneralVector> truth(batch_size / block);
+        for (size_t i = 0; i < batch_size / block; i++) {
+            for (size_t j = 0; j < block; j++) {
+                auto mul = context.mul(message1[j * (batch_size / block) + i], message2[j * (batch_size / block) + i]);
+                if (j == 0) {
+                    truth[i] = mul;
+                } else {
+                    truth[i] = context.add(truth[i], mul);
+                }
+            }
+        }
+        ASSERT_TRUE(context.batch_near_equal(truth, result));
+
+    }
+
+    
+    TEST(EvaluatorBatchTest, HostBFVMultiplyPlainAccumulate) {
+        GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_multiply_plain_accumulate(ghe);
+    }
+    TEST(EvaluatorBatchTest, HostBGVMultiplyPlainAccumulate) {
+        GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_multiply_plain_accumulate(ghe);
+    }
+    TEST(EvaluatorBatchTest, HostCKKSMultiplyPlainAccumulate) {
+        GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1ull<<20, 1e-2);
+        test_multiply_plain_accumulate(ghe);
+    }
+    TEST(EvaluatorBatchTest, DeviceBFVMultiplyPlainAccumulate) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_multiply_plain_accumulate(ghe);
+        utils::MemoryPool::Destroy();
+    }
+    TEST(EvaluatorBatchTest, DeviceBGVMultiplyPlainAccumulate) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_multiply_plain_accumulate(ghe);
+        utils::MemoryPool::Destroy();
+    }
+    TEST(EvaluatorBatchTest, DeviceCKKSMultiplyPlainAccumulate) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 60, 60 }, false, 0x123, 10, 1ull<<20, 1e-2);
+        test_multiply_plain_accumulate(ghe);
+        utils::MemoryPool::Destroy();
+    }
 
 }

@@ -1,5 +1,6 @@
 #include "poly_small_mod.h"
 #include "../batch_utils.h"
+#include <cstdint>
 
 namespace troy {namespace utils {
 
@@ -12,6 +13,22 @@ namespace troy {namespace utils {
             Slice<uint64_t> to_i = to[i];
             if (idx < from_i.size()) {
                 to_i[idx] = from_i[idx];
+            }
+        }
+    }
+
+    static __global__ void kernel_set_slice(uint64_t value, Slice<uint64_t> to) {
+        size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < to.size()) {
+            to[idx] = value;
+        }
+    }
+
+    static __global__ void kernel_set_slice_b(uint64_t value, SliceArrayRef<uint64_t> to) {
+        size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        for (size_t i = 0; i < to.size(); i++) {
+            if (idx < to[i].size()) {
+                to[i][idx] = value;
             }
         }
     }
@@ -33,6 +50,33 @@ namespace troy {namespace utils {
             size_t block_count = ceil_div<size_t>(device_reference.size(), KERNEL_THREAD_COUNT);
             set_device(device_reference.device_index());
             kernel_copy_slice_b<<<block_count, KERNEL_THREAD_COUNT>>>(from_arr, to_arr);
+            utils::stream_sync();
+        }
+    }
+
+    void set_slice_b(const uint64_t value, const SliceVec<uint64_t>& to, MemoryPoolHandle pool) {
+        if (to.size() == 0) return;
+        auto device_reference = to[0];
+        bool device = device_reference.on_device();
+        if (!device || to.size() < BATCH_OP_THRESHOLD) {
+            for (size_t i = 0; i < to.size(); i++) {
+                Slice<uint64_t> to_i = to[i];
+                if (!device) {
+                    for (size_t j = 0; j < to[i].size(); j++) {
+                        to_i[j] = value;
+                    }
+                } else {
+                    size_t block_count = ceil_div<size_t>(to[i].size(), KERNEL_THREAD_COUNT);
+                    set_device(device_reference.device_index());
+                    kernel_set_slice<<<block_count, KERNEL_THREAD_COUNT>>>(value, to_i);
+                    utils::stream_sync();
+                }
+            }
+        } else {
+            SliceArray<uint64_t> to_arr = construct_batch(to, pool, device_reference);
+            size_t block_count = ceil_div<size_t>(device_reference.size(), KERNEL_THREAD_COUNT);
+            set_device(device_reference.device_index());
+            kernel_set_slice_b<<<block_count, KERNEL_THREAD_COUNT>>>(value, to_arr);
             utils::stream_sync();
         }
     }

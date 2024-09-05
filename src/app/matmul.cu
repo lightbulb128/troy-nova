@@ -262,6 +262,24 @@ namespace troy { namespace linear {
             }
             std::cerr << "total " << input_split * output_split * batch_split << " multiplications" << std::endl;
             evaluator.multiply_plain_batched(a_ptrs, w_ptrs, prod_ptrs, pool);
+            
+            for (size_t i = 0; i < input_split; i++) {
+                for (size_t j = 0; j < output_split; j++) {
+                    for (size_t b = 0; b < batch_split; b++) {
+                        auto mul = evaluator.multiply_plain_new(a[b][i], w[i][j], pool);
+                        auto r = utils::Array<uint64_t>::create_and_copy_from_slice(mul.data().const_reference(), false);
+                        auto s = utils::Array<uint64_t>::create_and_copy_from_slice(prod[i][j][b].data().const_reference(), false);
+                        for (size_t k = 0; k < r.size(); k++) {
+                            if (r[k] != s[k]) {
+                                std::cerr << "error at " << k << " " << r[k] << " " << s[k] << std::endl;
+                                // exit(1);
+                            }
+                        }
+
+                    }
+                }
+            }
+
             for (size_t i = 0; i < input_split; i++) {
                 for (size_t j = 0; j < output_split; j++) {
                     for (size_t b = 0; b < batch_split; b++) {
