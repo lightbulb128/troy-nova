@@ -1,17 +1,11 @@
 #include "evaluator.h"
 #include "evaluator_utils.h"
-#include "utils/polynomial_buffer.h"
 
 namespace troy {
     
     using utils::Slice;
     using utils::ConstSlice;
     using utils::NTTTables;
-    using utils::ConstPointer;
-    using utils::RNSTool;
-    using utils::Buffer;
-    using utils::MultiplyUint64Operand;
-    using utils::GaloisTool;
 
     __global__ static void kernel_extract_lwe_gather_c0(
         size_t coeff_modulus_size, size_t coeff_count, size_t term,

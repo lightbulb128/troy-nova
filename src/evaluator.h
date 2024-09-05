@@ -53,6 +53,10 @@ namespace troy {
             const Ciphertext& encrypted, utils::ConstSlice<uint64_t> target, 
             const KSwitchKeys& kswitch_keys, size_t kswitch_keys_index, SwitchKeyDestinationAssignMethod assign_method, Ciphertext& destination, MemoryPoolHandle pool
         ) const;
+        void switch_key_internal_batched(
+            const std::vector<const Ciphertext*>& encrypted, utils::ConstSliceVec<uint64_t> target, 
+            const KSwitchKeys& kswitch_keys, size_t kswitch_keys_index, SwitchKeyDestinationAssignMethod assign_method, const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool
+        ) const;
 
         void relinearize_inplace_internal(Ciphertext& encrypted, const RelinKeys& relin_keys, size_t destination_size, MemoryPoolHandle pool) const;
         void relinearize_internal(const Ciphertext& encrypted, const RelinKeys& relin_keys, size_t destination_size, Ciphertext& destination, MemoryPoolHandle pool) const;
@@ -65,10 +69,12 @@ namespace troy {
         void translate_plain(const Ciphertext& encrypted, const Plaintext& plain, Ciphertext& destination, bool subtract, MemoryPoolHandle pool) const;
 
         void multiply_plain_normal(const Ciphertext& encrypted, const Plaintext& plain, Ciphertext& destination, MemoryPoolHandle pool) const;
+
         void multiply_plain_normal_batched(
             const std::vector<const Ciphertext*>& encrypted, const std::vector<const Plaintext*>& plain, 
             const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool
         ) const;
+        
         void multiply_plain_normal_accumulate(
             const std::vector<const Ciphertext*>& encrypted, const std::vector<const Plaintext*>& plain, 
             const std::vector<Ciphertext*>& destination, bool set_zero, MemoryPoolHandle pool
@@ -105,6 +111,13 @@ namespace troy {
         inline Ciphertext negate_new(const Ciphertext& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;
             negate(encrypted, destination, pool);
+            return destination;
+        }
+        void negate_inplace_batched(const std::vector<Ciphertext*>& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        void negate_batched(const std::vector<const Ciphertext*>& encrypted, const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        inline std::vector<Ciphertext> negate_new_batched(const std::vector<const Ciphertext*>& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            std::vector<Ciphertext> destination(encrypted.size());
+            negate_batched(encrypted, batch_utils::collect_pointer(destination), pool);
             return destination;
         }
 
@@ -439,6 +452,8 @@ namespace troy {
             const std::vector<Ciphertext*>& destination, 
             MemoryPoolHandle pool = MemoryPool::GlobalPool()
         ) const;
+        
+        // This is different from multiply_plain_batched that, destination can have repeated ptrs, so different c[i] * p[i]'s may be accumulated into the same dest[i].
         void multiply_plain_accumulate(
             const std::vector<const Ciphertext*>& encrypted,
             const std::vector<const Plaintext*>& plain, 

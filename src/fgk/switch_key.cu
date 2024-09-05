@@ -1,8 +1,9 @@
 #include "switch_key.h"
+#include "../batch_utils.h"
 
 namespace troy::utils::fgk::switch_key {
 
-    __global__ static void kernel_set_accumulate(
+    __device__ static void device_set_accumulate(
         size_t decomp_modulus_size, size_t coeff_count, ConstSlice<uint64_t> target_intt, Slice<uint64_t> temp_ntt, ConstSlice<Modulus> key_modulus
     ) {
         size_t key_modulus_size = key_modulus.size();
@@ -25,20 +26,55 @@ namespace troy::utils::fgk::switch_key {
         }
     }
 
+    __global__ static void kernel_set_accumulate(
+        size_t decomp_modulus_size, size_t coeff_count, ConstSlice<uint64_t> target_intt, Slice<uint64_t> temp_ntt, ConstSlice<Modulus> key_modulus
+    ) {
+        device_set_accumulate(decomp_modulus_size, coeff_count, target_intt, temp_ntt, key_modulus);
+    }
+
+    __global__ static void kernel_set_accumulate_batched(
+        size_t decomp_modulus_size, size_t coeff_count, ConstSliceArrayRef<uint64_t> target_intt, SliceArrayRef<uint64_t> temp_ntt, ConstSlice<Modulus> key_modulus
+    ) {
+        for (size_t i = 0; i < target_intt.size(); i++) {
+            device_set_accumulate(decomp_modulus_size, coeff_count, target_intt[i], temp_ntt[i], key_modulus);
+        }
+    }
+
     void set_accumulate(
         size_t decomp_modulus_size, size_t coeff_count, ConstSlice<uint64_t> target_intt, Buffer<uint64_t>& temp_ntt, ConstSlice<Modulus> key_modulus
     ) {
         assert(temp_ntt.on_device());
         size_t rns_modulus_size = decomp_modulus_size + 1;
-        
+
         size_t total = rns_modulus_size * decomp_modulus_size * coeff_count;
         size_t block_count = ceil_div(total, KERNEL_THREAD_COUNT);
         set_device(target_intt.device_index());
         kernel_set_accumulate<<<block_count, KERNEL_THREAD_COUNT>>>(decomp_modulus_size, coeff_count, target_intt, temp_ntt.reference(), key_modulus);
         stream_sync();
     }
+
+    void set_accumulate_batched(
+        size_t decomp_modulus_size, size_t coeff_count, utils::ConstSliceVec<uint64_t> target_intt, std::vector<Buffer<uint64_t>>& temp_ntt, ConstSlice<Modulus> key_modulus, MemoryPoolHandle pool
+    ) {
+        assert(key_modulus.on_device());
+        if (target_intt.size() != temp_ntt.size()) {
+            throw std::invalid_argument("[fgk::set_accumulate_batched] target_intt and temp_ntt must have the same size");
+        }
+        
+        size_t rns_modulus_size = decomp_modulus_size + 1;
+
+        size_t total = rns_modulus_size * decomp_modulus_size * coeff_count;
+        size_t block_count = ceil_div(total, KERNEL_THREAD_COUNT);
+        set_device(key_modulus.device_index());
+        auto target_intt_batched = batch_utils::construct_batch(target_intt, pool, key_modulus);
+        auto temp_ntt_slices = batch_utils::rcollect_reference(temp_ntt);
+        auto temp_ntt_batched = batch_utils::construct_batch(temp_ntt_slices, pool, key_modulus);
+        kernel_set_accumulate_batched<<<block_count, KERNEL_THREAD_COUNT>>>(decomp_modulus_size, coeff_count, target_intt_batched, temp_ntt_batched, key_modulus);
+        stream_sync();
+    }
     
-    __global__ static void kernel_accumulate_products(
+    
+    __device__ static void device_accumulate_products(
         size_t decomp_modulus_size, size_t key_component_count, size_t coeff_count, 
         ConstSlice<uint64_t> temp_ntt,
         ConstSlice<Modulus> key_moduli,
@@ -78,6 +114,28 @@ namespace troy::utils::fgk::switch_key {
         }
     }
 
+    __global__ static void kernel_accumulate_products(
+        size_t decomp_modulus_size, size_t key_component_count, size_t coeff_count, 
+        ConstSlice<uint64_t> temp_ntt,
+        ConstSlice<Modulus> key_moduli,
+        ConstSlice<const uint64_t*> key_vector,
+        Slice<uint64_t> poly_prod
+    ) {
+        device_accumulate_products(decomp_modulus_size, key_component_count, coeff_count, temp_ntt, key_moduli, key_vector, poly_prod);
+    }
+
+    __global__ static void kernel_accumulate_products_batched(
+        size_t decomp_modulus_size, size_t key_component_count, size_t coeff_count, 
+        ConstSliceArrayRef<uint64_t> temp_ntt,
+        ConstSlice<Modulus> key_moduli,
+        ConstSlice<const uint64_t*> key_vector,
+        SliceArrayRef<uint64_t> poly_prod
+    ) {
+        for (size_t i = 0; i < temp_ntt.size(); i++) {
+            device_accumulate_products(decomp_modulus_size, key_component_count, coeff_count, temp_ntt[i], key_moduli, key_vector, poly_prod[i]);
+        }
+    }
+
 
     void accumulate_products(
         size_t decomp_modulus_size, size_t key_component_count, size_t coeff_count, 
@@ -95,5 +153,28 @@ namespace troy::utils::fgk::switch_key {
         kernel_accumulate_products<<<block_count, KERNEL_THREAD_COUNT>>>(decomp_modulus_size, key_component_count, coeff_count, temp_ntt, key_moduli, key_vector, poly_prod);
         stream_sync();
     }
+
+    void accumulate_products_batched(
+        size_t decomp_modulus_size, size_t key_component_count, size_t coeff_count, 
+        ConstSliceVec<uint64_t> temp_ntt, 
+        ConstSlice<Modulus> key_moduli,
+        ConstSlice<const uint64_t*> key_vector,
+        SliceVec<uint64_t> poly_prod,
+        MemoryPoolHandle pool
+    ) {
+        if (temp_ntt.size() != poly_prod.size()) {
+            throw std::invalid_argument("[fgk::accumulate_products_batched] temp_ntt and poly_prod must have the same size");
+        }
+        assert(key_moduli.on_device());
+        size_t total = coeff_count * key_component_count;
+        size_t block_count = ceil_div(total, KERNEL_THREAD_COUNT);
+
+        set_device(key_moduli.device_index());
+        auto temp_ntt_batched = batch_utils::construct_batch(temp_ntt, pool, key_moduli);
+        auto poly_prod_batched = batch_utils::construct_batch(poly_prod, pool, key_moduli);
+        kernel_accumulate_products_batched<<<block_count, KERNEL_THREAD_COUNT>>>(decomp_modulus_size, key_component_count, coeff_count, temp_ntt_batched, key_moduli, key_vector, poly_prod_batched);
+        stream_sync();
+    }
+
 
 }

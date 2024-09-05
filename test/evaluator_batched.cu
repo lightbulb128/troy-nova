@@ -17,6 +17,76 @@ namespace evaluator_batched {
 
     constexpr int batch_size = 128;
 
+    void test_negate(const GeneralHeContext& context) {
+        double scale = context.scale();
+
+        auto message = context.batch_random_simd_full(batch_size);
+        auto encoded = context.encoder().batch_encode_simd(message, std::nullopt, scale);
+        auto encrypted = context.batch_encrypt_asymmetric(encoded);
+
+        auto enc_ptrs = batch_utils::collect_const_pointer(encrypted);
+
+        { // new
+            auto negated = context.evaluator().negate_new_batched(enc_ptrs);
+            auto decrypted = context.batch_decrypt(negated);
+            auto result = context.encoder().batch_decode_simd(decrypted);
+            auto truth = context.batch_negate(message);
+            ASSERT_TRUE(context.batch_near_equal(truth, result));
+        }
+
+        { // assign
+            auto destination = std::vector<Ciphertext>(batch_size);
+            auto destination_ptrs = batch_utils::collect_pointer(destination);
+            context.evaluator().negate_batched(enc_ptrs, destination_ptrs);
+            auto decrypted = context.batch_decrypt(destination);
+            auto result = context.encoder().batch_decode_simd(decrypted);
+            auto truth = context.batch_negate(message);
+            ASSERT_TRUE(context.batch_near_equal(truth, result));
+        }
+
+        { // inplace
+            auto destination = batch_utils::clone(encrypted);
+            auto destination_ptrs = batch_utils::collect_pointer(destination);
+            context.evaluator().negate_inplace_batched(destination_ptrs);
+            auto decrypted = context.batch_decrypt(destination);
+            auto result = context.encoder().batch_decode_simd(decrypted);
+            auto truth = context.batch_negate(message);
+            ASSERT_TRUE(context.batch_near_equal(truth, result));
+        }
+    }
+
+    TEST(EvaluatorBatchTest, HostBFVNegate) {
+        GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_negate(ghe);
+    }
+    TEST(EvaluatorBatchTest, HostBGVNegate) {
+        GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_negate(ghe);
+    }
+    TEST(EvaluatorBatchTest, HostCKKSNegate) {
+        GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 40, 40, 40 }, false, 0x123, 10, 1<<20, 1e-2);
+        test_negate(ghe);
+    }
+    TEST(EvaluatorBatchTest, DeviceBFVNegate) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_negate(ghe);
+        utils::MemoryPool::Destroy();
+    }
+    TEST(EvaluatorBatchTest, DeviceBGVNegate) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 40, 40, 40 }, false, 0x123, 0);
+        test_negate(ghe);
+        utils::MemoryPool::Destroy();
+    }
+    TEST(EvaluatorBatchTest, DeviceCKKSNegate) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 40, 40, 40 }, false, 0x123, 10, 1<<20, 1e-2);
+        test_negate(ghe);
+        utils::MemoryPool::Destroy();
+    }
+
+
     void test_add_subtract(const GeneralHeContext& context) {
         double scale = context.scale();
 
