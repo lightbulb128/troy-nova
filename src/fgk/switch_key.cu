@@ -54,7 +54,7 @@ namespace troy::utils::fgk::switch_key {
     }
 
     void set_accumulate_batched(
-        size_t decomp_modulus_size, size_t coeff_count, utils::ConstSliceVec<uint64_t> target_intt, std::vector<Buffer<uint64_t>>& temp_ntt, ConstSlice<Modulus> key_modulus, MemoryPoolHandle pool
+        size_t decomp_modulus_size, size_t coeff_count, const utils::ConstSliceVec<uint64_t>& target_intt, std::vector<Buffer<uint64_t>>& temp_ntt, ConstSlice<Modulus> key_modulus, MemoryPoolHandle pool
     ) {
         assert(key_modulus.on_device());
         if (target_intt.size() != temp_ntt.size()) {
@@ -156,10 +156,10 @@ namespace troy::utils::fgk::switch_key {
 
     void accumulate_products_batched(
         size_t decomp_modulus_size, size_t key_component_count, size_t coeff_count, 
-        ConstSliceVec<uint64_t> temp_ntt, 
+        const ConstSliceVec<uint64_t>& temp_ntt, 
         ConstSlice<Modulus> key_moduli,
         ConstSlice<const uint64_t*> key_vector,
-        SliceVec<uint64_t> poly_prod,
+        const SliceVec<uint64_t>& poly_prod,
         MemoryPoolHandle pool
     ) {
         if (temp_ntt.size() != poly_prod.size()) {

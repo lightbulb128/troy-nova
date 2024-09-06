@@ -27,12 +27,12 @@ namespace troy { namespace scaling_variant {
     
     void multiply_add_plain_inplace_batched(
         const std::vector<const Plaintext*>& plain, ContextDataPointer context_data, 
-        utils::SliceVec<uint64_t> destination, size_t destination_coeff_count,
+        const utils::SliceVec<uint64_t>& destination, size_t destination_coeff_count,
         MemoryPoolHandle pool = MemoryPool::GlobalPool()
     );
     void multiply_sub_plain_inplace_batched(
         const std::vector<const Plaintext*>& plain, ContextDataPointer context_data, 
-        utils::SliceVec<uint64_t> destination, size_t destination_coeff_count,
+        const utils::SliceVec<uint64_t>& destination, size_t destination_coeff_count,
         MemoryPoolHandle pool = MemoryPool::GlobalPool()
     );
     

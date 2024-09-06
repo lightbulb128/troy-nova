@@ -8,6 +8,60 @@ namespace troy {
     using utils::Slice;
     using utils::ConstSlice;
 
+
+    void Evaluator::negate_inplace(Ciphertext& encrypted) const {
+        check_ciphertext("[Evaluator::negate_inplace]", encrypted);
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::negate_inplace]", encrypted.parms_id());
+        const EncryptionParameters& parms = context_data->parms();
+        ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
+        size_t poly_count = encrypted.polynomial_count();
+        size_t poly_degree = parms.poly_modulus_degree();
+        utils::negate_inplace_ps(encrypted.data().reference(), poly_count, poly_degree, coeff_modulus);
+    }
+
+    void Evaluator::negate(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool) const {
+        check_ciphertext("[Evaluator::negate]", encrypted);
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::negate]", encrypted.parms_id());
+        const EncryptionParameters& parms = context_data->parms();
+        ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
+        destination = Ciphertext::like(encrypted, false, pool);
+        size_t poly_count = encrypted.polynomial_count();
+        size_t poly_degree = parms.poly_modulus_degree();
+        utils::negate_ps(encrypted.data().const_reference(), poly_count, poly_degree, coeff_modulus, destination.data().reference());
+    }
+
+    
+    void Evaluator::negate_inplace_batched(const std::vector<Ciphertext*>& encrypted, MemoryPoolHandle pool) const {
+        if (encrypted.size() == 0) return;
+        check_ciphertext_vec("[Evaluator::negate_inplace_batched]", encrypted);
+        ParmsID parms_id = get_vec_parms_id(encrypted);
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::negate_inplace_batched]", parms_id);
+        const EncryptionParameters& parms = context_data->parms();
+        ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
+        size_t poly_count = get_vec_polynomial_count(encrypted);
+        size_t poly_degree = parms.poly_modulus_degree();
+        utils::negate_inplace_bps(batch_utils::pcollect_reference(encrypted), poly_count, poly_degree, coeff_modulus, pool);
+    }
+
+    void Evaluator::negate_batched(const std::vector<const Ciphertext*>& encrypted, const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool) const {
+        if (encrypted.size() != destination.size()) {
+            throw std::invalid_argument("[Evaluator::negate_batched] Size mismatch");
+        }
+        if (encrypted.size() == 0) return;
+        check_ciphertext_vec("[Evaluator::negate_batched]", encrypted);
+        ParmsID parms_id = get_vec_parms_id(encrypted);
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::negate_batched]", parms_id);
+        const EncryptionParameters& parms = context_data->parms();
+        ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
+        for (size_t i = 0; i < encrypted.size(); i++) *destination[i] = Ciphertext::like(*encrypted[i], false, pool);
+        size_t poly_count = get_vec_polynomial_count(encrypted);
+        size_t poly_degree = parms.poly_modulus_degree();
+        utils::negate_bps(batch_utils::pcollect_const_reference(encrypted), poly_count, poly_degree, coeff_modulus, batch_utils::pcollect_reference(destination));
+    }
+
+
+
+
     void Evaluator::translate(const Ciphertext& encrypted1, const Ciphertext& encrypted2, Ciphertext& destination, bool subtract, MemoryPoolHandle pool) const {
         check_ciphertext("[Evaluator::translate_inplace]", encrypted1);
         check_ciphertext("[Evaluator::translate_inplace]", encrypted2);

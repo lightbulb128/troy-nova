@@ -570,4 +570,166 @@ namespace evaluator_batched {
         utils::MemoryPool::Destroy();
     }
 
+    
+    void test_keyswitching(const GeneralHeContext& context) {
+        // uint64_t t = context.t();
+        double scale = context.scale();
+
+        // create another keygenerator
+        KeyGenerator keygen_other = KeyGenerator(context.context());
+        SecretKey secret_key_other = keygen_other.secret_key();
+        Encryptor encryptor_other = Encryptor(context.context());
+        encryptor_other.set_secret_key(secret_key_other);
+
+        KSwitchKeys kswitch_key = context.key_generator().create_keyswitching_key(secret_key_other, false);
+
+        auto message = context.batch_random_simd_full(batch_size);
+        auto encoded = context.encoder().batch_encode_simd(message, std::nullopt, scale);
+        std::vector<Ciphertext> encrypted(batch_size);
+        for (size_t i = 0; i < batch_size; i++) encrypted[i] = encryptor_other.encrypt_symmetric_new(encoded[i], false);
+        auto switched = context.evaluator().apply_keyswitching_new_batched(batch_utils::collect_const_pointer(encrypted), kswitch_key);
+        auto decrypted = context.batch_decrypt(switched);
+        auto result = context.encoder().batch_decode_simd(decrypted);
+        ASSERT_TRUE(context.batch_near_equal(message, result));
+    }
+
+    TEST(EvaluatorBatchTest, HostBFVKeySwitching) {
+        GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_keyswitching(ghe);
+    }
+    TEST(EvaluatorBatchTest, HostBGVKeySwitching) {
+        GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_keyswitching(ghe);
+    }
+    TEST(EvaluatorBatchTest, HostCKKSKeySwitching) {
+        GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
+        test_keyswitching(ghe);
+    }
+    TEST(EvaluatorBatchTest, DeviceBFVKeySwitching) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_keyswitching(ghe);
+        utils::MemoryPool::Destroy();
+    }
+    TEST(EvaluatorBatchTest, DeviceBGVKeySwitching) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_keyswitching(ghe);
+        utils::MemoryPool::Destroy();
+    }
+    TEST(EvaluatorBatchTest, DeviceCKKSKeySwitching) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
+        test_keyswitching(ghe);
+        utils::MemoryPool::Destroy();
+    }
+
+
+
+    void test_rotate(const GeneralHeContext& context) {
+        double scale = context.scale();
+
+        auto message = context.batch_random_simd_full(batch_size);
+        auto encoded = context.encoder().batch_encode_simd(message, std::nullopt, scale);
+        auto encrypted = context.batch_encrypt_asymmetric(encoded);
+        auto encrypted_ptrs = batch_utils::collect_const_pointer(encrypted);
+        GaloisKeys glk = context.key_generator().create_galois_keys(false);
+        std::vector<Ciphertext> rotated;
+        for (int step: {1, 7}) {
+            if (context.params_host().scheme() == SchemeType::CKKS) {
+                rotated = context.evaluator().rotate_vector_new_batched(encrypted_ptrs, step, glk);
+            } else {
+                rotated = context.evaluator().rotate_rows_new_batched(encrypted_ptrs, step, glk);
+            }
+            auto decrypted = context.batch_decrypt(rotated);
+            auto result = context.encoder().batch_decode_simd(decrypted);
+            auto truth = context.batch_rotate(message, step);
+            ASSERT_TRUE(context.batch_near_equal(truth, result));
+        }
+        
+    }
+
+    TEST(EvaluatorBatchTest, HostBFVRotateRows) {
+        GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_rotate(ghe);
+    }
+    TEST(EvaluatorBatchTest, HostBGVRotateRows) {
+        GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_rotate(ghe);
+    }
+    TEST(EvaluatorBatchTest, HostCKKSRotateVector) {
+        GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
+        test_rotate(ghe);
+    }
+    TEST(EvaluatorBatchTest, DeviceBFVRotateRows) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_rotate(ghe);
+        utils::MemoryPool::Destroy();
+    }
+    TEST(EvaluatorBatchTest, DeviceBGVRotateRows) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_rotate(ghe);
+        utils::MemoryPool::Destroy();
+    }
+    TEST(EvaluatorBatchTest, DeviceCKKSRotateVector) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
+        test_rotate(ghe);
+        utils::MemoryPool::Destroy();
+    }
+
+    void test_conjugate(const GeneralHeContext& context) {
+        double scale = context.scale();
+
+        auto message = context.batch_random_simd_full(batch_size);
+        auto encoded = context.encoder().batch_encode_simd(message, std::nullopt, scale);
+        auto encrypted = context.batch_encrypt_asymmetric(encoded);
+        auto encrypted_ptrs = batch_utils::collect_const_pointer(encrypted);
+        GaloisKeys glk = context.key_generator().create_galois_keys(false);
+        std::vector<Ciphertext> rotated;
+        if (context.params_host().scheme() == SchemeType::CKKS) {
+            rotated = context.evaluator().complex_conjugate_new_batched(encrypted_ptrs, glk);
+        } else {
+            rotated = context.evaluator().rotate_columns_new_batched(encrypted_ptrs, glk);
+        }
+        auto decrypted = context.batch_decrypt(rotated);
+        auto result = context.encoder().batch_decode_simd(decrypted);
+        auto truth = context.batch_conjugate(message);
+        ASSERT_TRUE(context.batch_near_equal(truth, result));
+    }
+
+    TEST(EvaluatorBatchTest, HostBFVRotateColumns) {
+        GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_conjugate(ghe);
+    }
+    TEST(EvaluatorBatchTest, HostBGVRotateColumns) {
+        GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_conjugate(ghe);
+    }
+    TEST(EvaluatorBatchTest, HostCKKSComplexConjugate) {
+        GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
+        test_conjugate(ghe);
+    }
+    TEST(EvaluatorBatchTest, DeviceBFVRotateColumns) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_conjugate(ghe);
+        utils::MemoryPool::Destroy();
+    }
+    TEST(EvaluatorBatchTest, DeviceBGVRotateColumns) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_conjugate(ghe);
+        utils::MemoryPool::Destroy();
+    }
+    TEST(EvaluatorBatchTest, DeviceCKKSComplexConjugate) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
+        test_conjugate(ghe);
+        utils::MemoryPool::Destroy();
+    }
+
+
 }

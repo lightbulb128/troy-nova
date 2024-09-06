@@ -557,7 +557,7 @@ namespace tool {
             }
         }
 
-        inline GeneralVector rotate(int step) {
+        inline GeneralVector rotate(int step) const {
             if (complexes_) {
                 vector<complex<double>> vec(size());
                 for (size_t i = 0; i < size(); i++) {
@@ -578,7 +578,7 @@ namespace tool {
             }
         }
 
-        inline GeneralVector conjugate() {
+        inline GeneralVector conjugate() const {
             if (complexes_) {
                 vector<complex<double>> vec(size());
                 for (size_t i = 0; i < size(); i++) {
@@ -1275,6 +1275,16 @@ namespace tool {
         inline std::vector<GeneralVector> batch_square(const std::vector<GeneralVector>& vecs) const {
             std::vector<GeneralVector> ret; ret.reserve(vecs.size());
             for (const auto& vec: vecs) ret.push_back(square(vec));
+            return ret;
+        }
+        inline std::vector<GeneralVector> batch_rotate(const std::vector<GeneralVector>& vecs, int step) const {
+            std::vector<GeneralVector> ret; ret.reserve(vecs.size());
+            for (const auto& vec: vecs) ret.push_back(vec.rotate(step));
+            return ret;
+        }
+        inline std::vector<GeneralVector> batch_conjugate(const std::vector<GeneralVector>& vecs) const {
+            std::vector<GeneralVector> ret; ret.reserve(vecs.size());
+            for (const auto& vec: vecs) ret.push_back(vec.conjugate());
             return ret;
         }
         inline bool near_equal(const GeneralVector& vec1, const GeneralVector& vec2) const {

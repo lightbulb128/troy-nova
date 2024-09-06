@@ -125,7 +125,7 @@ namespace troy {namespace utils {
         }
     }
 
-    void modulo_bps(const ConstSliceVec<uint64_t>& polys, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t> result, MemoryPoolHandle pool) {
+    void modulo_bps(const ConstSliceVec<uint64_t>& polys, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, MemoryPoolHandle pool) {
         bool device = moduli.on_device();
         if (polys.size() != result.size()) {
             throw std::runtime_error("[modulo_bps] polys and result must have the same size");
@@ -186,7 +186,7 @@ namespace troy {namespace utils {
             host_negate_ps(polys, pcount, degree, moduli, result);
         }
     }
-    void negate_bps(const ConstSliceVec<uint64_t>& polys, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t> result, MemoryPoolHandle pool) {
+    void negate_bps(const ConstSliceVec<uint64_t>& polys, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, MemoryPoolHandle pool) {
         bool device = moduli.on_device();
         if (polys.size() != result.size()) {
             throw std::runtime_error("[negate_bps] polys and result must have the same size");
@@ -248,7 +248,7 @@ namespace troy {namespace utils {
             host_add_ps(polys1, polys2, pcount, degree, moduli, result);
         }
     }
-    void add_bps(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t> result, MemoryPoolHandle pool) {
+    void add_bps(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, MemoryPoolHandle pool) {
         bool device = moduli.on_device();
         if (polys1.size() != polys2.size() || polys1.size() != result.size()) {
             throw std::runtime_error("[add_bps] polys1, polys2, and result must have the same size");
@@ -309,7 +309,7 @@ namespace troy {namespace utils {
             host_sub_ps(polys1, polys2, pcount, degree, moduli, result);
         }
     }
-    void sub_bps(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t> result, MemoryPoolHandle pool) {
+    void sub_bps(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, MemoryPoolHandle pool) {
         bool device = moduli.on_device();
         if (polys1.size() != polys2.size() || polys1.size() != result.size()) {
             throw std::runtime_error("[sub_bps] polys1, polys2, and result must have the same size");
@@ -384,7 +384,7 @@ namespace troy {namespace utils {
             host_add_partial_ps(polys1, polys2, pcount, degree1, degree2, moduli, result, degree_result);
         }
     }
-    void add_partial_bps(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t pcount, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, const SliceVec<uint64_t> result, size_t degree_result, MemoryPoolHandle pool) {
+    void add_partial_bps(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t pcount, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, size_t degree_result, MemoryPoolHandle pool) {
         bool device = moduli.on_device();
         if (polys1.size() != polys2.size() || polys1.size() != result.size()) {
             throw std::runtime_error("[add_partial_bps] polys1, polys2, and result must have the same size");
@@ -457,7 +457,7 @@ namespace troy {namespace utils {
             host_sub_partial_ps(polys1, polys2, pcount, degree1, degree2, moduli, result, degree_result);
         }
     }
-    void sub_partial_bps(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t pcount, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, const SliceVec<uint64_t> result, size_t degree_result, MemoryPoolHandle pool) {
+    void sub_partial_bps(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t pcount, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, size_t degree_result, MemoryPoolHandle pool) {
         bool device = moduli.on_device();
         if (polys1.size() != polys2.size() || polys1.size() != result.size()) {
             throw std::runtime_error("[sub_partial_bps] polys1, polys2, and result must have the same size");
@@ -524,7 +524,7 @@ namespace troy {namespace utils {
             host_scatter_partial_ps(source_polys, pcount, source_degree, destination_degree, moduli_size, destination);
         }
     }
-    void scatter_partial_bps(const ConstSliceVec<uint64_t>& source_polys, size_t pcount, size_t source_degree, size_t destination_degree, size_t moduli_size, const SliceVec<uint64_t> destination, MemoryPoolHandle pool) {
+    void scatter_partial_bps(const ConstSliceVec<uint64_t>& source_polys, size_t pcount, size_t source_degree, size_t destination_degree, size_t moduli_size, const SliceVec<uint64_t>& destination, MemoryPoolHandle pool) {
         if (source_polys.size() != destination.size()) {
             throw std::runtime_error("[scatter_partial_bps] source_polys and destination must have the same size");
         }
@@ -656,7 +656,7 @@ namespace troy {namespace utils {
             host_multiply_scalar_ps(polys, scalar, pcount, degree, moduli, result);
         }
     }
-    void multiply_scalar_bps(const ConstSliceVec<uint64_t>& polys, uint64_t scalar, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t> result, MemoryPoolHandle pool) {
+    void multiply_scalar_bps(const ConstSliceVec<uint64_t>& polys, uint64_t scalar, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, MemoryPoolHandle pool) {
         bool device = moduli.on_device();
         if (polys.size() != result.size()) {
             throw std::runtime_error("[multiply_scalar_bps] polys and result must have the same size");

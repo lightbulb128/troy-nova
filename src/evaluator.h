@@ -54,7 +54,7 @@ namespace troy {
             const KSwitchKeys& kswitch_keys, size_t kswitch_keys_index, SwitchKeyDestinationAssignMethod assign_method, Ciphertext& destination, MemoryPoolHandle pool
         ) const;
         void switch_key_internal_batched(
-            const std::vector<const Ciphertext*>& encrypted, utils::ConstSliceVec<uint64_t> target, 
+            const std::vector<const Ciphertext*>& encrypted, const utils::ConstSliceVec<uint64_t>& target, 
             const KSwitchKeys& kswitch_keys, size_t kswitch_keys_index, SwitchKeyDestinationAssignMethod assign_method, const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool
         ) const;
 
@@ -91,7 +91,9 @@ namespace troy {
         void multiply_plain_ntt_inplace(Ciphertext& encrypted, const Plaintext& plain) const;
 
         void rotate_internal(const Ciphertext& encrypted, int steps, const GaloisKeys& galois_keys, Ciphertext& destination, MemoryPoolHandle pool) const;
+        void rotate_internal_batched(const std::vector<const Ciphertext*>& encrypted, int steps, const GaloisKeys& galois_keys, const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool) const;
         void conjugate_internal(const Ciphertext& encrypted, const GaloisKeys& galois_keys, Ciphertext& destination, MemoryPoolHandle pool) const;
+        void conjugate_internal_batched(const std::vector<const Ciphertext*>& encrypted, const GaloisKeys& galois_keys, const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool) const;
 
     public:
         inline Evaluator(HeContextPointer context): context_(context) {}
@@ -267,9 +269,13 @@ namespace troy {
             apply_keyswitching(encrypted, kswitch_keys, destination, pool);
             return destination;
         }
-
-
-
+        void apply_keyswitching_inplace_batched(const std::vector<Ciphertext*>& encrypted, const KSwitchKeys& kswitch_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        void apply_keyswitching_batched(const std::vector<const Ciphertext*>& encrypted, const KSwitchKeys& kswitch_keys, const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        inline std::vector<Ciphertext> apply_keyswitching_new_batched(const std::vector<const Ciphertext*>& encrypted, const KSwitchKeys& kswitch_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            std::vector<Ciphertext> destination(encrypted.size());
+            apply_keyswitching_batched(encrypted, kswitch_keys, batch_utils::collect_pointer(destination), pool);
+            return destination;
+        }
 
 
 
@@ -599,14 +605,32 @@ namespace troy {
         // ==================================
 
         void apply_galois(const Ciphertext& encrypted, size_t galois_element, const GaloisKeys& galois_keys, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        void apply_galois_batched(
+            const std::vector<const Ciphertext*>& encrypted, size_t galois_element, const GaloisKeys& galois_keys, 
+            const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const;
         inline void apply_galois_inplace(Ciphertext& encrypted, size_t galois_element, const GaloisKeys& galois_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;
             apply_galois(encrypted, galois_element, galois_keys, destination, pool);
             encrypted = std::move(destination);
         }
+        inline void apply_galois_inplace_batched(
+            std::vector<Ciphertext*>& encrypted, size_t galois_element, const GaloisKeys& galois_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            std::vector<Ciphertext> destination(encrypted.size());
+            apply_galois_batched(batch_utils::pcollect_const_pointer(encrypted), galois_element, galois_keys, batch_utils::collect_pointer(destination), pool);
+            for (size_t i = 0; i < encrypted.size(); i++) *encrypted[i] = std::move(destination[i]);
+        }
         inline Ciphertext apply_galois_new(const Ciphertext& encrypted, size_t galois_element, const GaloisKeys& galois_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;
             apply_galois(encrypted, galois_element, galois_keys, destination, pool);
+            return destination;
+        }
+        inline std::vector<Ciphertext> apply_galois_new_batched(
+            const std::vector<const Ciphertext*>& encrypted, size_t galois_element, const GaloisKeys& galois_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            std::vector<Ciphertext> destination(encrypted.size());
+            apply_galois_batched(encrypted, galois_element, galois_keys, batch_utils::collect_pointer(destination), pool);
             return destination;
         }
 
@@ -633,7 +657,7 @@ namespace troy {
         //         rotate
         // ==================================
 
-        void rotate_rows(const Ciphertext& encrypted, int steps, const GaloisKeys& galois_keys, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+        inline void rotate_rows(const Ciphertext& encrypted, int steps, const GaloisKeys& galois_keys, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             SchemeType scheme = this->context()->key_context_data().value()->parms().scheme();
             if (scheme == SchemeType::BFV || scheme == SchemeType::BGV) {
                 rotate_internal(encrypted, steps, galois_keys, destination, pool);
@@ -651,6 +675,35 @@ namespace troy {
             rotate_rows(encrypted, steps, galois_keys, destination, pool);
             return destination;
         }
+
+        inline void rotate_rows_batched(
+            const std::vector<const Ciphertext*>& encrypted, int steps, const GaloisKeys& galois_keys, 
+            const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            SchemeType scheme = this->context()->key_context_data().value()->parms().scheme();
+            if (scheme == SchemeType::BFV || scheme == SchemeType::BGV) {
+                rotate_internal_batched(encrypted, steps, galois_keys, destination, pool);
+            } else {
+                throw std::invalid_argument("[Evaluator::rotate_rows_inplace] Rotate rows only applies for BFV or BGV");
+            }
+        }
+        inline void rotate_rows_inplace_batched(
+            std::vector<Ciphertext*>& encrypted, int steps, const GaloisKeys& galois_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            std::vector<Ciphertext> destination(encrypted.size());
+            rotate_rows_batched(batch_utils::pcollect_const_pointer(encrypted), steps, galois_keys, batch_utils::collect_pointer(destination), pool);
+            for (size_t i = 0; i < encrypted.size(); i++) *encrypted[i] = std::move(destination[i]);
+        }
+        inline std::vector<Ciphertext> rotate_rows_new_batched(
+            const std::vector<const Ciphertext*>& encrypted, int steps, const GaloisKeys& galois_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            std::vector<Ciphertext> destination(encrypted.size());
+            rotate_rows_batched(encrypted, steps, galois_keys, batch_utils::collect_pointer(destination), pool);
+            return destination;
+        }
+
+
+
 
         inline void rotate_columns(const Ciphertext& encrypted, const GaloisKeys& galois_keys, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             SchemeType scheme = this->context()->key_context_data().value()->parms().scheme();
@@ -671,6 +724,33 @@ namespace troy {
             return destination;
         }
 
+        inline void rotate_columns_batched(
+            const std::vector<const Ciphertext*>& encrypted, const GaloisKeys& galois_keys, 
+            const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            SchemeType scheme = this->context()->key_context_data().value()->parms().scheme();
+            if (scheme == SchemeType::BFV || scheme == SchemeType::BGV) {
+                conjugate_internal_batched(encrypted, galois_keys, destination, pool);
+            } else {
+                throw std::invalid_argument("[Evaluator::rotate_columns_inplace] Rotate columns only applies for BFV or BGV");
+            }
+        }
+        inline void rotate_columns_inplace_batched(
+            std::vector<Ciphertext*>& encrypted, const GaloisKeys& galois_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            std::vector<Ciphertext> destination(encrypted.size());
+            rotate_columns_batched(batch_utils::pcollect_const_pointer(encrypted), galois_keys, batch_utils::collect_pointer(destination), pool);
+            for (size_t i = 0; i < encrypted.size(); i++) *encrypted[i] = std::move(destination[i]);
+        }
+        inline std::vector<Ciphertext> rotate_columns_new_batched(
+            const std::vector<const Ciphertext*>& encrypted, const GaloisKeys& galois_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            std::vector<Ciphertext> destination(encrypted.size());
+            rotate_columns_batched(encrypted, galois_keys, batch_utils::collect_pointer(destination), pool);
+            return destination;
+        }
+
+
         inline void rotate_vector(const Ciphertext& encrypted, int steps, const GaloisKeys& galois_keys, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             SchemeType scheme = this->context()->key_context_data().value()->parms().scheme();
             if (scheme == SchemeType::CKKS) {
@@ -690,6 +770,35 @@ namespace troy {
             return destination;
         }
 
+        inline void rotate_vector_batched(
+            const std::vector<const Ciphertext*>& encrypted, int steps, const GaloisKeys& galois_keys, 
+            const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            SchemeType scheme = this->context()->key_context_data().value()->parms().scheme();
+            if (scheme == SchemeType::CKKS) {
+                rotate_internal_batched(encrypted, steps, galois_keys, destination, pool);
+            } else {
+                throw std::invalid_argument("[Evaluator::rotate_vector_inplace] Rotate vector only applies for CKKS");
+            }
+        }
+        inline void rotate_vector_inplace_batched(
+            std::vector<Ciphertext*>& encrypted, int steps, const GaloisKeys& galois_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            std::vector<Ciphertext> destination(encrypted.size());
+            rotate_vector_batched(batch_utils::pcollect_const_pointer(encrypted), steps, galois_keys, batch_utils::collect_pointer(destination), pool);
+            for (size_t i = 0; i < encrypted.size(); i++) *encrypted[i] = std::move(destination[i]);
+        }
+        inline std::vector<Ciphertext> rotate_vector_new_batched(
+            const std::vector<const Ciphertext*>& encrypted, int steps, const GaloisKeys& galois_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            std::vector<Ciphertext> destination(encrypted.size());
+            rotate_vector_batched(encrypted, steps, galois_keys, batch_utils::collect_pointer(destination), pool);
+            return destination;
+        }
+
+
+
+
         inline void complex_conjugate(const Ciphertext& encrypted, const GaloisKeys& galois_keys, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             SchemeType scheme = this->context()->key_context_data().value()->parms().scheme();
             if (scheme == SchemeType::CKKS) {
@@ -706,6 +815,32 @@ namespace troy {
         inline Ciphertext complex_conjugate_new(const Ciphertext& encrypted, const GaloisKeys& galois_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;
             complex_conjugate(encrypted, galois_keys, destination, pool);
+            return destination;
+        }
+
+        inline void complex_conjugate_batched(
+            const std::vector<const Ciphertext*>& encrypted, const GaloisKeys& galois_keys, 
+            const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            SchemeType scheme = this->context()->key_context_data().value()->parms().scheme();
+            if (scheme == SchemeType::CKKS) {
+                conjugate_internal_batched(encrypted, galois_keys, destination, pool);
+            } else {
+                throw std::invalid_argument("[Evaluator::complex_conjugate_inplace] Complex conjugate only applies for CKKS");
+            }
+        }
+        inline void complex_conjugate_inplace_batched(
+            std::vector<Ciphertext*>& encrypted, const GaloisKeys& galois_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            std::vector<Ciphertext> destination(encrypted.size());
+            complex_conjugate_batched(batch_utils::pcollect_const_pointer(encrypted), galois_keys, batch_utils::collect_pointer(destination), pool);
+            for (size_t i = 0; i < encrypted.size(); i++) *encrypted[i] = std::move(destination[i]);
+        }
+        inline std::vector<Ciphertext> complex_conjugate_new_batched(
+            const std::vector<const Ciphertext*>& encrypted, const GaloisKeys& galois_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            std::vector<Ciphertext> destination(encrypted.size());
+            complex_conjugate_batched(encrypted, galois_keys, batch_utils::collect_pointer(destination), pool);
             return destination;
         }
 

@@ -18,19 +18,19 @@ namespace troy {namespace utils {
     void set_slice_b(const uint64_t value, const SliceVec<uint64_t>& to, MemoryPoolHandle pool = MemoryPool::GlobalPool());
 
     void modulo_ps(ConstSlice<uint64_t> polys, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result);
-    void modulo_bps(const ConstSliceVec<uint64_t>& polys, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t> result, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+    void modulo_bps(const ConstSliceVec<uint64_t>& polys, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, MemoryPoolHandle pool = MemoryPool::GlobalPool());
 
     inline void modulo_p(ConstSlice<uint64_t> poly, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         modulo_ps(poly, 1, degree, moduli, result);
     }
-    inline void modulo_bp(const ConstSliceVec<uint64_t>& polys, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t> result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void modulo_bp(const ConstSliceVec<uint64_t>& polys, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         modulo_bps(polys, 1, degree, moduli, result, pool);
     }
 
     inline void modulo(ConstSlice<uint64_t> poly, ConstPointer<Modulus> modulus, Slice<uint64_t> result) {
         modulo_ps(poly, 1, poly.size(), ConstSlice<Modulus>::from_pointer(modulus), result);
     }
-    inline void modulo_b(const ConstSliceVec<uint64_t>& polys, ConstPointer<Modulus> modulus, const SliceVec<uint64_t> result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void modulo_b(const ConstSliceVec<uint64_t>& polys, ConstPointer<Modulus> modulus, const SliceVec<uint64_t>& result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         if (polys.size() != result.size()) throw std::invalid_argument("[modulo_b] polys.size() != result.size()");
         if (polys.size() > 0) modulo_bps(polys, 1, polys[0].size(), ConstSlice<Modulus>::from_pointer(modulus), result, pool);
     }
@@ -47,33 +47,33 @@ namespace troy {namespace utils {
     inline void modulo_inplace_p(Slice<uint64_t> poly, size_t degree, ConstSlice<Modulus> moduli) {
         modulo_inplace_ps(poly, 1, degree, moduli);
     }
-    inline void modulo_inplace_bp(SliceVec<uint64_t>& polys, size_t degree, ConstSlice<Modulus> moduli, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void modulo_inplace_bp(const SliceVec<uint64_t>& polys, size_t degree, ConstSlice<Modulus> moduli, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         modulo_inplace_bps(polys, 1, degree, moduli, pool);
     }
 
     inline void modulo_inplace(Slice<uint64_t> poly, ConstPointer<Modulus> modulus) {
         modulo_inplace_ps(poly, 1, poly.size(), ConstSlice<Modulus>::from_pointer(modulus));
     }
-    inline void modulo_inplace_b(SliceVec<uint64_t>& polys, ConstPointer<Modulus> modulus, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void modulo_inplace_b(const SliceVec<uint64_t>& polys, ConstPointer<Modulus> modulus, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         if (polys.size() > 0) modulo_inplace_bps(polys, 1, polys[0].size(), ConstSlice<Modulus>::from_pointer(modulus), pool);
     }
 
 
 
     void negate_ps(ConstSlice<uint64_t> polys, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result);
-    void negate_bps(const ConstSliceVec<uint64_t>& polys, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t> result, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+    void negate_bps(const ConstSliceVec<uint64_t>& polys, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, MemoryPoolHandle pool = MemoryPool::GlobalPool());
     
     inline void negate_p(ConstSlice<uint64_t> poly, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         negate_ps(poly, 1, degree, moduli, result);
     }
-    inline void negate_bp(const ConstSliceVec<uint64_t>& polys, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t> result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void negate_bp(const ConstSliceVec<uint64_t>& polys, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         negate_bps(polys, 1, degree, moduli, result, pool);
     }
 
     inline void negate(ConstSlice<uint64_t> poly, ConstPointer<Modulus> modulus, Slice<uint64_t> result) {
         negate_ps(poly, 1, poly.size(), ConstSlice<Modulus>::from_pointer(modulus), result);
     }
-    inline void negate_b(const ConstSliceVec<uint64_t>& polys, ConstPointer<Modulus> modulus, const SliceVec<uint64_t> result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void negate_b(const ConstSliceVec<uint64_t>& polys, ConstPointer<Modulus> modulus, const SliceVec<uint64_t>& result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         if (polys.size() != result.size()) throw std::invalid_argument("[negate_b] polys.size() != result.size()");
         if (polys.size() > 0) negate_bps(polys, 1, polys[0].size(), ConstSlice<Modulus>::from_pointer(modulus), result, pool);
     }
@@ -90,46 +90,46 @@ namespace troy {namespace utils {
     inline void negate_inplace_p(Slice<uint64_t> poly, size_t degree, ConstSlice<Modulus> moduli) {
         negate_inplace_ps(poly, 1, degree, moduli);
     }
-    inline void negate_inplace_bp(SliceVec<uint64_t>& polys, size_t degree, ConstSlice<Modulus> moduli, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void negate_inplace_bp(const SliceVec<uint64_t>& polys, size_t degree, ConstSlice<Modulus> moduli, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         negate_inplace_bps(polys, 1, degree, moduli, pool);
     }
 
     inline void negate_inplace(Slice<uint64_t> poly, ConstPointer<Modulus> modulus) {
         negate_inplace_ps(poly, 1, poly.size(), ConstSlice<Modulus>::from_pointer(modulus));
     }
-    inline void negate_inplace_b(SliceVec<uint64_t>& polys, ConstPointer<Modulus> modulus, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void negate_inplace_b(const SliceVec<uint64_t>& polys, ConstPointer<Modulus> modulus, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         if (polys.size() > 0) negate_inplace_bps(polys, 1, polys[0].size(), ConstSlice<Modulus>::from_pointer(modulus), pool);
     }
 
     void scatter_partial_ps(ConstSlice<uint64_t> source_polys, size_t pcount, size_t source_degree, size_t destination_degree, size_t moduli_size, Slice<uint64_t> destination);
-    void scatter_partial_bps(const ConstSliceVec<uint64_t>& source_polys, size_t pcount, size_t source_degree, size_t destination_degree, size_t moduli_size, const SliceVec<uint64_t> destination, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+    void scatter_partial_bps(const ConstSliceVec<uint64_t>& source_polys, size_t pcount, size_t source_degree, size_t destination_degree, size_t moduli_size, const SliceVec<uint64_t>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool());
     inline void scatter_partial_p(ConstSlice<uint64_t> source_poly, size_t source_degree, size_t destination_degree, size_t moduli_size, Slice<uint64_t> destination) {
         scatter_partial_ps(source_poly, 1, source_degree, destination_degree, moduli_size, destination);
     }
-    inline void scatter_partial_bp(const ConstSliceVec<uint64_t>& source_polys, size_t source_degree, size_t destination_degree, size_t moduli_size, const SliceVec<uint64_t> destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void scatter_partial_bp(const ConstSliceVec<uint64_t>& source_polys, size_t source_degree, size_t destination_degree, size_t moduli_size, const SliceVec<uint64_t>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         scatter_partial_bps(source_polys, 1, source_degree, destination_degree, moduli_size, destination, pool);
     }
     inline void scatter_partial(ConstSlice<uint64_t> source_poly, size_t source_degree, size_t destination_degree, Slice<uint64_t> destination) {
         scatter_partial_ps(source_poly, 1, source_degree, destination_degree, 1, destination);
     }
-    inline void scatter_partial_b(const ConstSliceVec<uint64_t>& source_polys, size_t source_degree, size_t destination_degree, const SliceVec<uint64_t> destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void scatter_partial_b(const ConstSliceVec<uint64_t>& source_polys, size_t source_degree, size_t destination_degree, const SliceVec<uint64_t>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         if (source_polys.size() != destination.size()) throw std::invalid_argument("[scatter_partial_b] source_polys.size() != destination.size()");
         if (source_polys.size() > 0) scatter_partial_bps(source_polys, 1, source_degree, destination_degree, 1, destination, pool);
     }
 
 
     void add_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result);
-    void add_bps(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t> result, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+    void add_bps(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, MemoryPoolHandle pool = MemoryPool::GlobalPool());
     inline void add_p(ConstSlice<uint64_t> poly1, ConstSlice<uint64_t> poly2, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         add_ps(poly1, poly2, 1, degree, moduli, result);
     }
-    inline void add_bp(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t> result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void add_bp(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         add_bps(polys1, polys2, 1, degree, moduli, result, pool);
     }
     inline void add(ConstSlice<uint64_t> poly1, ConstSlice<uint64_t> poly2, ConstPointer<Modulus> modulus, Slice<uint64_t> result) {
         add_ps(poly1, poly2, 1, poly1.size(), ConstSlice<Modulus>::from_pointer(modulus), result);
     }
-    inline void add_b(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, ConstPointer<Modulus> modulus, const SliceVec<uint64_t> result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void add_b(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, ConstPointer<Modulus> modulus, const SliceVec<uint64_t>& result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         if (polys1.size() != polys2.size() || polys1.size() != result.size()) throw std::invalid_argument("[add_b] polys1.size() != polys2.size() || polys1.size() != result.size()");
         if (polys1.size() > 0) add_bps(polys1, polys2, 1, polys1[0].size(), ConstSlice<Modulus>::from_pointer(modulus), result, pool);
     }
@@ -143,30 +143,30 @@ namespace troy {namespace utils {
     inline void add_inplace_p(Slice<uint64_t> poly1, ConstSlice<uint64_t> poly2, size_t degree, ConstSlice<Modulus> moduli) {
         add_inplace_ps(poly1, poly2, 1, degree, moduli);
     }
-    inline void add_inplace_b(SliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t degree, ConstSlice<Modulus> moduli, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void add_inplace_bp(const SliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t degree, ConstSlice<Modulus> moduli, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         add_inplace_bps(polys1, polys2, 1, degree, moduli, pool);
     }
     inline void add_inplace(Slice<uint64_t> poly1, ConstSlice<uint64_t> poly2, ConstPointer<Modulus> modulus) {
         add_inplace_ps(poly1, poly2, 1, poly1.size(), ConstSlice<Modulus>::from_pointer(modulus));
     }
-    inline void add_inplace_b(SliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, ConstPointer<Modulus> modulus, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void add_inplace_b(const SliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, ConstPointer<Modulus> modulus, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         if (polys1.size() != polys2.size()) throw std::invalid_argument("[add_inplace_b] polys1.size() != polys2.size()");
         if (polys1.size() > 0) add_inplace_bps(polys1, polys2, 1, polys1[0].size(), ConstSlice<Modulus>::from_pointer(modulus), pool);
     }
 
 
     void sub_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result);
-    void sub_bps(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t> result, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+    void sub_bps(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, MemoryPoolHandle pool = MemoryPool::GlobalPool());
     inline void sub_p(ConstSlice<uint64_t> poly1, ConstSlice<uint64_t> poly2, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         sub_ps(poly1, poly2, 1, degree, moduli, result);
     }
-    inline void sub_bp(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t> result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void sub_bp(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         sub_bps(polys1, polys2, 1, degree, moduli, result, pool);
     }
     inline void sub(ConstSlice<uint64_t> poly1, ConstSlice<uint64_t> poly2, ConstPointer<Modulus> modulus, Slice<uint64_t> result) {
         sub_ps(poly1, poly2, 1, poly1.size(), ConstSlice<Modulus>::from_pointer(modulus), result);
     }
-    inline void sub_b(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, ConstPointer<Modulus> modulus, const SliceVec<uint64_t> result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void sub_b(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, ConstPointer<Modulus> modulus, const SliceVec<uint64_t>& result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         if (polys1.size() != polys2.size() || polys1.size() != result.size()) throw std::invalid_argument("[sub_b] polys1.size() != polys2.size() || polys1.size() != result.size()");
         if (polys1.size() > 0) sub_bps(polys1, polys2, 1, polys1[0].size(), ConstSlice<Modulus>::from_pointer(modulus), result, pool);
     }
@@ -180,44 +180,44 @@ namespace troy {namespace utils {
     inline void sub_inplace_p(Slice<uint64_t> poly1, ConstSlice<uint64_t> poly2, size_t degree, ConstSlice<Modulus> moduli) {
         sub_inplace_ps(poly1, poly2, 1, degree, moduli);
     }
-    inline void sub_inplace_b(SliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t degree, ConstSlice<Modulus> moduli, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void sub_inplace_bp(const SliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t degree, ConstSlice<Modulus> moduli, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         sub_inplace_bps(polys1, polys2, 1, degree, moduli, pool);
     }
     inline void sub_inplace(Slice<uint64_t> poly1, ConstSlice<uint64_t> poly2, ConstPointer<Modulus> modulus) {
         sub_inplace_ps(poly1, poly2, 1, poly1.size(), ConstSlice<Modulus>::from_pointer(modulus));
     }
-    inline void sub_inplace_b(SliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, ConstPointer<Modulus> modulus, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void sub_inplace_b(const SliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, ConstPointer<Modulus> modulus, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         if (polys1.size() != polys2.size()) throw std::invalid_argument("[sub_inplace_b] polys1.size() != polys2.size()");
         if (polys1.size() > 0) sub_inplace_bps(polys1, polys2, 1, polys1[0].size(), ConstSlice<Modulus>::from_pointer(modulus), pool);
     }
 
     void add_partial_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, Slice<uint64_t> result, size_t degree_result);
-    void add_partial_bps(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t pcount, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, const SliceVec<uint64_t> result, size_t degree_result, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+    void add_partial_bps(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t pcount, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, size_t degree_result, MemoryPoolHandle pool = MemoryPool::GlobalPool());
     inline void add_partial_p(ConstSlice<uint64_t> poly1, ConstSlice<uint64_t> poly2, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, Slice<uint64_t> result, size_t degree_result) {
         add_partial_ps(poly1, poly2, 1, degree1, degree2, moduli, result, degree_result);
     }
-    inline void add_partial_b(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, const SliceVec<uint64_t> result, size_t degree_result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void add_partial_bp(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, size_t degree_result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         add_partial_bps(polys1, polys2, 1, degree1, degree2, moduli, result, degree_result, pool);
     }
     inline void add_partial(ConstSlice<uint64_t> poly1, ConstSlice<uint64_t> poly2, size_t degree1, size_t degree2, ConstPointer<Modulus> modulus, Slice<uint64_t> result, size_t degree_result) {
         add_partial_ps(poly1, poly2, 1, degree1, degree2, ConstSlice<Modulus>::from_pointer(modulus), result, degree_result);
     }
-    inline void add_partial_b(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t degree1, size_t degree2, ConstPointer<Modulus> modulus, const SliceVec<uint64_t> result, size_t degree_result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void add_partial_b(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t degree1, size_t degree2, ConstPointer<Modulus> modulus, const SliceVec<uint64_t>& result, size_t degree_result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         add_partial_bps(polys1, polys2, 1, degree1, degree2, ConstSlice<Modulus>::from_pointer(modulus), result, degree_result, pool);
     }
 
     void sub_partial_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, Slice<uint64_t> result, size_t degree_result);
-    void sub_partial_bps(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t pcount, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, const SliceVec<uint64_t> result, size_t degree_result, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+    void sub_partial_bps(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t pcount, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, size_t degree_result, MemoryPoolHandle pool = MemoryPool::GlobalPool());
     inline void sub_partial_p(ConstSlice<uint64_t> poly1, ConstSlice<uint64_t> poly2, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, Slice<uint64_t> result, size_t degree_result) {
         sub_partial_ps(poly1, poly2, 1, degree1, degree2, moduli, result, degree_result);
     }
-    inline void sub_partial_b(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, const SliceVec<uint64_t> result, size_t degree_result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void sub_partial_bp(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, size_t degree_result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         sub_partial_bps(polys1, polys2, 1, degree1, degree2, moduli, result, degree_result, pool);
     }
     inline void sub_partial(ConstSlice<uint64_t> poly1, ConstSlice<uint64_t> poly2, size_t degree1, size_t degree2, ConstPointer<Modulus> modulus, Slice<uint64_t> result, size_t degree_result) {
         sub_partial_ps(poly1, poly2, 1, degree1, degree2, ConstSlice<Modulus>::from_pointer(modulus), result, degree_result);
     }
-    inline void sub_partial_b(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t degree1, size_t degree2, ConstPointer<Modulus> modulus, const SliceVec<uint64_t> result, size_t degree_result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void sub_partial_b(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t degree1, size_t degree2, ConstPointer<Modulus> modulus, const SliceVec<uint64_t>& result, size_t degree_result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         sub_partial_bps(polys1, polys2, 1, degree1, degree2, ConstSlice<Modulus>::from_pointer(modulus), result, degree_result, pool);
     }
 
@@ -230,13 +230,13 @@ namespace troy {namespace utils {
     inline void add_partial_inplace_p(Slice<uint64_t> poly1, ConstSlice<uint64_t> poly2, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli) {
         add_partial_inplace_ps(poly1, poly2, 1, degree1, degree2, moduli);
     }
-    inline void add_partial_inplace_b(SliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void add_partial_inplace_bp(const SliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         add_partial_inplace_bps(polys1, polys2, 1, degree1, degree2, moduli, pool);
     }
     inline void add_partial_inplace(Slice<uint64_t> poly1, ConstSlice<uint64_t> poly2, size_t degree1, size_t degree2, ConstPointer<Modulus> modulus) {
         add_partial_inplace_ps(poly1, poly2, 1, degree1, degree2, ConstSlice<Modulus>::from_pointer(modulus));
     }
-    inline void add_partial_inplace_b(SliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t degree1, size_t degree2, ConstPointer<Modulus> modulus, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void add_partial_inplace_b(const SliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t degree1, size_t degree2, ConstPointer<Modulus> modulus, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         add_partial_inplace_bps(polys1, polys2, 1, degree1, degree2, ConstSlice<Modulus>::from_pointer(modulus), pool);
     }
 
@@ -249,13 +249,13 @@ namespace troy {namespace utils {
     inline void sub_partial_inplace_p(Slice<uint64_t> poly1, ConstSlice<uint64_t> poly2, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli) {
         sub_partial_inplace_ps(poly1, poly2, 1, degree1, degree2, moduli);
     }
-    inline void sub_partial_inplace_b(SliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void sub_partial_inplace_bp(const SliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t degree1, size_t degree2, ConstSlice<Modulus> moduli, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         sub_partial_inplace_bps(polys1, polys2, 1, degree1, degree2, moduli, pool);
     }
     inline void sub_partial_inplace(Slice<uint64_t> poly1, ConstSlice<uint64_t> poly2, size_t degree1, size_t degree2, ConstPointer<Modulus> modulus) {
         sub_partial_inplace_ps(poly1, poly2, 1, degree1, degree2, ConstSlice<Modulus>::from_pointer(modulus));
     }
-    inline void sub_partial_inplace_b(SliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t degree1, size_t degree2, ConstPointer<Modulus> modulus, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void sub_partial_inplace_b(const SliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t degree1, size_t degree2, ConstPointer<Modulus> modulus, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         sub_partial_inplace_bps(polys1, polys2, 1, degree1, degree2, ConstSlice<Modulus>::from_pointer(modulus), pool);
     }
 
@@ -313,19 +313,19 @@ namespace troy {namespace utils {
 
 
     void multiply_scalar_ps(ConstSlice<uint64_t> polys, uint64_t scalar, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result);
-    void multiply_scalar_bps(const ConstSliceVec<uint64_t>& polys, uint64_t scalar, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t> result, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+    void multiply_scalar_bps(const ConstSliceVec<uint64_t>& polys, uint64_t scalar, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, MemoryPoolHandle pool = MemoryPool::GlobalPool());
 
     inline void multiply_scalar_p(ConstSlice<uint64_t> poly, uint64_t scalar, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         multiply_scalar_ps(poly, scalar, 1, degree, moduli, result);
     }
-    inline void multiply_scalar_bp(const ConstSliceVec<uint64_t>& polys, uint64_t scalar, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t> result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void multiply_scalar_bp(const ConstSliceVec<uint64_t>& polys, uint64_t scalar, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         multiply_scalar_bps(polys, scalar, 1, degree, moduli, result, pool);
     }
 
     inline void multiply_scalar(ConstSlice<uint64_t> poly, uint64_t scalar, ConstPointer<Modulus> modulus, Slice<uint64_t> result) {
         multiply_scalar_ps(poly, scalar, 1, poly.size(), ConstSlice<Modulus>::from_pointer(modulus), result);
     }
-    inline void multiply_scalar_b(const ConstSliceVec<uint64_t>& polys, uint64_t scalar, ConstPointer<Modulus> modulus, const SliceVec<uint64_t> result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void multiply_scalar_b(const ConstSliceVec<uint64_t>& polys, uint64_t scalar, ConstPointer<Modulus> modulus, const SliceVec<uint64_t>& result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         if (polys.size() != result.size()) throw std::invalid_argument("[multiply_scalar_b] polys.size() != result.size()");
         if (polys.size() > 0) multiply_scalar_bps(polys, scalar, 1, polys[0].size(), ConstSlice<Modulus>::from_pointer(modulus), result, pool);
     }
@@ -344,14 +344,14 @@ namespace troy {namespace utils {
     inline void multiply_scalar_inplace_p(Slice<uint64_t> poly, uint64_t scalar, size_t degree, ConstSlice<Modulus> moduli) {
         multiply_scalar_inplace_ps(poly, scalar, 1, degree, moduli);
     }
-    inline void multiply_scalar_inplace_bp(SliceVec<uint64_t> polys, uint64_t scalar, size_t degree, ConstSlice<Modulus> moduli, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void multiply_scalar_inplace_bp(const SliceVec<uint64_t>& polys, uint64_t scalar, size_t degree, ConstSlice<Modulus> moduli, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         multiply_scalar_inplace_bps(polys, scalar, 1, degree, moduli, pool);
     }
 
     inline void multiply_scalar_inplace(Slice<uint64_t> poly, uint64_t scalar, ConstPointer<Modulus> modulus) {
         multiply_scalar_inplace_ps(poly, scalar, 1, poly.size(), ConstSlice<Modulus>::from_pointer(modulus));
     }
-    inline void multiply_scalar_inplace_b(SliceVec<uint64_t> polys, uint64_t scalar, ConstPointer<Modulus> modulus, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+    inline void multiply_scalar_inplace_b(const SliceVec<uint64_t>& polys, uint64_t scalar, ConstPointer<Modulus> modulus, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
         if (polys.size() > 0) multiply_scalar_inplace_bps(polys, scalar, 1, polys[0].size(), ConstSlice<Modulus>::from_pointer(modulus), pool);
     }
 
