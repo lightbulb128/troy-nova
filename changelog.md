@@ -46,3 +46,8 @@
 - Update kernels for multiple APIs in evaluator and encryptor, removing redundant cuda memory copies and memsets.
 - All unittests using device will be skipped if no device is detected on the machine.
 - Examples will run on host if no device is detected on the machine.
+
+## 2024-09-06
+
+- Use `cudaMemcpyAsync` instead of `cudaMemcpy` when copying from host to device, and device to device.
+- Use `cudaMemsetAsync` instead of `cudaMemset` when setting device memory.

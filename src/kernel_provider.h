@@ -70,7 +70,7 @@ namespace troy {
         inline void memset(MemoryPool& pool, T* ptr, size_t length, int value) {
             if (length == 0) return;
             pool.set_device();
-            cudaError_t status = cudaMemset(ptr, value, length * sizeof(T));
+            cudaError_t status = cudaMemsetAsync(ptr, value, length * sizeof(T));
             if (status != cudaSuccess) {
                 runtime_error("[kernel_provider::memset] cudaMemset failed", status);
             }
