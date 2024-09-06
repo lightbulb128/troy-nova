@@ -619,18 +619,4 @@ namespace troy {
         }
     }
 
-    void Evaluator::negacyclic_shift(const Ciphertext& encrypted, size_t shift, Ciphertext& destination, MemoryPoolHandle pool) const {
-        check_no_seed("[Evaluator::negacyclic_shift]", encrypted);
-        ContextDataPointer context_data = this->get_context_data("[Evaluator::negacyclic_shift]", encrypted.parms_id());
-        const EncryptionParameters& parms = context_data->parms();
-        size_t coeff_count = parms.poly_modulus_degree();
-        ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
-
-        destination = Ciphertext::like(encrypted, false, pool);
-        utils::negacyclic_shift_ps(
-            encrypted.polys(0, encrypted.polynomial_count()),
-            shift, encrypted.polynomial_count(), coeff_count, coeff_modulus, 
-            destination.polys(0, destination.polynomial_count())
-        );
-    }
 }

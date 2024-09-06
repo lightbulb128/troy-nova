@@ -427,13 +427,21 @@ namespace troy {namespace utils {
 
 
     void negacyclic_shift_ps(ConstSlice<uint64_t> polys, size_t shift, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result);
+    void negacyclic_shift_bps(const ConstSliceVec<uint64_t>& polys, size_t shift, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, MemoryPoolHandle pool = MemoryPool::GlobalPool());
 
     inline void negacyclic_shift_p(ConstSlice<uint64_t> poly, size_t shift, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         negacyclic_shift_ps(poly, shift, 1, degree, moduli, result);
     }
+    inline void negacyclic_shift_bp(const ConstSliceVec<uint64_t>& polys, size_t shift, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+        negacyclic_shift_bps(polys, shift, 1, degree, moduli, result, pool);
+    }
 
     inline void negacyclic_shift(ConstSlice<uint64_t> poly, size_t shift, ConstPointer<Modulus> modulus, Slice<uint64_t> result) {
         negacyclic_shift_ps(poly, shift, 1, poly.size(), ConstSlice<Modulus>::from_pointer(modulus), result);
+    }
+    inline void negacyclic_shift_b(const ConstSliceVec<uint64_t>& polys, size_t shift, ConstPointer<Modulus> modulus, const SliceVec<uint64_t>& result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+        if (polys.size() != result.size()) throw std::invalid_argument("[negacyclic_shift_b] polys.size() != result.size()");
+        if (polys.size() > 0) negacyclic_shift_bps(polys, shift, 1, polys[0].size(), ConstSlice<Modulus>::from_pointer(modulus), result, pool);
     }
 
 

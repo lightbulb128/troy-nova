@@ -876,6 +876,26 @@ namespace troy {
             negacyclic_shift(encrypted, shift, destination, pool);
             encrypted = std::move(destination);
         }
+        
+        void negacyclic_shift_batched(
+            const std::vector<const Ciphertext*>& encrypted, size_t shift, 
+            const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const;
+        inline void negacyclic_shift_inplace_batched(
+            std::vector<Ciphertext*>& encrypted, size_t shift, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            std::vector<Ciphertext> destination(encrypted.size());
+            negacyclic_shift_batched(batch_utils::pcollect_const_pointer(encrypted), shift, batch_utils::collect_pointer(destination), pool);
+            for (size_t i = 0; i < encrypted.size(); i++) *encrypted[i] = std::move(destination[i]);
+        }
+        inline std::vector<Ciphertext> negacyclic_shift_new_batched(
+            const std::vector<const Ciphertext*>& encrypted, size_t shift, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            std::vector<Ciphertext> destination(encrypted.size());
+            negacyclic_shift_batched(encrypted, shift, batch_utils::collect_pointer(destination), pool);
+            return destination;
+        }
+
     };
 
 }

@@ -1,3 +1,5 @@
+#include "constants.h"
+#include "memory_pool.h"
 #include "poly_small_mod.h"
 #include "../batch_utils.h"
 #include <cstdint>
@@ -830,7 +832,7 @@ namespace troy {namespace utils {
         }
     }
 
-    __global__ void kernel_negacyclic_shift_ps(ConstSlice<uint64_t> polys, size_t shift, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
+    __device__ void device_negacyclic_shift_ps(ConstSlice<uint64_t> polys, size_t shift, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
         if (idx < pcount * moduli.size() * degree) {
             size_t i = idx / (moduli.size() * degree);
@@ -849,6 +851,16 @@ namespace troy {namespace utils {
         }
     }
 
+    __global__ void kernel_negacyclic_shift_ps(ConstSlice<uint64_t> polys, size_t shift, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
+        device_negacyclic_shift_ps(polys, shift, pcount, degree, moduli, result);
+    }
+    __global__ void kernel_negacyclic_shift_bps(ConstSliceArrayRef<uint64_t> polys, size_t shift, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, SliceArrayRef<uint64_t> result) {
+        for (size_t i = 0; i < polys.size(); i++) {
+            device_negacyclic_shift_ps(polys[i], shift, pcount, degree, moduli, result[i]);
+        }
+    }
+    
+
     void negacyclic_shift_ps(ConstSlice<uint64_t> polys, size_t shift, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         bool device = result.on_device();
         if (!device_compatible(polys, moduli, result)) {
@@ -863,8 +875,24 @@ namespace troy {namespace utils {
             host_negacyclic_shift_ps(polys, shift, pcount, degree, moduli, result);
         }
     }
-
-
-
+    void negacyclic_shift_bps(const ConstSliceVec<uint64_t>& polys, size_t shift, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, MemoryPoolHandle pool) {
+        if (polys.size() != result.size()) {
+            throw std::runtime_error("[negacyclic_shift_bps] polys and result must have the same size");
+        }
+        if (polys.size() == 0) return;
+        bool device = moduli.on_device();
+        if (!device || polys.size() < BATCH_OP_THRESHOLD) {
+            for (size_t i = 0; i < polys.size(); i++) {
+                negacyclic_shift_ps(polys[i], shift, pcount, degree, moduli, result[i]);
+            }
+        } else {
+            size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
+            ConstSliceArray<uint64_t> polys_arr = construct_batch(polys, pool, moduli);
+            SliceArray<uint64_t> result_arr = construct_batch(result, pool, moduli);
+            set_device(moduli.device_index());
+            kernel_negacyclic_shift_bps<<<block_count, KERNEL_THREAD_COUNT>>>(polys_arr, shift, pcount, degree, moduli, result_arr);
+            utils::stream_sync();
+        }
+    }
 
 }}
