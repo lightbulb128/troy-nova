@@ -248,6 +248,10 @@ namespace troy {
         const std::vector<const Ciphertext*>& encrypted, size_t shift, 
         const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool
     ) const {
+        if (encrypted.size() != destination.size()) {
+            throw std::invalid_argument("[Evaluator::negacyclic_shift_batched] Size mismatch.");
+        }
+        if (encrypted.size() == 0) return;
         check_no_seed_vec("[Evaluator::negacyclic_shift_batched]", encrypted);
         ParmsID parms_id = get_vec_parms_id(encrypted);
         ContextDataPointer context_data = this->get_context_data("[Evaluator::negacyclic_shift]", parms_id);

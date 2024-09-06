@@ -731,5 +731,23 @@ namespace evaluator_batched {
         utils::MemoryPool::Destroy();
     }
 
+    void test_negacyclic_shift(const GeneralHeContext& context) {
+        double scale = context.scale();
 
+        auto message = context.batch_random_simd_full(batch_size);
+        auto encoded = context.encoder().batch_encode_simd(message, std::nullopt, scale);
+        auto encrypted = context.batch_encrypt_asymmetric(encoded);
+        auto encrypted_ptrs = batch_utils::collect_const_pointer(encrypted);
+        GaloisKeys glk = context.key_generator().create_galois_keys(false);
+        std::vector<Ciphertext> rotated;
+        if (context.params_host().scheme() == SchemeType::CKKS) {
+            rotated = context.evaluator().complex_conjugate_new_batched(encrypted_ptrs, glk);
+        } else {
+            rotated = context.evaluator().rotate_columns_new_batched(encrypted_ptrs, glk);
+        }
+        auto decrypted = context.batch_decrypt(rotated);
+        auto result = context.encoder().batch_decode_simd(decrypted);
+        auto truth = context.batch_conjugate(message);
+        ASSERT_TRUE(context.batch_near_equal(truth, result));
+    }
 }
