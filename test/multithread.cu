@@ -488,7 +488,6 @@ namespace multithread {
             }
         }
 
-
         { // add
             GeneralVector message0 = context.random_simd_full();
             GeneralVector message1 = context.random_simd_full();
@@ -600,7 +599,6 @@ namespace multithread {
                 IF_FALSE_PRINT_RETURN(context.near_equal(truth, decoded), "add_plain_scaled/correct");
             }
         }
-
 
         { // sub
             GeneralVector message0 = context.random_simd_full();
@@ -1128,7 +1126,6 @@ namespace multithread {
                 }
             }
         }
-
 
         { // lwe related
             MemoryPoolHandle pool = create_new_memory_pool();

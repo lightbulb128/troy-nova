@@ -154,6 +154,7 @@ namespace troy {
             throw std::invalid_argument("[Evaluator::pack_lwe_ciphertexts_new] LWE ciphertexts count must be less than poly_modulus_degree.");
         }
         size_t l = 0;
+        bool device = this->on_device();
         while ((static_cast<size_t>(1) << l) < lwes_count) l += 1;
         std::vector<Ciphertext> rlwes(1 << l);
         for (size_t i = 0; i < (static_cast<size_t>(1)<<l); i++) {
@@ -162,7 +163,8 @@ namespace troy {
                 rlwes[i] = this->assemble_lwe_new(lwes[index], pool);
                 this->divide_by_poly_modulus_degree_inplace(rlwes[i]);
             } else {
-                rlwes[i] = Ciphertext(); rlwes[i].to_device_inplace(pool);
+                rlwes[i] = Ciphertext(); 
+                if (device) rlwes[i].to_device_inplace(pool);
             }
         }
         Ciphertext temp = Ciphertext::like(rlwes[0], false, pool);
@@ -177,7 +179,7 @@ namespace troy {
                 bool even_empty = even.polynomial_count() == 0;
                 bool odd_empty = odd.polynomial_count() == 0;
                 if (odd_empty && even_empty) {
-                    even = Ciphertext(); even.to_device_inplace(pool); continue;
+                    even = Ciphertext(); if (device) even.to_device_inplace(pool); continue;
                 }
 
                 if (!odd_empty) {

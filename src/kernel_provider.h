@@ -39,7 +39,7 @@ namespace troy {
         inline void copy_host_to_device(MemoryPool& pool, T* dst, const T* src, size_t length) {
             if (length == 0) return;
             pool.set_device();
-            cudaError_t status = cudaMemcpy(dst, src, length * sizeof(T), cudaMemcpyHostToDevice);
+            cudaError_t status = cudaMemcpyAsync(dst, src, length * sizeof(T), cudaMemcpyHostToDevice);
             if (status != cudaSuccess) {
                 runtime_error("[kernel_provider::copy_host_to_device] cudaMemcpy host to device failed", status);
             }
@@ -59,7 +59,7 @@ namespace troy {
         inline void copy_device_to_device(MemoryPool& pool, T* dst, const T* src, size_t length) {
             if (length == 0) return;
             pool.set_device();
-            cudaError_t status = cudaMemcpy(dst, src, length * sizeof(T), cudaMemcpyDeviceToDevice);
+            cudaError_t status = cudaMemcpyAsync(dst, src, length * sizeof(T), cudaMemcpyDeviceToDevice);
             if (status != cudaSuccess) {
                 runtime_error("[kernel_provider::copy_device_to_device] cudaMemcpy device to device failed", status);
             }

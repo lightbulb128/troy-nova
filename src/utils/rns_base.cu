@@ -211,7 +211,7 @@ namespace troy {namespace utils {
         }
         std::vector<Array<uint64_t>> cloned(value.size());
         for (size_t i = 0; i < value.size(); i++) {
-            cloned[i] = Array<uint64_t>::create_uninitialized(value[i].size(), true, pool);
+            cloned[i] = Array<uint64_t>::create_uninitialized(value[i].size(), value[i].on_device(), pool);
         }
         auto cloned_batched = utils::rcollect_const_reference(cloned);
         utils::copy_slice_b(utils::rcollect_as_const(value), utils::rcollect_reference(cloned));
