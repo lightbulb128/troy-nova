@@ -22,6 +22,7 @@ namespace troy::linear {
         inline std::vector<uint64_t> decrypt_outputs(const Decryptor& decryptor, const Ciphertext& ciphertext, MemoryPoolHandle pool) const {
             return encoder.decode_polynomial_new(decryptor.decrypt_new(ciphertext, pool));
         }
+        inline HeContextPointer context() const {return encoder.context();}
     };
 
     class CKKSEncoderAdapter {
@@ -41,6 +42,7 @@ namespace troy::linear {
         inline std::vector<double> decrypt_outputs(const Decryptor& decryptor, const Ciphertext& ciphertext, MemoryPoolHandle pool) const {
             return encoder.decode_float64_polynomial_new(decryptor.decrypt_new(ciphertext, pool), pool);
         }
+        inline HeContextPointer context() const {return encoder.context();}
     };
 
     template <typename T>
@@ -61,6 +63,7 @@ namespace troy::linear {
         inline std::vector<T> decrypt_outputs(const Decryptor& decryptor, const Ciphertext& ciphertext, MemoryPoolHandle pool) const {
             return encoder.scale_down_new(decryptor.bfv_decrypt_without_scaling_down_new(ciphertext, pool), pool);
         }
+        inline HeContextPointer context() const {return encoder.context();}
     };
 
 }

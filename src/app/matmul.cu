@@ -11,6 +11,86 @@ namespace troy { namespace linear {
 
     using uint128_t = __uint128_t;
 
+    template <typename T>
+    void ensure_ntt_form(bool batched_op, HeContextPointer context, MemoryPoolHandle pool, const T& target, T& output, bool centralize) {
+        static_assert(std::is_same_v<T, Cipher2d> || std::is_same_v<T, Plain2d>, "Invalid type");
+        if (target.size() == 0 || target[0].size() == 0) return;
+        output.data().clear();
+        output.data().resize(target.size());
+        for (size_t i = 0; i < target.size(); i++) {
+            output[i].resize(target[i].size());
+        }
+        bool is_ntt_form = target[0][0].is_ntt_form();
+        if (is_ntt_form) return;
+        troy::Evaluator evaluator(context);
+        bool is_bgv = context->first_context_data_pointer()->parms().scheme() == SchemeType::BGV;
+        if (batched_op) {
+            std::vector<decltype(&target[0][0])> target_ptrs;
+            std::vector<decltype(&output[0][0])> output_ptrs;
+            for (size_t i = 0; i < target.size(); i++) {
+                for (size_t j = 0; j < target[i].size(); j++) {
+                    target_ptrs.push_back(&target[i][j]);
+                    output_ptrs.push_back(&output[i][j]);
+                }
+            }
+            if constexpr (std::is_same_v<T, Plain2d>) {
+                if (target[0][0].parms_id() == parms_id_zero) {
+                    if (is_bgv || centralize) {
+                        evaluator.bfv_centralize_batched(target_ptrs, context->first_parms_id(), output_ptrs, pool);
+                    } else {
+                        evaluator.bfv_scale_up_batched(target_ptrs, context->first_parms_id(), output_ptrs, pool);
+                    }
+                    evaluator.transform_plain_to_ntt_inplace_batched(output_ptrs, context->first_parms_id(), pool);
+                } else {
+                    evaluator.transform_plain_to_ntt_batched(target_ptrs, context->first_parms_id(), output_ptrs, pool);
+                }
+            } else {
+                evaluator.transform_to_ntt_batched(target_ptrs, output_ptrs, pool);
+            }
+        } else {
+            for (size_t i = 0; i < target.size(); i++) {
+                for (size_t j = 0; j < target[i].size(); j++) {
+                    if constexpr (std::is_same_v<T, Plain2d>) {
+                        if (target[i][j].parms_id() == parms_id_zero) {
+                            if (is_bgv || centralize) {
+                                evaluator.bfv_centralize(target[i][j], context->first_parms_id(), output[i][j], pool);
+                            } else {
+                                evaluator.bfv_scale_up(target[i][j], context->first_parms_id(), output[i][j], pool);
+                            }
+                            evaluator.transform_plain_to_ntt_inplace(output[i][j], context->first_parms_id(), pool);
+                        } else {
+                            evaluator.transform_plain_to_ntt(target[i][j], context->first_parms_id(), output[i][j], pool);
+                        }
+                    } else {
+                        evaluator.transform_to_ntt(target[i][j], output[i][j], pool);
+                    }
+                }
+            }
+        }
+    }
+
+    void ensure_no_ntt_form(bool batched_op, HeContextPointer context, MemoryPoolHandle pool, Cipher2d& target) {
+        if (target.size() == 0 || target[0].size() == 0) return;
+        bool is_ntt_form = target[0][0].is_ntt_form();
+        if (!is_ntt_form) return;
+        troy::Evaluator evaluator(context);
+        if (batched_op) {
+            std::vector<decltype(&target[0][0])> ptrs;
+            for (size_t i = 0; i < target.size(); i++) {
+                for (size_t j = 0; j < target[i].size(); j++) {
+                    ptrs.push_back(&target[i][j]);
+                }
+            }
+            evaluator.transform_from_ntt_inplace_batched(ptrs, pool);
+        } else {
+            for (size_t i = 0; i < target.size(); i++) {
+                for (size_t j = 0; j < target[i].size(); j++) {
+                    evaluator.transform_from_ntt_inplace(target[i][j]);
+                }
+            }
+        }
+    }
+
     #define D_IMPL_ALL                                               \
         D_IMPL(BatchEncoderAdapter, uint64_t)                        \
         D_IMPL(CKKSEncoderAdapter, double)                           \
@@ -206,6 +286,17 @@ namespace troy { namespace linear {
             if (out_plain) out_plain->data().push_back(std::move(encoded_row_plain));
             else out_cipher->data().push_back(std::move(encoded_row_cipher));
         }
+        if (out_plain) {
+            if (!out_plain->data()[0][0].is_ntt_form()) {
+                Plain2d out; ensure_ntt_form(batched_mul, encoder.context(), pool, *out_plain, out, false);
+                *out_plain = std::move(out);
+            }
+        } else {
+            if (!out_cipher->data()[0][0].is_ntt_form()) {
+                Cipher2d out; ensure_ntt_form(batched_mul, encoder.context(), pool, *out_cipher, out, false); // centralize does not have effect here.
+                *out_cipher = std::move(out);
+            }
+        }
     }
 
     #define D_IMPL(adapter, dtype) \
@@ -226,6 +317,7 @@ namespace troy { namespace linear {
         if (w.data().size() != ceil_div(input_dims, input_block)) {
             throw std::invalid_argument("[MatmulHelper::matmul] Weight input dimension incorrect.");
         }
+
         if (!batched_mul) {
             for (size_t i = 0; i < w.data().size(); i++) {
                 for (size_t j = 0; j < w[i].size(); j++) {
@@ -240,10 +332,16 @@ namespace troy { namespace linear {
                 }
             }
         } else {
-            using std::vector;
             size_t input_split = ceil_div(input_dims, input_block);
             size_t output_split = ceil_div(output_dims, output_block);
             size_t batch_split = ceil_div(batch_size, batch_block);
+            using std::vector;
+            Plain2d w_cloned;
+            bool use_w_cloned = false;
+            if (!w[0][0].is_ntt_form()) {
+                use_w_cloned = true;
+                ensure_ntt_form(batched_mul, evaluator.context(), pool, w, w_cloned, true);
+            }
             vector<const Ciphertext*> a_ptrs; a_ptrs.reserve(input_split * output_split * batch_split);
             vector<const Plaintext*> w_ptrs; w_ptrs.reserve(input_split * output_split * batch_split);
             vector<Ciphertext*> r_ptrs; r_ptrs.reserve(input_split * output_split * batch_split);
@@ -251,19 +349,23 @@ namespace troy { namespace linear {
                 for (size_t j = 0; j < output_split; j++) {
                     for (size_t b = 0; b < batch_split; b++) {
                         a_ptrs.push_back(&a[b][i]);
-                        w_ptrs.push_back(&w[i][j]);
+                        w_ptrs.push_back(use_w_cloned ? &w_cloned[i][j] : &w[i][j]);
                         r_ptrs.push_back(&ret[b][j]);
                     }
                 }
             }
             evaluator.multiply_plain_accumulate(a_ptrs, w_ptrs, r_ptrs, true, pool);
         }
+        HeContextPointer context = evaluator.context();
+        if (context->first_context_data().value()->parms().scheme() == SchemeType::BFV) {
+            ensure_no_ntt_form(batched_mul, context, pool, ret);
+        }
         return ret;
     }
 
     Cipher2d MatmulHelper::matmul_cipher(const Evaluator& evaluator, const Cipher2d& a, const Cipher2d& w) const {
         Cipher2d ret; ret.data().reserve(ceil_div(batch_size, batch_block));
-        size_t outputVectorCount = ceil_div(output_dims, output_block);
+        size_t output_vector_count = ceil_div(output_dims, output_block);
         if (a.data().size() != ceil_div(batch_size, batch_block)) {
             throw std::invalid_argument("[MatmulHelper::matmul_cipher] Input batch_size incorrect.");
         }
@@ -271,7 +373,7 @@ namespace troy { namespace linear {
             throw std::invalid_argument("[MatmulHelper::matmul_cipher] Weight input dimension incorrect.");
         }
         for (size_t b = 0; b < ceil_div(batch_size, batch_block); b++) {
-            std::vector<Ciphertext> outVecs(outputVectorCount);
+            std::vector<Ciphertext> outVecs(output_vector_count);
             for (size_t i = 0; i < w.data().size(); i++) {
                 for (size_t j = 0; j < w[i].size(); j++) {
                     Ciphertext prod;
@@ -284,12 +386,16 @@ namespace troy { namespace linear {
             }
             ret.data().push_back(std::move(outVecs));
         }
+        HeContextPointer context = evaluator.context();
+        if (context->first_context_data().value()->parms().scheme() == SchemeType::BFV) {
+            ensure_no_ntt_form(batched_mul, context, pool, ret);
+        }
         return ret;
     }
 
     Cipher2d MatmulHelper::matmul_reverse(const Evaluator& evaluator, const Plain2d& a, const Cipher2d& w) const {
         Cipher2d ret; ret.data().reserve(ceil_div(batch_size, batch_block));
-        size_t outputVectorCount = ceil_div(output_dims, output_block);
+        size_t output_vector_count = ceil_div(output_dims, output_block);
         if (a.data().size() != ceil_div(batch_size, batch_block)) {
             throw std::invalid_argument("[MatmulHelper::matmul_reverse] Input batch_size incorrect.");
         }
@@ -297,7 +403,7 @@ namespace troy { namespace linear {
             throw std::invalid_argument("[MatmulHelper::matmul_reverse] Weight input dimension incorrect.");
         }
         for (size_t b = 0; b < ceil_div(batch_size, batch_block); b++) {
-            std::vector<Ciphertext> outVecs(outputVectorCount);
+            std::vector<Ciphertext> outVecs(output_vector_count);
             for (size_t i = 0; i < w.data().size(); i++) {
                 for (size_t j = 0; j < w[i].size(); j++) {
                     Ciphertext prod;
@@ -309,6 +415,10 @@ namespace troy { namespace linear {
                 }
             }
             ret.data().push_back(std::move(outVecs));
+        }
+        HeContextPointer context = evaluator.context();
+        if (context->first_context_data().value()->parms().scheme() == SchemeType::BFV) {
+            ensure_no_ntt_form(batched_mul, context, pool, ret);
         }
         return ret;
     }
@@ -623,6 +733,10 @@ namespace troy { namespace linear {
                     else evaluator.add_inplace(multiplied[b][j], prod, pool);
                 }
             }
+        }
+        HeContextPointer context = evaluator.context();
+        if (context->first_context_data().value()->parms().scheme() == SchemeType::BFV) {
+            ensure_no_ntt_form(batched_mul, context, pool, multiplied);
         }
         return multiplied;
     }

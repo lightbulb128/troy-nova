@@ -1,4 +1,5 @@
 #include "batch_utils.h"
+#include "encryption_parameters.h"
 #include "evaluator.h"
 #include "evaluator_utils.h"
 #include "fgk/translate_plain.h"
@@ -44,9 +45,9 @@ namespace troy {
 
         destination = Plaintext::like(plain, false, pool);
 
+        if (plain.on_device()) destination.to_device_inplace(pool);
+        destination.resize_rns(*context_, parms_id);
         if (plain.parms_id() == parms_id_zero) {
-            if (plain.on_device()) destination.to_device_inplace(pool);
-            destination.resize_rns(*context_, parms_id);
             scaling_variant::centralize(plain, context_data, destination.poly(), coeff_count, pool);
             utils::ntt_inplace_p(destination.poly(), coeff_count, ntt_tables);
             destination.is_ntt_form() = true;
@@ -85,11 +86,12 @@ namespace troy {
             *destination[i] = Plaintext::like(*plain[i], false, pool);
 
         auto plain_parms_id = get_vec_parms_id(plain);
+        for (size_t i = 0; i < n; i++) {
+            if (plain[i]->on_device()) destination[i]->to_device_inplace(pool);
+            destination[i]->resize_rns(*context_, parms_id);
+        }
+
         if (plain_parms_id == parms_id_zero) {
-            for (size_t i = 0; i < n; i++) {
-                if (plain[i]->on_device()) destination[i]->to_device_inplace(pool);
-                destination[i]->resize_rns(*context_, parms_id);
-            }
             auto destination_batched = batch_utils::pcollect_poly(destination);
             scaling_variant::centralize_batched(plain, context_data, destination_batched, coeff_count, pool);
             utils::ntt_inplace_bp(destination_batched, coeff_count, ntt_tables, pool);
@@ -126,7 +128,114 @@ namespace troy {
         }
     }
 
+    void Evaluator::bfv_centralize(const Plaintext& plain, const ParmsID& parms_id, Plaintext& destination, MemoryPoolHandle pool) const {
+        check_is_not_ntt_form("[Evaluator::bfv_centralize]", plain);
+        if (plain.parms_id() != parms_id_zero) {
+            throw std::invalid_argument("[Evaluator::bfv_centralize] Plaintext is not modulo t.");
+        }
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::transform_plain_to_ntt_inplace]", parms_id);
+        const EncryptionParameters& parms = context_data->parms();
+        size_t coeff_count = parms.poly_modulus_degree();
+        ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
+        size_t coeff_modulus_size = coeff_modulus.size();
 
+        destination = Plaintext::like(plain, false, pool);
+
+        if (plain.on_device()) destination.to_device_inplace(pool);
+        destination.resize_rns(*context_, parms_id);
+        scaling_variant::centralize(plain, context_data, destination.poly(), coeff_count, pool);
+        destination.is_ntt_form() = false;
+        destination.coeff_modulus_size() = coeff_modulus_size;
+        destination.poly_modulus_degree() = coeff_count;
+    }
+
+    void Evaluator::bfv_centralize_batched(const std::vector<const Plaintext*>& plain, const ParmsID& parms_id, const std::vector<Plaintext*>& destination, MemoryPoolHandle pool) const {
+        if (plain.size() != destination.size()) throw std::invalid_argument("[Evaluator::transform_plain_to_ntt_batched] The number of plaintexts does not match the number of destinations.");
+        if (plain.size() == 0) return;
+        check_is_not_ntt_form_vec("[Evaluator::transform_plain_to_ntt_batched]", plain);
+        for (size_t i = 0; i < plain.size(); i++) {
+            if (plain[i]->parms_id() != parms_id_zero) {
+                throw std::invalid_argument("[Evaluator::bfv_centralize_batched] Plaintext is not modulo t.");
+            }
+        }
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::transform_plain_to_ntt_inplace]", parms_id);
+        const EncryptionParameters& parms = context_data->parms();
+        size_t coeff_count = parms.poly_modulus_degree();
+        ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
+        size_t coeff_modulus_size = coeff_modulus.size();
+
+        size_t n = plain.size();
+        for (size_t i = 0; i < n; i++)
+            *destination[i] = Plaintext::like(*plain[i], false, pool);
+
+        for (size_t i = 0; i < n; i++) {
+            if (plain[i]->on_device()) destination[i]->to_device_inplace(pool);
+            destination[i]->resize_rns(*context_, parms_id);
+        }
+
+        auto destination_batched = batch_utils::pcollect_poly(destination);
+        scaling_variant::centralize_batched(plain, context_data, destination_batched, coeff_count, pool);
+        for (size_t i = 0; i < n; i++) {
+            destination[i]->is_ntt_form() = false;
+            destination[i]->coeff_modulus_size() = coeff_modulus_size;
+            destination[i]->poly_modulus_degree() = coeff_count;
+        }
+    }
+
+    void Evaluator::bfv_scale_up(const Plaintext& plain, const ParmsID& parms_id, Plaintext& destination, MemoryPoolHandle pool) const {
+        check_is_not_ntt_form("[Evaluator::bfv_centralize]", plain);
+        if (plain.parms_id() != parms_id_zero) {
+            throw std::invalid_argument("[Evaluator::bfv_centralize] Plaintext is not modulo t.");
+        }
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::transform_plain_to_ntt_inplace]", parms_id);
+        const EncryptionParameters& parms = context_data->parms();
+        size_t coeff_count = parms.poly_modulus_degree();
+        ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
+        size_t coeff_modulus_size = coeff_modulus.size();
+
+        destination = Plaintext::like(plain, false, pool);
+
+        if (plain.on_device()) destination.to_device_inplace(pool);
+        destination.resize_rns(*context_, parms_id);
+        scaling_variant::scale_up(plain, context_data, destination.poly(), coeff_count, nullptr, false);
+        destination.is_ntt_form() = false;
+        destination.coeff_modulus_size() = coeff_modulus_size;
+        destination.poly_modulus_degree() = coeff_count;
+    }
+
+    void Evaluator::bfv_scale_up_batched(const std::vector<const Plaintext*>& plain, const ParmsID& parms_id, const std::vector<Plaintext*>& destination, MemoryPoolHandle pool) const {
+        if (plain.size() != destination.size()) throw std::invalid_argument("[Evaluator::transform_plain_to_ntt_batched] The number of plaintexts does not match the number of destinations.");
+        if (plain.size() == 0) return;
+        check_is_not_ntt_form_vec("[Evaluator::transform_plain_to_ntt_batched]", plain);
+        for (size_t i = 0; i < plain.size(); i++) {
+            if (plain[i]->parms_id() != parms_id_zero) {
+                throw std::invalid_argument("[Evaluator::bfv_centralize_batched] Plaintext is not modulo t.");
+            }
+        }
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::transform_plain_to_ntt_inplace]", parms_id);
+        const EncryptionParameters& parms = context_data->parms();
+        size_t coeff_count = parms.poly_modulus_degree();
+        ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
+        size_t coeff_modulus_size = coeff_modulus.size();
+
+        size_t n = plain.size();
+        for (size_t i = 0; i < n; i++)
+            *destination[i] = Plaintext::like(*plain[i], false, pool);
+
+        for (size_t i = 0; i < n; i++) {
+            if (plain[i]->on_device()) destination[i]->to_device_inplace(pool);
+            destination[i]->resize_rns(*context_, parms_id);
+        }
+
+        auto destination_batched = batch_utils::pcollect_poly(destination);
+        std::vector<ConstSlice<uint64_t>> froms; for (size_t i = 0; i < n; i++) froms.push_back(nullptr);
+        scaling_variant::scale_up_batched(plain, context_data, destination_batched, coeff_count, froms, false, pool);
+        for (size_t i = 0; i < n; i++) {
+            destination[i]->is_ntt_form() = false;
+            destination[i]->coeff_modulus_size() = coeff_modulus_size;
+            destination[i]->poly_modulus_degree() = coeff_count;
+        }
+    }
 
 
 
@@ -229,7 +338,7 @@ namespace troy {
                 auto cloned_batched = batch_utils::rcollect_poly(cloned);
                 auto from_batched = std::vector<ConstSlice<uint64_t>>();
                 for (size_t i = 0; i < n; i++) from_batched.push_back(nullptr);
-                utils::fgk::translate_plain::scatter_translate_copy_batched(from_batched, plain_batched, coeff_count, plain_coeff_count, coeff_modulus, cloned_batched, false);
+                utils::fgk::translate_plain::scatter_translate_copy_batched(from_batched, plain_batched, coeff_count, plain_coeff_count, coeff_modulus, cloned_batched, false, pool);
                 for (size_t i = 0; i < n; i++) {
                     *plain[i] = std::move(cloned[i]);
                 }

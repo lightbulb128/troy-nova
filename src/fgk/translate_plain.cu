@@ -262,7 +262,8 @@ namespace troy::utils::fgk::translate_plain {
             auto plain_slices = batch_utils::pcollect_const_reference(plain);
             auto plain_batched = batch_utils::construct_batch(plain_slices, pool, coeff_modulus);
             auto destination_batched = batch_utils::construct_batch(destination, pool, coeff_modulus);
-            auto from_batched = batch_utils::construct_batch(from, pool, coeff_modulus);
+            ConstSliceArray<uint64_t> from_batched(&*from.begin(), from.size());
+            from_batched.to_device_inplace(pool);
             size_t total = plain_coeff_count * coeff_modulus_size;
             size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
             utils::set_device(coeff_modulus.device_index());
@@ -423,7 +424,8 @@ namespace troy::utils::fgk::translate_plain {
             }
         } else {
             auto destination_batched = batch_utils::construct_batch(destination, pool, moduli);
-            auto from_batched = batch_utils::construct_batch(from, pool, moduli);
+            utils::ConstSliceArray<uint64_t> from_batched(&*from.begin(), from.size());
+            from_batched.to_device_inplace(pool);
             auto translation_batched = batch_utils::construct_batch(translation, pool, moduli);
             size_t total = from_degree * moduli.size();
             size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);

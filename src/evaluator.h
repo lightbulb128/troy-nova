@@ -495,6 +495,76 @@ namespace troy {
 
 
 
+        // ==================================
+        //       bfv centralize / scale up
+        // ==================================
+
+                void bfv_centralize(const Plaintext& plain, const ParmsID& parms_id, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        inline Plaintext bfv_centralize_new(const Plaintext& plain, const ParmsID& parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            Plaintext destination;
+            bfv_centralize(plain, parms_id, destination, pool);
+            return destination;
+        }
+        inline void bfv_centralize_inplace(Plaintext& plain, const ParmsID& parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            Plaintext destination;
+            bfv_centralize(plain, parms_id, destination, pool);
+            plain = std::move(destination);
+        }
+        void bfv_centralize_batched(
+            const std::vector<const Plaintext*>& plain, const ParmsID& parms_id, 
+            const std::vector<Plaintext*>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const;
+        inline std::vector<Plaintext> bfv_centralize_new_batched(
+            const std::vector<const Plaintext*>& plain, const ParmsID& parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            std::vector<Plaintext> destination(plain.size());
+            bfv_centralize_batched(plain, parms_id, batch_utils::collect_pointer(destination), pool);
+            return destination;
+        }
+        inline void bfv_centralize_inplace_batched(
+            std::vector<Plaintext*>& plain, const ParmsID& parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            std::vector<Plaintext> destination(plain.size());
+            bfv_centralize_batched(batch_utils::pcollect_const_pointer(plain), parms_id, batch_utils::collect_pointer(destination), pool);
+            for (size_t i = 0; i < plain.size(); i++) *plain[i] = std::move(destination[i]);
+        }
+
+        void bfv_scale_up(const Plaintext& plain, const ParmsID& parms_id, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        inline Plaintext bfv_scale_up_new(const Plaintext& plain, const ParmsID& parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            Plaintext destination;
+            bfv_scale_up(plain, parms_id, destination, pool);
+            return destination;
+        }
+        inline void bfv_scale_up_inplace(Plaintext& plain, const ParmsID& parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            Plaintext destination;
+            bfv_scale_up(plain, parms_id, destination, pool);
+            plain = std::move(destination);
+        }
+        void bfv_scale_up_batched(
+            const std::vector<const Plaintext*>& plain, const ParmsID& parms_id, 
+            const std::vector<Plaintext*>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const;
+        inline std::vector<Plaintext> bfv_scale_up_new_batched(
+            const std::vector<const Plaintext*>& plain, const ParmsID& parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            std::vector<Plaintext> destination(plain.size());
+            bfv_scale_up_batched(plain, parms_id, batch_utils::collect_pointer(destination), pool);
+            return destination;
+        }
+        inline void bfv_scale_up_inplace_batched(
+            std::vector<Plaintext*>& plain, const ParmsID& parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const {
+            std::vector<Plaintext> destination(plain.size());
+            bfv_scale_up_batched(batch_utils::pcollect_const_pointer(plain), parms_id, batch_utils::collect_pointer(destination), pool);
+            for (size_t i = 0; i < plain.size(); i++) *plain[i] = std::move(destination[i]);
+        }
+
+
+
+
+
+
+
 
 
         // ==================================
