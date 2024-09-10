@@ -10,3 +10,4 @@ gather_code.*
 .clangd
 test/custom.cu
 test/main.cu
+test/custom*.cu
