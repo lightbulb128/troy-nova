@@ -165,9 +165,8 @@ namespace troy::utils::fgk::dyadic_convolute {
     }
 
     __global__ static void kernel_dyadic_broadcast_product_bps(ConstSliceArrayRef<uint64_t> polys1, ConstSliceArrayRef<uint64_t> poly2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, SliceArrayRef<uint64_t> result, bool accumulate) {
-        for (size_t i = 0; i < result.size(); i++) {
-            device_dyadic_broadcast_product_ps(polys1[i], poly2[i], pcount, degree, moduli, result[i], accumulate);
-        }
+        size_t i = blockIdx.y;
+        device_dyadic_broadcast_product_ps(polys1[i], poly2[i], pcount, degree, moduli, result[i], accumulate);
     }
 
     void dyadic_broadcast_product_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> poly2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
@@ -251,7 +250,8 @@ namespace troy::utils::fgk::dyadic_convolute {
             auto op2_batch = batch_utils::construct_batch(op2, pool, moduli);
             auto result_batch = batch_utils::construct_batch(result, pool, moduli);
             utils::set_device(moduli.device_index());
-            kernel_dyadic_broadcast_product_bps<<<block_count, KERNEL_THREAD_COUNT>>>(
+            dim3 block_dims(block_count, op1.size());
+            kernel_dyadic_broadcast_product_bps<<<block_dims, KERNEL_THREAD_COUNT>>>(
                 op1_batch, op2_batch, op1_pcount, degree, moduli, result_batch, false
             );
             utils::stream_sync();
@@ -284,7 +284,8 @@ namespace troy::utils::fgk::dyadic_convolute {
             auto op2_batch = batch_utils::construct_batch(op2, pool, moduli);
             auto result_batch = batch_utils::construct_batch(result, pool, moduli);
             utils::set_device(moduli.device_index());
-            kernel_dyadic_broadcast_product_bps<<<block_count, KERNEL_THREAD_COUNT>>>(
+            dim3 block_dims(block_count, op1.size());
+            kernel_dyadic_broadcast_product_bps<<<block_dims, KERNEL_THREAD_COUNT>>>(
                 op1_batch, op2_batch, op1_pcount, degree, moduli, result_batch, true
             );
             utils::stream_sync();

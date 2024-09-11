@@ -230,7 +230,7 @@ namespace troy::utils {
 
     template <typename T, typename U>
     utils::ConstSliceArray<T> construct_batch(const utils::ConstSliceVec<T>& vec, const MemoryPoolHandle& pool, const U& comp_ref) {
-        utils::ConstSliceArray<uint64_t> arr(vec);
+        utils::ConstSliceArray<T> arr(vec);
         if (!arr.device_compatible(comp_ref)) {
             throw std::runtime_error("[construct_batch] All inputs must be on the same device as comp_ref");
         }
@@ -243,7 +243,7 @@ namespace troy::utils {
 
     template <typename T, typename U>
     utils::SliceArray<T> construct_batch(const utils::SliceVec<T>& vec, const MemoryPoolHandle& pool, const U& comp_ref) {
-        utils::SliceArray<uint64_t> arr(vec);
+        utils::SliceArray<T> arr(vec);
         if (!arr.device_compatible(comp_ref)) {
             throw std::runtime_error("[construct_batch] All inputs must be on the same device as comp_ref");
         }

@@ -10,12 +10,11 @@ namespace troy {namespace utils {
 
     static __global__ void kernel_copy_slice_b(ConstSliceArrayRef<uint64_t> from, SliceArrayRef<uint64_t> to) {
         size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-        for (size_t i = 0; i < from.size(); i++) {
-            ConstSlice<uint64_t> from_i = from[i];
-            Slice<uint64_t> to_i = to[i];
-            if (idx < from_i.size()) {
-                to_i[idx] = from_i[idx];
-            }
+        size_t i = blockIdx.y;
+        ConstSlice<uint64_t> from_i = from[i];
+        Slice<uint64_t> to_i = to[i];
+        if (idx < from_i.size()) {
+            to_i[idx] = from_i[idx];
         }
     }
 
@@ -28,10 +27,9 @@ namespace troy {namespace utils {
 
     static __global__ void kernel_set_slice_b(uint64_t value, SliceArrayRef<uint64_t> to) {
         size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-        for (size_t i = 0; i < to.size(); i++) {
-            if (idx < to[i].size()) {
-                to[i][idx] = value;
-            }
+        size_t i = blockIdx.y;
+        if (idx < to[i].size()) {
+            to[i][idx] = value;
         }
     }
 
@@ -51,7 +49,8 @@ namespace troy {namespace utils {
             SliceArray<uint64_t> to_arr = construct_batch(to, pool, device_reference);
             size_t block_count = ceil_div<size_t>(device_reference.size(), KERNEL_THREAD_COUNT);
             set_device(device_reference.device_index());
-            kernel_copy_slice_b<<<block_count, KERNEL_THREAD_COUNT>>>(from_arr, to_arr);
+            dim3 block_dims(block_count, from.size());
+            kernel_copy_slice_b<<<block_dims, KERNEL_THREAD_COUNT>>>(from_arr, to_arr);
             utils::stream_sync();
         }
     }
@@ -78,7 +77,8 @@ namespace troy {namespace utils {
             SliceArray<uint64_t> to_arr = construct_batch(to, pool, device_reference);
             size_t block_count = ceil_div<size_t>(device_reference.size(), KERNEL_THREAD_COUNT);
             set_device(device_reference.device_index());
-            kernel_set_slice_b<<<block_count, KERNEL_THREAD_COUNT>>>(value, to_arr);
+            dim3 block_dims(block_count, to.size());
+            kernel_set_slice_b<<<block_dims, KERNEL_THREAD_COUNT>>>(value, to_arr);
             utils::stream_sync();
         }
     }

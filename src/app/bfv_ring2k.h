@@ -65,7 +65,9 @@ namespace troy::linear {
             void to_device_inplace(MemoryPoolHandle pool);
 
             void scale_up(utils::ConstSlice<T> source, const HeContext& context, Plaintext& destination, MemoryPoolHandle pool) const;
+            void scale_up_batched(const utils::ConstSliceVec<T>& source, const HeContext& context, const std::vector<Plaintext*>& destination, MemoryPoolHandle pool) const;
             void centralize(utils::ConstSlice<T> source, const HeContext& context, Plaintext& destination, MemoryPoolHandle pool) const;
+            void centralize_batched(const utils::ConstSliceVec<T>& source, const HeContext& context, const std::vector<Plaintext*>& destination, MemoryPoolHandle pool) const;
             
             void scale_down(const Plaintext& input, const HeContext& context, utils::Slice<T> destination, MemoryPoolHandle pool) const;
             void decentralize(const Plaintext& input, const HeContext& context, utils::Slice<T> destination, T correction_factor, MemoryPoolHandle pool) const;
@@ -122,6 +124,14 @@ namespace troy::linear {
                 }
                 helper.value()->scale_up(source, *context_, destination, pool);
             }
+            void scale_up_slice_batched(const utils::ConstSliceVec<T>& source, std::optional<ParmsID> parms_id, const std::vector<Plaintext*>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+                ParmsID pid = parms_id.value_or(context_->first_parms_id());
+                auto helper = get_helper(pid);
+                if (!helper.has_value()) {
+                    throw std::invalid_argument("[PolynomialEncoderRing2k:scale_up_batched] No helper found for the given parms_id");
+                }
+                helper.value()->scale_up_batched(source, *context_, destination, pool);
+            }
             void scale_up(const std::vector<T>& source, std::optional<ParmsID> parms_id, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
                 if (on_device()) {
                     utils::Array<T> source_array = utils::Array<T>::create_uninitialized(source.size(), true, pool); 
@@ -150,6 +160,14 @@ namespace troy::linear {
                     throw std::invalid_argument("[PolynomialEncoderRing2k:centralize] No helper found for the given parms_id");
                 }
                 helper.value()->centralize(source, *context_, destination, pool);
+            }
+            void centralize_slice_batched(const utils::ConstSliceVec<T>& source, std::optional<ParmsID> parms_id, const std::vector<Plaintext*>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+                ParmsID pid = parms_id.value_or(context_->first_parms_id());
+                auto helper = get_helper(pid);
+                if (!helper.has_value()) {
+                    throw std::invalid_argument("[PolynomialEncoderRing2k:centralize_batched] No helper found for the given parms_id");
+                }
+                helper.value()->centralize_batched(source, *context_, destination, pool);
             }
             void centralize(const std::vector<T>& source, std::optional<ParmsID> parms_id, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
                 if (on_device()) {
