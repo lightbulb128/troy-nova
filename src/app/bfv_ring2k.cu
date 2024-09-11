@@ -373,7 +373,11 @@ namespace troy::linear {
                 custom_assert(coeff_modulus.size() == destination[i]->coeff_modulus_size(), "[PolynomialEncoderRNSHelper::scale_up] coeff_modulus.size() != destination.coeff_modulus_size()");
             }
 
-            size_t block_count = ceil_div(source.size(), KERNEL_THREAD_COUNT);
+            size_t max_source_size = 0;
+            for (size_t i = 0; i < n; i++) {
+                max_source_size = std::max(max_source_size, source[i].size());
+            }
+            size_t block_count = ceil_div(max_source_size, KERNEL_THREAD_COUNT);
             utils::set_device(context.device_index());
             dim3 block_dims(block_count, n);
             auto source_batched = batch_utils::construct_batch(source, pool, coeff_modulus);
@@ -464,7 +468,11 @@ namespace troy::linear {
                 custom_assert(coeff_modulus.size() == destination[i]->coeff_modulus_size(), "[PolynomialEncoderRNSHelper::scale_up] coeff_modulus.size() != destination.coeff_modulus_size()");
             }
 
-            size_t block_count = ceil_div(source.size(), KERNEL_THREAD_COUNT);
+            size_t max_source_size = 0;
+            for (size_t i = 0; i < n; i++) {
+                max_source_size = std::max(max_source_size, source[i].size());
+            }
+            size_t block_count = ceil_div(max_source_size, KERNEL_THREAD_COUNT);
             utils::set_device(context.device_index());
             dim3 block_dims(block_count, n);
             auto source_batched = batch_utils::construct_batch(source, pool, coeff_modulus);
@@ -589,7 +597,11 @@ namespace troy::linear {
                 custom_assert(coeff_modulus.size() == destination[i]->coeff_modulus_size(), "[PolynomialEncoderRNSHelper::scale_up] coeff_modulus.size() != destination.coeff_modulus_size()");
             }
 
-            size_t block_count = ceil_div(source.size(), KERNEL_THREAD_COUNT);
+            size_t max_source_size = 0;
+            for (size_t i = 0; i < n; i++) {
+                max_source_size = std::max(max_source_size, source[i].size());
+            }
+            size_t block_count = ceil_div(max_source_size, KERNEL_THREAD_COUNT);
             utils::set_device(context.device_index());
             dim3 block_dims(block_count, n);
             auto source_batched = batch_utils::construct_batch(source, pool, coeff_modulus);

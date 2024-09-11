@@ -173,10 +173,10 @@ namespace bfv_ring2k {
                 encoder.to_device_inplace();
             }
 
-            constexpr size_t n = 10;
+            std::vector<size_t> ns; for (size_t i = 0; i < batch_size; i++) ns.push_back(i);
             std::vector<utils::Array<T>> message(batch_size);
             for (size_t i = 0; i < batch_size; i++) {
-                message[i] = utils::Array<T>::from_vector(random_sampler<T>(n, t_bit_length));
+                message[i] = utils::Array<T>::from_vector(random_sampler<T>(ns[i], t_bit_length));
                 message[i].to_device_inplace();
             }
 
@@ -184,9 +184,9 @@ namespace bfv_ring2k {
                 std::vector<Plaintext> plaintext(batch_size);
                 encoder.scale_up_slice_batched(batch_utils::rcollect_const_reference<utils::Array<T>, T>(message), std::nullopt, batch_utils::collect_pointer(plaintext));
                 for (size_t i = 0; i < batch_size; i++) {
-                    ASSERT_TRUE(plaintext[i].coeff_count() == n);
+                    ASSERT_TRUE(plaintext[i].coeff_count() == ns[i]);
                     ASSERT_TRUE(plaintext[i].poly_modulus_degree() == poly_modulus_degree);
-                    ASSERT_TRUE(plaintext[i].data().size() == plaintext[i].coeff_modulus_size() * n);
+                    ASSERT_TRUE(plaintext[i].data().size() == plaintext[i].coeff_modulus_size() * ns[i]);
                     std::vector<T> result = encoder.scale_down_new(plaintext[i]);
                     ASSERT_TRUE(same_vector(message[i].to_vector(), result));
                 }
@@ -197,9 +197,9 @@ namespace bfv_ring2k {
                 std::vector<Plaintext> plaintext(batch_size);
                 encoder.scale_up_slice_batched(batch_utils::rcollect_const_reference<utils::Array<T>, T>(message), second_parms_id, batch_utils::collect_pointer(plaintext));
                 for (size_t i = 0; i < batch_size; i++) {
-                    ASSERT_TRUE(plaintext[i].coeff_count() == n);
+                    ASSERT_TRUE(plaintext[i].coeff_count() == ns[i]);
                     ASSERT_TRUE(plaintext[i].poly_modulus_degree() == poly_modulus_degree);
-                    ASSERT_TRUE(plaintext[i].data().size() == plaintext[i].coeff_modulus_size() * n);
+                    ASSERT_TRUE(plaintext[i].data().size() == plaintext[i].coeff_modulus_size() * ns[i]);
                     std::vector<T> result = encoder.scale_down_new(plaintext[i]);
                     ASSERT_TRUE(same_vector(message[i].to_vector(), result));
                 }
@@ -325,10 +325,10 @@ namespace bfv_ring2k {
                 encoder.to_device_inplace();
             }
 
-            constexpr size_t n = 10;
+            std::vector<size_t> ns; for (size_t i = 0; i < batch_size; i++) ns.push_back(i);
             std::vector<utils::Array<T>> message(batch_size);
             for (size_t i = 0; i < batch_size; i++) {
-                message[i] = utils::Array<T>::from_vector(random_sampler<T>(n, t_bit_length));
+                message[i] = utils::Array<T>::from_vector(random_sampler<T>(ns[i], t_bit_length));
                 message[i].to_device_inplace();
             }
 
@@ -336,9 +336,9 @@ namespace bfv_ring2k {
                 std::vector<Plaintext> plaintext(batch_size);
                 encoder.centralize_slice_batched(batch_utils::rcollect_const_reference<utils::Array<T>, T>(message), std::nullopt, batch_utils::collect_pointer(plaintext));
                 for (size_t i = 0; i < batch_size; i++) {
-                    ASSERT_TRUE(plaintext[i].coeff_count() == n);
+                    ASSERT_TRUE(plaintext[i].coeff_count() == ns[i]);
                     ASSERT_TRUE(plaintext[i].poly_modulus_degree() == poly_modulus_degree);
-                    ASSERT_TRUE(plaintext[i].data().size() == plaintext[i].coeff_modulus_size() * n);
+                    ASSERT_TRUE(plaintext[i].data().size() == plaintext[i].coeff_modulus_size() * ns[i]);
                     std::vector<T> result = encoder.decentralize_new(plaintext[i]);
                     ASSERT_TRUE(same_vector(message[i].to_vector(), result));
                 }
@@ -349,9 +349,9 @@ namespace bfv_ring2k {
                 std::vector<Plaintext> plaintext(batch_size);
                 encoder.centralize_slice_batched(batch_utils::rcollect_const_reference<utils::Array<T>, T>(message), second_parms_id, batch_utils::collect_pointer(plaintext));
                 for (size_t i = 0; i < batch_size; i++) {
-                    ASSERT_TRUE(plaintext[i].coeff_count() == n);
+                    ASSERT_TRUE(plaintext[i].coeff_count() == ns[i]);
                     ASSERT_TRUE(plaintext[i].poly_modulus_degree() == poly_modulus_degree);
-                    ASSERT_TRUE(plaintext[i].data().size() == plaintext[i].coeff_modulus_size() * n);
+                    ASSERT_TRUE(plaintext[i].data().size() == plaintext[i].coeff_modulus_size() * ns[i]);
                     std::vector<T> result = encoder.decentralize_new(plaintext[i]);
                     ASSERT_TRUE(same_vector(message[i].to_vector(), result));
                 }
