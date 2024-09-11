@@ -35,9 +35,8 @@ namespace troy::utils::fgk::switch_key {
     __global__ static void kernel_set_accumulate_batched(
         size_t decomp_modulus_size, size_t coeff_count, ConstSliceArrayRef<uint64_t> target_intt, SliceArrayRef<uint64_t> temp_ntt, ConstSlice<Modulus> key_modulus
     ) {
-        for (size_t i = 0; i < target_intt.size(); i++) {
-            device_set_accumulate(decomp_modulus_size, coeff_count, target_intt[i], temp_ntt[i], key_modulus);
-        }
+        size_t i = blockIdx.y;
+        device_set_accumulate(decomp_modulus_size, coeff_count, target_intt[i], temp_ntt[i], key_modulus);
     }
 
     void set_accumulate(
@@ -69,7 +68,8 @@ namespace troy::utils::fgk::switch_key {
         auto target_intt_batched = batch_utils::construct_batch(target_intt, pool, key_modulus);
         auto temp_ntt_slices = batch_utils::rcollect_reference(temp_ntt);
         auto temp_ntt_batched = batch_utils::construct_batch(temp_ntt_slices, pool, key_modulus);
-        kernel_set_accumulate_batched<<<block_count, KERNEL_THREAD_COUNT>>>(decomp_modulus_size, coeff_count, target_intt_batched, temp_ntt_batched, key_modulus);
+        dim3 block_dims(block_count, target_intt.size());
+        kernel_set_accumulate_batched<<<block_dims, KERNEL_THREAD_COUNT>>>(decomp_modulus_size, coeff_count, target_intt_batched, temp_ntt_batched, key_modulus);
         stream_sync();
     }
     
@@ -131,9 +131,8 @@ namespace troy::utils::fgk::switch_key {
         ConstSlice<const uint64_t*> key_vector,
         SliceArrayRef<uint64_t> poly_prod
     ) {
-        for (size_t i = 0; i < temp_ntt.size(); i++) {
-            device_accumulate_products(decomp_modulus_size, key_component_count, coeff_count, temp_ntt[i], key_moduli, key_vector, poly_prod[i]);
-        }
+        size_t i = blockIdx.y;
+        device_accumulate_products(decomp_modulus_size, key_component_count, coeff_count, temp_ntt[i], key_moduli, key_vector, poly_prod[i]);
     }
 
 
@@ -172,7 +171,8 @@ namespace troy::utils::fgk::switch_key {
         set_device(key_moduli.device_index());
         auto temp_ntt_batched = batch_utils::construct_batch(temp_ntt, pool, key_moduli);
         auto poly_prod_batched = batch_utils::construct_batch(poly_prod, pool, key_moduli);
-        kernel_accumulate_products_batched<<<block_count, KERNEL_THREAD_COUNT>>>(decomp_modulus_size, key_component_count, coeff_count, temp_ntt_batched, key_moduli, key_vector, poly_prod_batched);
+        dim3 block_dims(block_count, temp_ntt.size());
+        kernel_accumulate_products_batched<<<block_dims, KERNEL_THREAD_COUNT>>>(decomp_modulus_size, key_component_count, coeff_count, temp_ntt_batched, key_moduli, key_vector, poly_prod_batched);
         stream_sync();
     }
 

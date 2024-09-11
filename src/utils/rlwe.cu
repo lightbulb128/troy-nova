@@ -4,9 +4,6 @@ namespace troy {namespace rlwe {
 
     using utils::Array;
     using utils::ConstSlice;
-    using utils::Slice;
-    using utils::ConstPointer;
-    using utils::Pointer;
     using utils::RandomGenerator;
     using utils::NTTTables;
 

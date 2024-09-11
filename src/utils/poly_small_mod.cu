@@ -231,9 +231,8 @@ namespace troy {namespace utils {
         device_add_ps(polys1, polys2, pcount, degree, moduli, result);
     }
     static __global__ void kernel_add_bps(ConstSliceArrayRef<uint64_t> polys1, ConstSliceArrayRef<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, SliceArrayRef<uint64_t> result) {
-        for (size_t i = 0; i < polys1.size(); i++) {
-            device_add_ps(polys1[i], polys2[i], pcount, degree, moduli, result[i]);
-        }
+        size_t i = blockIdx.y;
+        device_add_ps(polys1[i], polys2[i], pcount, degree, moduli, result[i]);
     }
 
     void add_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
@@ -265,7 +264,8 @@ namespace troy {namespace utils {
             SliceArray<uint64_t> result_arr = construct_batch(result, pool, moduli);
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
             set_device(moduli.device_index());
-            kernel_add_bps<<<block_count, KERNEL_THREAD_COUNT>>>(polys1_arr, polys2_arr, pcount, degree, moduli, result_arr);
+            dim3 block_dims(block_count, polys1.size());
+            kernel_add_bps<<<block_dims, KERNEL_THREAD_COUNT>>>(polys1_arr, polys2_arr, pcount, degree, moduli, result_arr);
             utils::stream_sync();
         }
     }
@@ -292,9 +292,8 @@ namespace troy {namespace utils {
         device_sub_ps(polys1, polys2, pcount, degree, moduli, result);
     }
     static __global__ void kernel_sub_bps(ConstSliceArrayRef<uint64_t> polys1, ConstSliceArrayRef<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, SliceArrayRef<uint64_t> result) {
-        for (size_t i = 0; i < polys1.size(); i++) {
-            device_sub_ps(polys1[i], polys2[i], pcount, degree, moduli, result[i]);
-        }
+        size_t i = blockIdx.y;
+        device_sub_ps(polys1[i], polys2[i], pcount, degree, moduli, result[i]);
     }
 
     void sub_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
@@ -326,7 +325,8 @@ namespace troy {namespace utils {
             SliceArray<uint64_t> result_arr = construct_batch(result, pool, moduli);
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
             set_device(moduli.device_index());
-            kernel_sub_bps<<<block_count, KERNEL_THREAD_COUNT>>>(polys1_arr, polys2_arr, pcount, degree, moduli, result_arr);
+            dim3 block_dims(block_count, polys1.size());
+            kernel_sub_bps<<<block_dims, KERNEL_THREAD_COUNT>>>(polys1_arr, polys2_arr, pcount, degree, moduli, result_arr);
             utils::stream_sync();
         }
     }
@@ -855,9 +855,8 @@ namespace troy {namespace utils {
         device_negacyclic_shift_ps(polys, shift, pcount, degree, moduli, result);
     }
     __global__ void kernel_negacyclic_shift_bps(ConstSliceArrayRef<uint64_t> polys, size_t shift, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, SliceArrayRef<uint64_t> result) {
-        for (size_t i = 0; i < polys.size(); i++) {
-            device_negacyclic_shift_ps(polys[i], shift, pcount, degree, moduli, result[i]);
-        }
+        size_t i = blockIdx.y;
+        device_negacyclic_shift_ps(polys[i], shift, pcount, degree, moduli, result[i]);
     }
     
 
@@ -890,7 +889,8 @@ namespace troy {namespace utils {
             ConstSliceArray<uint64_t> polys_arr = construct_batch(polys, pool, moduli);
             SliceArray<uint64_t> result_arr = construct_batch(result, pool, moduli);
             set_device(moduli.device_index());
-            kernel_negacyclic_shift_bps<<<block_count, KERNEL_THREAD_COUNT>>>(polys_arr, shift, pcount, degree, moduli, result_arr);
+            dim3 block_dims(block_count, polys.size());
+            kernel_negacyclic_shift_bps<<<block_dims, KERNEL_THREAD_COUNT>>>(polys_arr, shift, pcount, degree, moduli, result_arr);
             utils::stream_sync();
         }
     }

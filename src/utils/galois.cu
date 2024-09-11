@@ -170,9 +170,8 @@ namespace troy {namespace utils {
         device_apply_ps(coeff_count_power, polys, pcount, galois_element, moduli, result);
     }
     __global__ static void kernel_apply_bps(size_t coeff_count_power, ConstSliceArrayRef<uint64_t> polys, size_t pcount, size_t galois_element, ConstSlice<Modulus> moduli, SliceArrayRef<uint64_t> result) {
-        for (size_t i = 0; i < polys.size(); i++) {
-            device_apply_ps(coeff_count_power, polys[i], pcount, galois_element, moduli, result[i]);
-        }
+        size_t i = blockIdx.y;
+        device_apply_ps(coeff_count_power, polys[i], pcount, galois_element, moduli, result[i]);
     }
     
     void GaloisTool::apply_ps(ConstSlice<uint64_t> polys, size_t pcount, size_t galois_element, ConstSlice<Modulus> moduli, Slice<uint64_t> result) const {
@@ -218,10 +217,11 @@ namespace troy {namespace utils {
             }
             size_t total = this->coeff_count() * moduli.size() * pcount;
             size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+            dim3 block_dims(block_count, polys.size());
             utils::set_device(polys[0].device_index());
             auto polys_batched = utils::construct_batch(polys, pool, moduli);
             auto result_batched = utils::construct_batch(result, pool, moduli);
-            kernel_apply_bps<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+            kernel_apply_bps<<<block_dims, utils::KERNEL_THREAD_COUNT>>>(
                 this->coeff_count_power(),
                 polys_batched,
                 pcount,
@@ -258,9 +258,8 @@ namespace troy {namespace utils {
         device_apply_ntt_ps(polys, pcount, coeff_modulus_size, coeff_count, result, permutation_table);
     }
     __global__ static void kernel_apply_ntt_bps(ConstSliceArrayRef<uint64_t> polys, size_t pcount, size_t coeff_modulus_size, size_t coeff_count, SliceArrayRef<uint64_t> result, ConstSlice<size_t> permutation_table) {
-        for (size_t i = 0; i < polys.size(); i++) {
-            device_apply_ntt_ps(polys[i], pcount, coeff_modulus_size, coeff_count, result[i], permutation_table);
-        }
+        size_t i = blockIdx.y;
+        device_apply_ntt_ps(polys[i], pcount, coeff_modulus_size, coeff_count, result[i], permutation_table);
     }
 
     void GaloisTool::apply_ntt_ps(ConstSlice<uint64_t> polys, size_t pcount, size_t coeff_modulus_size, size_t galois_element, Slice<uint64_t> result, MemoryPoolHandle pool) const {
@@ -327,10 +326,11 @@ namespace troy {namespace utils {
             }
             size_t total = this->coeff_count() * coeff_modulus_size * pcount;
             size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+            dim3 block_dims(block_count, polys.size());
             utils::set_device(result[0].device_index());
             auto polys_batched = utils::construct_batch(polys, pool, permutation_table);
             auto result_batched = utils::construct_batch(result, pool, permutation_table);
-            kernel_apply_ntt_bps<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+            kernel_apply_ntt_bps<<<block_dims, utils::KERNEL_THREAD_COUNT>>>(
                 polys_batched,
                 pcount,
                 coeff_modulus_size,

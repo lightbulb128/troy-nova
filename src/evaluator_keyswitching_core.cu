@@ -618,9 +618,8 @@ namespace troy {
         ConstSlice<Modulus> key_modulus,
         utils::SliceArrayRef<uint64_t> temp_last
     ) {
-        for (size_t i = 0; i < poly_prod_intt.size(); i++) {
-            device_ski_util6_merged(poly_prod_intt[i], key_component_count, decomp_modulus_size, coeff_count, qk, key_modulus, temp_last[i]);
-        }
+        size_t i = blockIdx.y;
+        device_ski_util6_merged(poly_prod_intt[i], key_component_count, decomp_modulus_size, coeff_count, qk, key_modulus, temp_last[i]);
     }
 
     __device__ static void device_ski_util7_merged(
@@ -684,9 +683,8 @@ namespace troy {
         ConstSlice<MultiplyUint64Operand> modswitch_factors,
         Evaluator::SwitchKeyDestinationAssignMethod assign_method
     ) {
-        for (size_t i = 0; i < poly_prod.size(); i++) {
-            device_ski_util7_merged(poly_prod[i], temp_last[i], coeff_count, destination[i], is_ckks, key_component_count, decomp_modulus_size, key_modulus, modswitch_factors, assign_method);
-        }
+        size_t i = blockIdx.y;
+        device_ski_util7_merged(poly_prod[i], temp_last[i], coeff_count, destination[i], is_ckks, key_component_count, decomp_modulus_size, key_modulus, modswitch_factors, assign_method);
     }
 
     __global__ static void kernel_ski_util7(
@@ -1235,7 +1233,8 @@ namespace troy {
             auto poly_prod_intt_batched = batch_utils::construct_batch(batch_utils::rcollect_reference(poly_prod_intt), pool, key_modulus);
             auto temp_last_reference = batch_utils::rcollect_reference(temp_last);
             auto temp_last_batched = batch_utils::construct_batch(temp_last_reference, pool, key_modulus);
-            kernel_ski_util6_merged_batched<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+            dim3 block_dims(block_count, n);
+            kernel_ski_util6_merged_batched<<<block_dims, utils::KERNEL_THREAD_COUNT>>>(
                 poly_prod_intt_batched,
                 key_component_count, decomp_modulus_size, coeff_count, key_modulus.at(key_modulus_size - 1),
                 key_modulus,
@@ -1253,7 +1252,8 @@ namespace troy {
             auto poly_prod_batched = batch_utils::construct_batch(batch_utils::rcollect_reference(poly_prod), pool, key_modulus);
             auto temp_last_const_batched = batch_utils::construct_batch(batch_utils::rcollect_const_reference(temp_last), pool, key_modulus);
             auto destination_batched = batch_utils::construct_batch(batch_utils::pcollect_reference(destination), pool, key_modulus);
-            kernel_ski_util7_merged_batched<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+            block_dims = dim3(block_count, n);
+            kernel_ski_util7_merged_batched<<<block_dims, utils::KERNEL_THREAD_COUNT>>>(
                 poly_prod_batched,
                 temp_last_const_batched,
                 coeff_count, destination_batched,
