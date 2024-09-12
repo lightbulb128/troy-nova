@@ -69,12 +69,19 @@ namespace troy { namespace utils {
         }
 
         void fill_bytes(Slice<uint8_t> bytes);
+        void fill_bytes_batched(const SliceVec<uint8_t>& bytes, MemoryPoolHandle pool);
         void fill_uint64s(Slice<uint64_t> uint64s);
+        void fill_uint64s_batched(const SliceVec<uint64_t>& uint64s, MemoryPoolHandle pool);
         uint64_t sample_uint64();
 
         void sample_poly_ternary(Slice<uint64_t> destination, size_t degree, ConstSlice<Modulus> moduli);
         void sample_poly_centered_binomial(Slice<uint64_t> destination, size_t degree, ConstSlice<Modulus> moduli);
         void sample_poly_uniform(Slice<uint64_t> destination, size_t degree, ConstSlice<Modulus> moduli);
+
+        
+        void sample_poly_ternary_batched(const SliceVec<uint64_t>& destination, size_t degree, ConstSlice<Modulus> moduli, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+        void sample_poly_centered_binomial_batched(const SliceVec<uint64_t>& destination, size_t degree, ConstSlice<Modulus> moduli, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+        void sample_poly_uniform_batched(const SliceVec<uint64_t>& destination, size_t degree, ConstSlice<Modulus> moduli, MemoryPoolHandle pool = MemoryPool::GlobalPool());
 
     };
 

@@ -50,6 +50,7 @@ namespace bench::matmul {
         bool use_special_prime_for_encryption = false;
         size_t mod_switch_down_levels = 0;
         bool pack_lwes = true;
+        bool batched_mul = true;
         bool use_zstd = false;
 
         bool no_check_correctness = false;
@@ -102,6 +103,8 @@ namespace bench::matmul {
             mod_switch_down_levels = parser.get_uint<size_t>("-msd").value_or(parser.get_uint<size_t>("--mod-switch-down-levels").value_or(0));
             bool no_pack_lwes = parser.get_bool_store_true("-np").value_or(parser.get_bool_store_true("--no-pack-lwes").value_or(false));
             pack_lwes = !no_pack_lwes;
+            bool no_batched_mul = parser.get_bool_store_true("-nbm").value_or(parser.get_bool_store_true("--no-batched-mul").value_or(false));
+            batched_mul = !no_batched_mul;
             use_zstd = parser.get_bool_store_true("--use-zstd").value_or(false);
             no_check_correctness = parser.get_bool_store_true("--no-check-correctness").value_or(false);
 
@@ -185,8 +188,9 @@ namespace bench::matmul {
             std::cout << "                              Use special prime for encryption" << std::endl;
             std::cout << "  -msd, --mod-switch-down-levels" << std::endl;
             std::cout << "  -np, --no-pack-lwes         Do not pack lwes" << std::endl;
+            std::cout << "  -nbm, --no-batched-mul      Do not use batched mul" << std::endl;
             std::cout << "  --use-zstd                  Use Zstd for compressing serialized ciphers" << std::endl;
-            std::cout << "  --no-check-correctness       Do not check correctness" << std::endl;
+            std::cout << "  --no-check-correctness      Do not check correctness" << std::endl;
             std::cout << std::endl;
         }
 
@@ -237,6 +241,7 @@ namespace bench::matmul {
             std::cout << "  use-special-prime   = " << bool_to_string(use_special_prime_for_encryption) << std::endl;
             std::cout << "  mod-down-levels     = " << mod_switch_down_levels << std::endl;
             std::cout << "  pack-lwes           = " << bool_to_string(pack_lwes) << std::endl;
+            std::cout << "  batched-mul         = " << bool_to_string(batched_mul) << std::endl;
             std::cout << "  use-zstd            = " << bool_to_string(use_zstd) << std::endl;
             std::cout << "  no-check-correct    = " << bool_to_string(no_check_correctness) << std::endl;
 
@@ -376,6 +381,7 @@ namespace bench::matmul {
 
             // create helpers. one helper for each thread
             MatmulHelper helper(m_divided, r, n, context.params_host().poly_modulus_degree(), MatmulObjective::EncryptLeft, args.pack_lwes);
+            helper.batched_mul = args.batched_mul;
             std::vector<MatmulHelper> thread_helpers = {};
             for (size_t i = 0; i < args.threads; i++) {
                 thread_helpers.push_back(helper);

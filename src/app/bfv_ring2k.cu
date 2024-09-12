@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <cstdint>
 #include <unordered_map>
+#include "../batch_utils.h"
 
 namespace troy::linear {
 
@@ -199,7 +200,7 @@ namespace troy::linear {
     }
 
     template <typename T>
-    __global__ static void kernel_scale_up(
+    __device__ static void device_scale_up(
         ConstSlice<T> source,
         ConstSlice<Modulus> modulus, ConstSlice<MultiplyUint64Operand> Q_div_t_mod_qi,
         uint128_t Q_mod_t, uint128_t t_half, uint32_t base_mod_bitlen,
@@ -219,7 +220,29 @@ namespace troy::linear {
         }
     }
 
-    __global__ static void kernel_scale_up_uint128(
+    template <typename T>
+    __global__ static void kernel_scale_up(
+        ConstSlice<T> source,
+        ConstSlice<Modulus> modulus, ConstSlice<MultiplyUint64Operand> Q_div_t_mod_qi,
+        uint128_t Q_mod_t, uint128_t t_half, uint32_t base_mod_bitlen,
+        Slice<uint64_t> out
+    ) {
+        device_scale_up(source, modulus, Q_div_t_mod_qi, Q_mod_t, t_half, base_mod_bitlen, out);
+    }
+
+    template <typename T>
+    __global__ static void kernel_scale_up_batched(
+        utils::ConstSliceArrayRef<T> source,
+        ConstSlice<Modulus> modulus, ConstSlice<MultiplyUint64Operand> Q_div_t_mod_qi,
+        uint128_t Q_mod_t, uint128_t t_half, uint32_t base_mod_bitlen,
+        utils::SliceArrayRef<uint64_t> out
+    ) {
+        size_t i = blockIdx.y;
+        device_scale_up(source[i], modulus, Q_div_t_mod_qi, Q_mod_t, t_half, base_mod_bitlen, out[i]);
+    }
+
+
+    __device__ static void device_scale_up_uint128(
         ConstSlice<uint128_t> source,
         ConstSlice<Modulus> modulus, ConstSlice<MultiplyUint64Operand> Q_div_t_mod_qi,
         uint128_t Q_mod_t, uint128_t t_half, uint32_t base_mod_bitlen,
@@ -256,6 +279,25 @@ namespace troy::linear {
                 out[i * source.size() + j] = modulus[i].reduce_uint128(u + uint128_from_uint64s(rs_limbs[0], rs_limbs[1]));
             }
         }
+    }
+
+    __global__ static void kernel_scale_up_uint128(
+        ConstSlice<uint128_t> source,
+        ConstSlice<Modulus> modulus, ConstSlice<MultiplyUint64Operand> Q_div_t_mod_qi,
+        uint128_t Q_mod_t, uint128_t t_half, uint32_t base_mod_bitlen,
+        Slice<uint64_t> out
+    ) {
+        device_scale_up_uint128(source, modulus, Q_div_t_mod_qi, Q_mod_t, t_half, base_mod_bitlen, out);
+    }
+
+    __global__ static void kernel_scale_up_uint128_batched(
+        utils::ConstSliceArrayRef<uint128_t> source,
+        ConstSlice<Modulus> modulus, ConstSlice<MultiplyUint64Operand> Q_div_t_mod_qi,
+        uint128_t Q_mod_t, uint128_t t_half, uint32_t base_mod_bitlen,
+        utils::SliceArrayRef<uint64_t> out
+    ) {
+        size_t i = blockIdx.y;
+        device_scale_up_uint128(source[i], modulus, Q_div_t_mod_qi, Q_mod_t, t_half, base_mod_bitlen, out[i]);
     }
 
     template<typename T>
@@ -298,6 +340,52 @@ namespace troy::linear {
                 source, coeff_modulus, 
                 Q_div_t_mod_qi_.const_reference(), Q_mod_t_, 
                 t_half_, t_bit_length_, destination.reference()
+            );
+            utils::stream_sync();
+        }
+    }
+
+    
+    template<typename T>
+    void PolynomialEncoderRNSHelper<T>::scale_up_batched(const utils::ConstSliceVec<T>& source, const HeContext& context, const std::vector<Plaintext*>& destination, MemoryPoolHandle pool) const {
+        static_assert(std::is_same<T, uint32_t>::value || std::is_same<T, uint64_t>::value, "[PolynomialEncoderRNSHelper::scale_up_component] T must be uint32_t or uint64_t");
+        if (source.size() != destination.size()) {
+            throw std::invalid_argument("[PolynomialEncoderRNSHelper::scale_up_batched] source and destination must have the same size");
+        }
+        if (source.size() == 0) return;
+        if (!context.on_device() || source.size() < utils::BATCH_OP_THRESHOLD) {
+            for (size_t i = 0; i < source.size(); i++) {
+                scale_up(source[i], context, *destination[i], pool);
+            }
+        } else {
+            size_t poly_degree = context.key_context_data_pointer()->parms().poly_modulus_degree();
+            size_t n = source.size();
+            ContextDataPointer context_data = context.get_context_data(this->parms_id_).value();
+            ConstSlice<Modulus> coeff_modulus = context_data->parms().coeff_modulus();
+            for (size_t i = 0; i < n; i++) {
+                if (source[i].size() > poly_degree) {
+                    throw std::invalid_argument("[PolynomialEncoderRNSHelper:scale_up] source size is larger than poly_modulus_degree");
+                }
+                *destination[i] = Plaintext();
+                if (on_device()) destination[i]->to_device_inplace(pool);
+                destination[i]->is_ntt_form() = false;
+                destination[i]->resize_rns_partial(context, parms_id_, source[i].size(), false, false);
+                custom_assert(coeff_modulus.size() == destination[i]->coeff_modulus_size(), "[PolynomialEncoderRNSHelper::scale_up] coeff_modulus.size() != destination.coeff_modulus_size()");
+            }
+
+            size_t max_source_size = 0;
+            for (size_t i = 0; i < n; i++) {
+                max_source_size = std::max(max_source_size, source[i].size());
+            }
+            size_t block_count = ceil_div(max_source_size, KERNEL_THREAD_COUNT);
+            utils::set_device(context.device_index());
+            dim3 block_dims(block_count, n);
+            auto source_batched = batch_utils::construct_batch(source, pool, coeff_modulus);
+            auto destination_batched = batch_utils::construct_batch(batch_utils::pcollect_reference(destination), pool, coeff_modulus);
+            kernel_scale_up_batched<T><<<block_dims, KERNEL_THREAD_COUNT>>>(
+                source_batched, coeff_modulus, 
+                Q_div_t_mod_qi_.const_reference(), Q_mod_t_, 
+                t_half_, t_bit_length_, destination_batched
             );
             utils::stream_sync();
         }
@@ -354,9 +442,53 @@ namespace troy::linear {
         }
     }
 
+    template<>
+    void PolynomialEncoderRNSHelper<uint128_t>::scale_up_batched(const utils::ConstSliceVec<uint128_t>& source, const HeContext& context, const std::vector<Plaintext*>& destination, MemoryPoolHandle pool) const {
+        if (source.size() != destination.size()) {
+            throw std::invalid_argument("[PolynomialEncoderRNSHelper::scale_up_batched] source and destination must have the same size");
+        }
+        if (source.size() == 0) return;
+        if (!context.on_device() || source.size() < utils::BATCH_OP_THRESHOLD) {
+            for (size_t i = 0; i < source.size(); i++) {
+                scale_up(source[i], context, *destination[i], pool);
+            }
+        } else {
+            size_t poly_degree = context.key_context_data_pointer()->parms().poly_modulus_degree();
+            size_t n = source.size();
+            ContextDataPointer context_data = context.get_context_data(this->parms_id_).value();
+            ConstSlice<Modulus> coeff_modulus = context_data->parms().coeff_modulus();
+            for (size_t i = 0; i < n; i++) {
+                if (source[i].size() > poly_degree) {
+                    throw std::invalid_argument("[PolynomialEncoderRNSHelper:scale_up] source size is larger than poly_modulus_degree");
+                }
+                *destination[i] = Plaintext();
+                if (on_device()) destination[i]->to_device_inplace(pool);
+                destination[i]->is_ntt_form() = false;
+                destination[i]->resize_rns_partial(context, parms_id_, source[i].size(), false, false);
+                custom_assert(coeff_modulus.size() == destination[i]->coeff_modulus_size(), "[PolynomialEncoderRNSHelper::scale_up] coeff_modulus.size() != destination.coeff_modulus_size()");
+            }
+
+            size_t max_source_size = 0;
+            for (size_t i = 0; i < n; i++) {
+                max_source_size = std::max(max_source_size, source[i].size());
+            }
+            size_t block_count = ceil_div(max_source_size, KERNEL_THREAD_COUNT);
+            utils::set_device(context.device_index());
+            dim3 block_dims(block_count, n);
+            auto source_batched = batch_utils::construct_batch(source, pool, coeff_modulus);
+            auto destination_batched = batch_utils::construct_batch(batch_utils::pcollect_reference(destination), pool, coeff_modulus);
+            kernel_scale_up_uint128_batched<<<block_dims, KERNEL_THREAD_COUNT>>>(
+                source_batched, coeff_modulus, 
+                Q_div_t_mod_qi_.const_reference(), Q_mod_t_, 
+                t_half_, t_bit_length_, destination_batched
+            );
+            utils::stream_sync();
+        }
+    }
+
 
     template <typename T>
-    __global__ static void kernel_centralize_at(
+    __device__ static void device_centralize(
         ConstSlice<T> source,
         utils::ConstSlice<troy::Modulus> mod_qs,
         uint128_t t_half, uint128_t mod_t_mask,
@@ -376,6 +508,27 @@ namespace troy::linear {
                 }
             }
         }
+    }
+
+    template <typename T>
+    __global__ static void kernel_centralize(
+        ConstSlice<T> source,
+        utils::ConstSlice<troy::Modulus> mod_qs,
+        uint128_t t_half, uint128_t mod_t_mask,
+        Slice<uint64_t> out
+    ) {
+        device_centralize(source, mod_qs, t_half, mod_t_mask, out);
+    }
+
+    template <typename T>
+    __global__ static void kernel_centralize_batched(
+        utils::ConstSliceArrayRef<T> source,
+        utils::ConstSlice<troy::Modulus> mod_qs,
+        uint128_t t_half, uint128_t mod_t_mask,
+        utils::SliceArrayRef<uint64_t> out
+    ) {
+        size_t i = blockIdx.y;
+        device_centralize(source[i], mod_qs, t_half, mod_t_mask, out[i]);
     }
 
     template <typename T>
@@ -410,12 +563,56 @@ namespace troy::linear {
             utils::set_device(destination.device_index());
             ConstSlice<Modulus> coeff_modulus = context.get_context_data(this->parms_id_).value()->parms().coeff_modulus();
             custom_assert(coeff_modulus.size() == destination.coeff_modulus_size(), "[PolynomialEncoderRNSHelper::centralize] coeff_modulus.size() != destination.coeff_modulus_size()");
-            kernel_centralize_at<<<block_count, KERNEL_THREAD_COUNT>>>(
+            kernel_centralize<<<block_count, KERNEL_THREAD_COUNT>>>(
                 source, coeff_modulus, t_half_, mod_t_mask_, destination.reference()
             );
             utils::stream_sync();
         }
     }
+
+
+    template<typename T>
+    void PolynomialEncoderRNSHelper<T>::centralize_batched(const utils::ConstSliceVec<T>& source, const HeContext& context, const std::vector<Plaintext*>& destination, MemoryPoolHandle pool) const {
+        if (source.size() != destination.size()) {
+            throw std::invalid_argument("[PolynomialEncoderRNSHelper::centralize_batched] source and destination must have the same size");
+        }
+        if (source.size() == 0) return;
+        if (!context.on_device() || source.size() < utils::BATCH_OP_THRESHOLD) {
+            for (size_t i = 0; i < source.size(); i++) {
+                centralize(source[i], context, *destination[i], pool);
+            }
+        } else {
+            size_t poly_degree = context.key_context_data_pointer()->parms().poly_modulus_degree();
+            size_t n = source.size();
+            ContextDataPointer context_data = context.get_context_data(this->parms_id_).value();
+            ConstSlice<Modulus> coeff_modulus = context_data->parms().coeff_modulus();
+            for (size_t i = 0; i < n; i++) {
+                if (source[i].size() > poly_degree) {
+                    throw std::invalid_argument("[PolynomialEncoderRNSHelper:centralize_batched] source size is larger than poly_modulus_degree");
+                }
+                *destination[i] = Plaintext();
+                if (on_device()) destination[i]->to_device_inplace(pool);
+                destination[i]->is_ntt_form() = false;
+                destination[i]->resize_rns_partial(context, parms_id_, source[i].size(), false, false);
+                custom_assert(coeff_modulus.size() == destination[i]->coeff_modulus_size(), "[PolynomialEncoderRNSHelper::scale_up] coeff_modulus.size() != destination.coeff_modulus_size()");
+            }
+
+            size_t max_source_size = 0;
+            for (size_t i = 0; i < n; i++) {
+                max_source_size = std::max(max_source_size, source[i].size());
+            }
+            size_t block_count = ceil_div(max_source_size, KERNEL_THREAD_COUNT);
+            utils::set_device(context.device_index());
+            dim3 block_dims(block_count, n);
+            auto source_batched = batch_utils::construct_batch(source, pool, coeff_modulus);
+            auto destination_batched = batch_utils::construct_batch(batch_utils::pcollect_reference(destination), pool, coeff_modulus);
+            kernel_centralize_batched<T><<<block_dims, KERNEL_THREAD_COUNT>>>(
+                source_batched, coeff_modulus, t_half_, mod_t_mask_, destination_batched
+            );
+            utils::stream_sync();
+        }
+    }
+
 
     template <typename T>
     __global__ static void kernel_scale_down(
@@ -481,7 +678,6 @@ namespace troy::linear {
         }
         ContextDataPointer context_data = context.get_context_data(parms_id).value();
         const EncryptionParameters& parms = context_data->parms();
-        custom_assert(parms.poly_modulus_degree() >= destination.size());
         size_t num_modulus = parms.coeff_modulus().size();
         size_t coeff_count = destination.size();
         custom_assert(input.coeff_modulus_size() == num_modulus);
@@ -530,19 +726,6 @@ namespace troy::linear {
                 // 3-2 Then multiply with -Q^{-1} mod t
                 base_on_t = (base_on_t * neg_inv_Q_mod_t_) & mod_t_mask_;
 
-                // clang-format off
-                // 4 Correct sign: (base_on_t - [base_on_gamma]_gamma) * gamma^{-1} mod t
-                // NOTE(juhou):
-                // `base_on_gamma` and `base_on_t` together gives
-                // `gamma*(x + t*r) + round(gamma*v/q) - e` mod gamma*t for some unknown v and e.
-                // (Key point): Taking `base_on_gamma` along equals to
-                //    `round(gamma*v/q) - e mod gamma`
-                // When gamma > v, e, we can have the centered remainder
-                // [round(gamma*v/q) - e mod gamma]_gamma = round(gamma*v/q) - e.
-                // As a result, `base_on_t - [base_on_gamma]_gamma mod t` will cancel out the
-                // last term and gives `gamma*(x + t*r) mod t`.
-                // Finally, multiply with `gamma^{-1} mod t` gives `x mod t`.
-                // clang-format on
                 uint64_t gamma_div_2 = gamma_->value() >> 1;
                 uint64_t on_gamma = base_on_gamma[i];
                 // [0, gamma) -> [-gamma/2, gamma/2]
@@ -700,7 +883,6 @@ namespace troy::linear {
         }
         ContextDataPointer context_data = context.get_context_data(parms_id).value();
         const EncryptionParameters& parms = context_data->parms();
-        custom_assert(parms.poly_modulus_degree() >= destination.size());
         size_t num_modulus = parms.coeff_modulus().size();
         size_t coeff_count = destination.size();
         custom_assert(input.coeff_modulus_size() == num_modulus);

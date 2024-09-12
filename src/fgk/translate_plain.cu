@@ -1,9 +1,9 @@
 #include "translate_plain.h"
-
+#include "../batch_utils.h"
 
 namespace troy::utils::fgk::translate_plain {
     
-    __global__ static void kernel_multiply_translate_plain(
+    __device__ static void device_multiply_translate_plain(
         ConstSlice<uint64_t> from,
         size_t plain_coeff_count,
         size_t coeff_count,
@@ -69,7 +69,65 @@ namespace troy::utils::fgk::translate_plain {
     }
 
 
-    void multiply_translate_plain(utils::ConstSlice<uint64_t> from, const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, bool subtract) {
+    __global__ static void kernel_multiply_translate_plain(
+        ConstSlice<uint64_t> from,
+        size_t plain_coeff_count,
+        size_t coeff_count,
+        ConstSlice<uint64_t> plain_data,
+        ConstSlice<MultiplyUint64Operand> coeff_div_plain_modulus,
+        uint64_t plain_upper_half_threshold,
+        uint64_t q_mod_t,
+        uint64_t plain_modulus_value,
+        ConstSlice<Modulus> coeff_modulus,
+        Slice<uint64_t> destination,
+        bool subtract
+    ) {
+        device_multiply_translate_plain(
+            from,
+            plain_coeff_count,
+            coeff_count,
+            plain_data,
+            coeff_div_plain_modulus,
+            plain_upper_half_threshold,
+            q_mod_t,
+            plain_modulus_value,
+            coeff_modulus,
+            destination,
+            subtract
+        );
+    }
+    
+    __global__ static void kernel_multiply_translate_plain_batched(
+        ConstSliceArrayRef<uint64_t> from,
+        size_t plain_coeff_count,
+        size_t coeff_count,
+        ConstSliceArrayRef<uint64_t> plain_data,
+        ConstSlice<MultiplyUint64Operand> coeff_div_plain_modulus,
+        uint64_t plain_upper_half_threshold,
+        uint64_t q_mod_t,
+        uint64_t plain_modulus_value,
+        ConstSlice<Modulus> coeff_modulus,
+        SliceArrayRef<uint64_t> destination,
+        bool subtract
+    ) {
+        for (size_t i = 0; i < destination.size(); i++) {
+            device_multiply_translate_plain(
+                from[i],
+                plain_coeff_count,
+                coeff_count,
+                plain_data[i],
+                coeff_div_plain_modulus,
+                plain_upper_half_threshold,
+                q_mod_t,
+                plain_modulus_value,
+                coeff_modulus,
+                destination[i],
+                subtract
+            );
+        }
+    }
+
+    void multiply_translate_plain(utils::ConstSlice<uint64_t> from, const Plaintext& plain, ContextDataPointer context_data, utils::Slice<uint64_t> destination, size_t destination_coeff_count, bool subtract) {
         bool device = plain.on_device();
         if (!utils::device_compatible(*context_data, plain, destination)) {
             throw std::invalid_argument("[scaling_variant::scale_up] Arguments are not on the same device.");
@@ -85,7 +143,7 @@ namespace troy::utils::fgk::translate_plain {
         const EncryptionParameters& parms = context_data->parms();
         ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
         size_t plain_coeff_count = plain.coeff_count();
-        size_t coeff_count = parms.poly_modulus_degree();
+        size_t coeff_count = destination_coeff_count;
         size_t coeff_modulus_size = coeff_modulus.size();
         ConstSlice<uint64_t> plain_data = plain.data().const_reference();
         ConstSlice<MultiplyUint64Operand> coeff_div_plain_modulus = context_data->coeff_div_plain_modulus();
@@ -163,8 +221,70 @@ namespace troy::utils::fgk::translate_plain {
             utils::stream_sync();
         }
     }
+    
+    void multiply_translate_plain_batched(
+        const utils::ConstSliceVec<uint64_t>& from, 
+        const std::vector<const Plaintext*> plain, 
+        ContextDataPointer context_data, 
+        const utils::SliceVec<uint64_t>& destination, 
+        size_t destination_coeff_count, bool subtract,
+        MemoryPoolHandle pool
+    ) {
+        
+        if (plain.size() != destination.size() || plain.size() != from.size()) {
+            throw std::invalid_argument("[scaling_variant::scale_up_batched] Arguments have different sizes.");
+        }
+        if (destination.size() == 0) return;
+        bool device = context_data->on_device();
+        if (!device || destination.size() < utils::BATCH_OP_THRESHOLD) {
+            // directly call n times single multiply_translate_plain
+            for (size_t i = 0; i < destination.size(); i++) {
+                multiply_translate_plain(from[i], *plain[i], context_data, destination[i], destination_coeff_count, subtract);
+            }
+        } else {
+            const EncryptionParameters& parms = context_data->parms();
+            ConstSlice<Modulus> coeff_modulus = parms.coeff_modulus();
+            size_t plain_coeff_count = plain[0]->coeff_count();
+            // check all should have same plain_coeff_count
+            for (size_t i = 1; i < plain.size(); i++) {
+                if (plain[i]->coeff_count() != plain_coeff_count) {
+                    throw std::invalid_argument("[scaling_variant::scale_up_batched] All plaintexts should have the same number of coefficients.");
+                }
+            }
+            if (destination_coeff_count < plain_coeff_count) {
+                throw std::invalid_argument("[scaling_variant::scale_up] destination_coeff_count should no less than plain_coeff_count.");
+            }
+            size_t coeff_modulus_size = coeff_modulus.size();
+            ConstSlice<MultiplyUint64Operand> coeff_div_plain_modulus = context_data->coeff_div_plain_modulus();
+            uint64_t plain_upper_half_threshold = context_data->plain_upper_half_threshold();
+            uint64_t q_mod_t = context_data->coeff_modulus_mod_plain_modulus();
 
-    static __global__ void kernel_scatter_translate_copy(ConstSlice<uint64_t> from, ConstSlice<uint64_t> translation, size_t from_degree, size_t translation_degree, ConstSlice<Modulus> moduli, Slice<uint64_t> destination, bool subtract) {
+            auto plain_slices = batch_utils::pcollect_const_reference(plain);
+            auto plain_batched = batch_utils::construct_batch(plain_slices, pool, coeff_modulus);
+            auto destination_batched = batch_utils::construct_batch(destination, pool, coeff_modulus);
+            ConstSliceArray<uint64_t> from_batched(&*from.begin(), from.size());
+            from_batched.to_device_inplace(pool);
+            size_t total = plain_coeff_count * coeff_modulus_size;
+            size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+            utils::set_device(coeff_modulus.device_index());
+
+            kernel_multiply_translate_plain_batched<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                from_batched,
+                plain_coeff_count,
+                destination_coeff_count,
+                plain_batched,
+                coeff_div_plain_modulus,
+                plain_upper_half_threshold,
+                q_mod_t,
+                parms.plain_modulus_host().value(),
+                coeff_modulus,
+                destination_batched,
+                subtract
+            );
+        }
+    }
+
+    static __device__ void device_scatter_translate_copy(ConstSlice<uint64_t> from, ConstSlice<uint64_t> translation, size_t from_degree, size_t translation_degree, ConstSlice<Modulus> moduli, Slice<uint64_t> destination, bool subtract) {
         size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
         if (idx >= moduli.size() * from_degree) return;
         
@@ -205,6 +325,20 @@ namespace troy::utils::fgk::translate_plain {
             }
         }
     
+    }
+
+    static __global__ void kernel_scatter_translate_copy(ConstSlice<uint64_t> from, ConstSlice<uint64_t> translation, size_t from_degree, size_t translation_degree, ConstSlice<Modulus> moduli, Slice<uint64_t> destination, bool subtract) {
+        device_scatter_translate_copy(from, translation, from_degree, translation_degree, moduli, destination, subtract);
+    }
+
+    static __global__ void kernel_scatter_translate_copy_batched(
+        ConstSliceArrayRef<uint64_t> from, 
+        ConstSliceArrayRef<uint64_t> translation, size_t from_degree, size_t translation_degree, ConstSlice<Modulus> moduli, 
+        SliceArrayRef<uint64_t> destination, bool subtract
+    ) {
+        for (size_t i = 0; i < destination.size(); i++) {
+            device_scatter_translate_copy(from[i], translation[i], from_degree, translation_degree, moduli, destination[i], subtract);
+        }
     }
 
     void scatter_translate_copy(ConstSlice<uint64_t> from, ConstSlice<uint64_t> translation, size_t from_degree, size_t translation_degree, ConstSlice<Modulus> moduli, Slice<uint64_t> destination, bool subtract) {
@@ -272,5 +406,42 @@ namespace troy::utils::fgk::translate_plain {
         }
     }
 
+    void scatter_translate_copy_batched(
+        const ConstSliceVec<uint64_t>& from, 
+        const ConstSliceVec<uint64_t>& translation, size_t from_degree, size_t translation_degree, ConstSlice<Modulus> moduli, 
+        const SliceVec<uint64_t>& destination, bool subtract,
+        MemoryPoolHandle pool
+    ) {
+        if (from.size() != translation.size() || from.size() != destination.size()) {
+            throw std::invalid_argument("[scatter_translate_copy_batched] Arguments have different sizes.");
+        }
+        if (destination.size() == 0) return;
+        bool device = moduli.on_device();
+        if (!device || destination.size() < utils::BATCH_OP_THRESHOLD) {
+            // directly call n times single scatter_translate_copy
+            for (size_t i = 0; i < destination.size(); i++) {
+                scatter_translate_copy(from[i], translation[i], from_degree, translation_degree, moduli, destination[i], subtract);
+            }
+        } else {
+            auto destination_batched = batch_utils::construct_batch(destination, pool, moduli);
+            utils::ConstSliceArray<uint64_t> from_batched(&*from.begin(), from.size());
+            from_batched.to_device_inplace(pool);
+            auto translation_batched = batch_utils::construct_batch(translation, pool, moduli);
+            size_t total = from_degree * moduli.size();
+            size_t block_count = utils::ceil_div(total, utils::KERNEL_THREAD_COUNT);
+            utils::set_device(moduli.device_index());
+            kernel_scatter_translate_copy_batched<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                from_batched,
+                translation_batched,
+                from_degree,
+                translation_degree,
+                moduli,
+                destination_batched,
+                subtract
+            );
+        }
+
+
+    }
 
 }

@@ -86,7 +86,7 @@ namespace troy { namespace utils {
         Box(T* object, bool device, MemoryPoolHandle memory_pool_handle = MemoryPool::GlobalPool()) : pointer(object), device(device), memory_pool_handle_(device ? memory_pool_handle : nullptr) {
             if (device && !memory_pool_handle_) throw std::runtime_error("[Box::Box] Memory pool handle is required for device memory");
         }
-        Box(Box&& other) : pointer(other.pointer), device(other.device), memory_pool_handle_(other.memory_pool_handle_) { other.pointer = nullptr;}
+        Box(Box&& other): pointer(other.pointer), device(other.device), memory_pool_handle_(other.memory_pool_handle_) { other.pointer = nullptr;}
 
         __host__ __device__ bool on_device() const { return device; }
         __host__ __device__ bool is_null() const { return pointer == nullptr; }
@@ -277,11 +277,11 @@ namespace troy { namespace utils {
         __host__ __device__ ConstSlice<T> const_slice(size_t begin, size_t end) const { return ConstSlice<T>(pointer + begin, end - begin, device, memory_pool_handle_); }
         __host__ __device__ Slice<T> slice(size_t begin, size_t end) { return Slice<T>(pointer + begin, end - begin, device, memory_pool_handle_); }
         __host__ __device__ bool on_device() const { return device; }
-        __host__ __device__ T* raw_pointer() { return pointer; }
+        __host__ __device__ T* raw_pointer() const { return pointer; }
         __host__ __device__ static Slice<T> from_pointer(Pointer<T> pointer) {
             return Slice<T>(pointer.get(), 1, pointer.on_device(), pointer.pool());
         }
-        void copy_from_slice(ConstSlice<T> slice) {
+        void copy_from_slice(ConstSlice<T> slice) const {
             if (slice.size() != len) throw std::runtime_error("[Slice::copy_from_slice] Slice size does not match array size");
             if (!device && !slice.on_device()) {
                 memcpy(pointer, slice.raw_pointer(), len * sizeof(T));
@@ -387,7 +387,7 @@ namespace troy { namespace utils {
         __host__ __device__ T* raw_pointer() { return pointer; }
         __host__ __device__ const T* raw_pointer() const { return pointer; }
 
-        Array(Array&& other) : pointer(other.pointer), len(other.len), device(other.device), memory_pool_handle_(other.memory_pool_handle_) { 
+        Array(Array&& other): pointer(other.pointer), len(other.len), device(other.device), memory_pool_handle_(other.memory_pool_handle_) { 
             other.pointer = nullptr;
             other.memory_pool_handle_ = nullptr;
             other.len = 0; 

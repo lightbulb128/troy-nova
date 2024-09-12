@@ -22,20 +22,20 @@ target_compile_options(troy INTERFACE
   "$<${nvcc_cxx}:$<BUILD_INTERFACE:--compiler-options=-fPIC>>"
 )
 
-# if TROY_MEMORY_POOL is on, add this as a macro
-if(TROY_MEMORY_POOL)
-  target_compile_definitions(troy        PUBLIC TROY_MEMORY_POOL)
-  target_compile_definitions(troy_static PUBLIC TROY_MEMORY_POOL)
-endif()
+macro(troy_add_compile_definition_if definition)
+  if (${definition})
+    target_compile_definitions(troy        PUBLIC ${definition})
+    target_compile_definitions(troy_static PUBLIC ${definition})
+  endif()
+endmacro()
 
-if(TROY_MEMORY_POOL_UNSAFE)
-  target_compile_definitions(troy        PUBLIC TROY_MEMORY_POOL_UNSAFE)
-  target_compile_definitions(troy_static PUBLIC TROY_MEMORY_POOL_UNSAFE)
-endif()
+troy_add_compile_definition_if(TROY_MEMORY_POOL)
+troy_add_compile_definition_if(TROY_MEMORY_POOL_UNSAFE)
+troy_add_compile_definition_if(TROY_ZSTD)
+troy_add_compile_definition_if(TROY_DEVICE_SYNCHRONIZE_ON_MULTIPLE_THREAD)
+troy_add_compile_definition_if(TROY_STREAM_SYNC_ON_RETURN_TO_MEMORY_POOL)
 
 if(TROY_ZSTD)
-  target_compile_definitions(troy        PUBLIC TROY_ZSTD)
-  target_compile_definitions(troy_static PUBLIC TROY_ZSTD)
   target_link_libraries(troy        PRIVATE ${TROY_ZSTD_STATIC_LINK_NAME})
   target_link_libraries(troy_static PRIVATE ${TROY_ZSTD_STATIC_LINK_NAME})
 endif()

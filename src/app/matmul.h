@@ -54,13 +54,21 @@ namespace troy { namespace linear {
         bool pack_lwe;
         MemoryPoolHandle pool;
 
+        // When this is enabled, in the `matmul` function
+        // we will invoke the batched operation. Note that this will
+        // consume much more memory than the non-batched version.
+        // Specifically, the memory is O(MNR/n), where n is the poly degree.
+        // If this is disabled, the memory requirement should be O(max(MN, NR)/n)
+        bool batched_mul = false;
+
         inline void set_pool(MemoryPoolHandle pool) {
             this->pool = pool;
         }
 
         inline MatmulHelper(size_t batch_size, size_t input_dims, size_t output_dims, size_t slot_count, MatmulObjective objective = MatmulObjective::EncryptLeft, bool pack_lwe = true, MemoryPoolHandle pool = MemoryPool::GlobalPool()):
             batch_size(batch_size), input_dims(input_dims), output_dims(output_dims),
-            slot_count(slot_count), objective(objective), pack_lwe(pack_lwe), pool(pool)
+            slot_count(slot_count), objective(objective), pack_lwe(pack_lwe), pool(pool),
+            batched_mul(true)
         {
             determine_block();
         }

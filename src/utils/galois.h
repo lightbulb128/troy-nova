@@ -4,6 +4,7 @@
 #include <vector>
 #include "box.h"
 #include "basics.h"
+#include "box_batch.h"
 #include "number_theory.h"
 
 namespace troy {namespace utils {
@@ -109,23 +110,37 @@ namespace troy {namespace utils {
         }
 
         void apply_ps(ConstSlice<uint64_t> polys, size_t pcount, size_t galois_element, ConstSlice<Modulus> moduli, Slice<uint64_t> result) const;
+        void apply_bps(const ConstSliceVec<uint64_t>& polys, size_t pcount, size_t galois_element, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
 
         inline void apply_p(ConstSlice<uint64_t> poly, size_t galois_element, ConstSlice<Modulus> moduli, Slice<uint64_t> result) const {
             apply_ps(poly, 1, galois_element, moduli, result);
+        }
+        inline void apply_bp(const ConstSliceVec<uint64_t>& poly, size_t galois_element, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            apply_bps(poly, 1, galois_element, moduli, result, pool);
         }
 
         inline void apply(ConstSlice<uint64_t> component, size_t galois_element, ConstPointer<Modulus> modulus, Slice<uint64_t> result) const {
             apply_ps(component, 1, galois_element, ConstSlice<Modulus>::from_pointer(modulus), result);
         }
+        inline void apply_b(const ConstSliceVec<uint64_t>& component, size_t galois_element, ConstPointer<Modulus> modulus, const SliceVec<uint64_t>& result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            apply_bps(component, 1, galois_element, ConstSlice<Modulus>::from_pointer(modulus), result, pool);
+        }
 
         void apply_ntt_ps(ConstSlice<uint64_t> polys, size_t pcount, size_t coeff_modulus_size, size_t galois_element, Slice<uint64_t> result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        void apply_ntt_bps(const ConstSliceVec<uint64_t>& polys, size_t pcount, size_t coeff_modulus_size, size_t galois_element, const SliceVec<uint64_t>& result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
 
         inline void apply_ntt_p(ConstSlice<uint64_t> poly, size_t coeff_modulus_size, size_t galois_element, Slice<uint64_t> result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             apply_ntt_ps(poly, 1, coeff_modulus_size, galois_element, result, pool);
         }
+        inline void apply_ntt_bp(const ConstSliceVec<uint64_t>& poly, size_t coeff_modulus_size, size_t galois_element, const SliceVec<uint64_t>& result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            apply_ntt_bps(poly, 1, coeff_modulus_size, galois_element, result, pool);
+        }
 
         inline void apply_ntt(ConstSlice<uint64_t> component, size_t galois_element, Slice<uint64_t> result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             apply_ntt_ps(component, 1, 1, galois_element, result, pool);
+        }
+        inline void apply_ntt_b(const ConstSliceVec<uint64_t>& component, size_t galois_element, const SliceVec<uint64_t>& result, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            apply_ntt_bps(component, 1, 1, galois_element, result, pool);
         }
 
         

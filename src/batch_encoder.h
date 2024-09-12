@@ -1,4 +1,5 @@
 #pragma once
+#include "batch_utils.h"
 #include "plaintext.h"
 #include "he_context.h"
 #include "utils/box.h"
@@ -65,6 +66,14 @@ namespace troy {
             encode_slice(values, destination, pool);
             return destination;
         }
+
+        void encode_slice_batched(const utils::ConstSliceVec<uint64_t>& values, const std::vector<Plaintext*>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        inline std::vector<Plaintext> encode_slice_new_batched(const utils::ConstSliceVec<uint64_t>& values, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            std::vector<Plaintext> destination(values.size());
+            encode_slice_batched(values, batch_utils::collect_pointer(destination), pool);
+            return destination;
+        }
+        
         inline void encode(const std::vector<uint64_t>& values, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             encode_slice(utils::ConstSlice(values.data(), values.size(), false, nullptr), destination, pool);
         }
@@ -95,6 +104,18 @@ namespace troy {
             decode_slice(plaintext, destination.reference(), pool);
             return destination;
         }
+
+        void decode_slice_batched(const std::vector<const Plaintext*>& plaintexts, const std::vector<utils::Slice<uint64_t>>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        inline std::vector<utils::Array<uint64_t>> decode_slice_new_batched(const std::vector<const Plaintext*>& plaintexts, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            std::vector<utils::Array<uint64_t>> destination; destination.reserve(plaintexts.size());
+            for (size_t i = 0; i < plaintexts.size(); i++) 
+                destination.push_back(utils::Array<uint64_t>::create_uninitialized(slot_count(), on_device(), pool));
+            decode_slice_batched(plaintexts, batch_utils::rcollect_reference(destination), pool);
+            return destination;
+        }
+
+
+
         inline void decode(const Plaintext& plaintext, std::vector<uint64_t>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             destination.resize(slot_count());
             decode_slice(plaintext, utils::Slice(destination.data(), destination.size(), false, nullptr), pool);

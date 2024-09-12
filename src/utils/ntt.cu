@@ -7,7 +7,7 @@
 
 namespace troy {namespace utils {
 
-    static constexpr bool NTT_USE_COOPERATIVE = true;
+    static constexpr bool NTT_USE_COOPERATIVE = false;
 
     NTTTables::NTTTables(size_t coeff_count_power, const Modulus& modulus) {
 
@@ -137,6 +137,27 @@ namespace troy {namespace utils {
     void ntt_transfer_from_rev(ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, Slice<uint64_t> result, NTTTableIndexer tables) {
         if constexpr (NTT_USE_COOPERATIVE) fgk::ntt_cooperative::intt(operand, pcount, component_count, log_degree, use_inv_root_powers, result, tables);
         else fgk::ntt_grouped::intt(operand, pcount, component_count, log_degree, use_inv_root_powers, result, tables);
+    }
+
+    
+    void ntt_transfer_to_rev_inplace_batched(const SliceVec<uint64_t>& operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, NTTTableIndexer tables, MemoryPoolHandle pool) {
+        if constexpr (NTT_USE_COOPERATIVE) fgk::ntt_cooperative::ntt_inplace_batched(operand, pcount, component_count, log_degree, use_inv_root_powers, tables, pool);
+        else fgk::ntt_grouped::ntt_inplace_batched(operand, pcount, component_count, log_degree, use_inv_root_powers, tables, pool);
+    }
+
+    void ntt_transfer_from_rev_inplace_batched(const SliceVec<uint64_t>& operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, NTTTableIndexer tables, MemoryPoolHandle pool) {
+        if constexpr (NTT_USE_COOPERATIVE) fgk::ntt_cooperative::intt_inplace_batched(operand, pcount, component_count, log_degree, use_inv_root_powers, tables, pool);
+        else fgk::ntt_grouped::intt_inplace_batched(operand, pcount, component_count, log_degree, use_inv_root_powers, tables, pool);
+    }
+
+    void ntt_transfer_to_rev_batched(const ConstSliceVec<uint64_t>& operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, const SliceVec<uint64_t>& result, NTTTableIndexer tables, MemoryPoolHandle pool) {
+        if constexpr (NTT_USE_COOPERATIVE) fgk::ntt_cooperative::ntt_batched(operand, pcount, component_count, log_degree, use_inv_root_powers, result, tables, pool);
+        else fgk::ntt_grouped::ntt_batched(operand, pcount, component_count, log_degree, use_inv_root_powers, result, tables, pool);
+    }
+
+    void ntt_transfer_from_rev_batched(const ConstSliceVec<uint64_t>& operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, const SliceVec<uint64_t>& result, NTTTableIndexer tables, MemoryPoolHandle pool) {
+        if constexpr (NTT_USE_COOPERATIVE) fgk::ntt_cooperative::intt_batched(operand, pcount, component_count, log_degree, use_inv_root_powers, result, tables, pool);
+        else fgk::ntt_grouped::intt_batched(operand, pcount, component_count, log_degree, use_inv_root_powers, result, tables, pool);
     }
 
     void host_ntt_transfer_last_reduce(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, NTTTableIndexer tables) {

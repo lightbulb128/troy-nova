@@ -44,6 +44,10 @@ if(TROY_TEST)
 
         multithread.cu
         # temp.cu
+
+        batch_encoder_batched.cu
+        encryptor_batched.cu
+        evaluator_batched.cu
     )
 
     if(TROY_ZSTD)
@@ -95,8 +99,8 @@ if(TROY_BENCH)
 
 endif()
 
-# add_executable(custom)
-# target_sources(custom PRIVATE 
-#     main.cu
+# add_executable(custom3)
+# target_sources(custom3 PRIVATE 
+# custom3.cu
 # )
-# target_link_libraries(custom troy)
+# target_link_libraries(custom3 troy)

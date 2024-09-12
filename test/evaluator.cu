@@ -22,10 +22,26 @@ namespace evaluator {
         Plaintext encoded = context.encoder().encode_simd(message, std::nullopt, scale);
         Ciphertext encrypted = context.encryptor().encrypt_asymmetric_new(encoded);
         encrypted.scale() = scale;
-        Ciphertext negated = context.evaluator().negate_new(encrypted);
-        Plaintext decrypted = context.decryptor().decrypt_new(negated);
-        GeneralVector result = context.encoder().decode_simd(decrypted);
-        ASSERT_TRUE(message.near_equal(result.negate(t), tolerance));
+
+        { // new
+            Ciphertext negated = context.evaluator().negate_new(encrypted);
+            Plaintext decrypted = context.decryptor().decrypt_new(negated);
+            GeneralVector result = context.encoder().decode_simd(decrypted);
+            ASSERT_TRUE(message.near_equal(result.negate(t), tolerance));
+        }
+        { // assign
+            Ciphertext negated; context.evaluator().negate(encrypted, negated);
+            Plaintext decrypted = context.decryptor().decrypt_new(negated);
+            GeneralVector result = context.encoder().decode_simd(decrypted);
+            ASSERT_TRUE(message.near_equal(result.negate(t), tolerance));
+        }
+        { // inplace
+            Ciphertext negated = encrypted.clone();
+            context.evaluator().negate_inplace(negated);
+            Plaintext decrypted = context.decryptor().decrypt_new(negated);
+            GeneralVector result = context.encoder().decode_simd(decrypted);
+            ASSERT_TRUE(message.near_equal(result.negate(t), tolerance));
+        }
     }
 
     TEST(EvaluatorTest, HostBFVNegate) {
@@ -94,17 +110,48 @@ namespace evaluator {
         Plaintext encoded2 = context.encoder().encode_simd(message2, std::nullopt, scale);
         Ciphertext encrypted1 = context.encryptor().encrypt_asymmetric_new(encoded1);
         Ciphertext encrypted2 = context.encryptor().encrypt_asymmetric_new(encoded2);
-        Ciphertext added = context.evaluator().add_new(encrypted1, encrypted2);
-        Plaintext decrypted = context.decryptor().decrypt_new(added);
-        GeneralVector result = context.encoder().decode_simd(decrypted);
-        GeneralVector truth = message1.add(message2, t);
-        ASSERT_TRUE(truth.near_equal(result, tolerance));
 
-        Ciphertext subtracted = context.evaluator().sub_new(encrypted1, encrypted2);
-        decrypted = context.decryptor().decrypt_new(subtracted);
-        result = context.encoder().decode_simd(decrypted);
-        truth = message1.sub(message2, t);
-        ASSERT_TRUE(truth.near_equal(result, tolerance));
+        { // new
+            Ciphertext added = context.evaluator().add_new(encrypted1, encrypted2);
+            Plaintext decrypted = context.decryptor().decrypt_new(added);
+            GeneralVector result = context.encoder().decode_simd(decrypted);
+            GeneralVector truth = message1.add(message2, t);
+            ASSERT_TRUE(truth.near_equal(result, tolerance));
+
+            Ciphertext subtracted = context.evaluator().sub_new(encrypted1, encrypted2);
+            decrypted = context.decryptor().decrypt_new(subtracted);
+            result = context.encoder().decode_simd(decrypted);
+            truth = message1.sub(message2, t);
+            ASSERT_TRUE(truth.near_equal(result, tolerance));
+        }
+        { // assign
+            Ciphertext added; context.evaluator().add(encrypted1, encrypted2, added);
+            Plaintext decrypted = context.decryptor().decrypt_new(added);
+            GeneralVector result = context.encoder().decode_simd(decrypted);
+            GeneralVector truth = message1.add(message2, t);
+            ASSERT_TRUE(truth.near_equal(result, tolerance));
+
+            Ciphertext subtracted; context.evaluator().sub(encrypted1, encrypted2, subtracted);
+            decrypted = context.decryptor().decrypt_new(subtracted);
+            result = context.encoder().decode_simd(decrypted);
+            truth = message1.sub(message2, t);
+            ASSERT_TRUE(truth.near_equal(result, tolerance));
+        }
+        { // inplace
+            Ciphertext added = encrypted1.clone();
+            context.evaluator().add_inplace(added, encrypted2);
+            Plaintext decrypted = context.decryptor().decrypt_new(added);
+            GeneralVector result = context.encoder().decode_simd(decrypted);
+            GeneralVector truth = message1.add(message2, t);
+            ASSERT_TRUE(truth.near_equal(result, tolerance));
+
+            Ciphertext subtracted = encrypted1.clone();
+            context.evaluator().sub_inplace(subtracted, encrypted2);
+            decrypted = context.decryptor().decrypt_new(subtracted);
+            result = context.encoder().decode_simd(decrypted);
+            truth = message1.sub(message2, t);
+            ASSERT_TRUE(truth.near_equal(result, tolerance));
+        }
     }
 
     TEST(EvaluatorTest, HostBFVAdd) {

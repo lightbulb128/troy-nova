@@ -12,6 +12,8 @@ option(TROY_PYBIND "Build python encapsulation with Pybind11" ON)
 option(TROY_EXAMPLES "Build examples" OFF)
 option(TROY_ZSTD "Use Zstandard for compression" ON)
 option(TROY_STREAM_SYNC_AFTER_KERNEL_CALLS "Synchronize stream after each kernel call" OFF)
+option(TROY_DEVICE_SYNCHRONIZE_ON_MULTIPLE_THREAD "Synchronize device when memory is allocated to another thread" ON)
+option(TROY_STREAM_SYNC_ON_RETURN_TO_MEMORY_POOL "Synchronize stream when returning memory to pool" OFF)
 
 if (TROY_MEMORY_POOL_UNSAFE)
   # if TROY_MEMORY_POOL_UNSAFE is enabled, TROY_MEMORY_POOL must be enabled

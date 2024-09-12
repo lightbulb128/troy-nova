@@ -107,6 +107,12 @@ namespace troy::utils {
             throw std::runtime_error("[MemoryPool(safe)::release] The pointer is not in the allocated set.");
         }
         size_t size = iterator->second;
+        #ifdef TROY_STREAM_SYNC_ON_RETURN_TO_MEMORY_POOL
+            cudaError_t status = cudaStreamSynchronize(0);
+            if (status != cudaSuccess) {
+                runtime_error("[MemoryPool(safe)::release] cudaStreamSynchronize failed.", status);
+            }
+        #endif
         impl_->unused.insert(std::make_pair(size, std::make_pair(ptr, std::this_thread::get_id())));
     }
 
@@ -124,16 +130,18 @@ namespace troy::utils {
             return try_allocate(required);
         } else {
             void* ptr = iterator->second.first;
-            std::thread::id last_used_id = iterator->second.second;
-            if (last_used_id != std::this_thread::get_id()) {
-                // A new thread is now taking over the memory which was last used by another thread.
-                // To avoid data racing, we need to execute a cudaDeviceSync
-                // before returning the pointer.
-                cudaError_t status = cudaDeviceSynchronize();
-                if (status != cudaSuccess) {
-                    runtime_error("[MemoryPool(safe)::allocate] cudaDeviceSynchronize failed.", status);
+            #ifdef TROY_DEVICE_SYNCHRONIZE_ON_MULTIPLE_THREAD
+                std::thread::id last_used_id = iterator->second.second;
+                if (last_used_id != std::this_thread::get_id()) {
+                    // A new thread is now taking over the memory which was last used by another thread.
+                    // To avoid data racing, we need to execute a cudaDeviceSync
+                    // before returning the pointer.
+                    cudaError_t status = cudaDeviceSynchronize();
+                    if (status != cudaSuccess) {
+                        runtime_error("[MemoryPool(safe)::allocate] cudaDeviceSynchronize failed.", status);
+                    }
                 }
-            }
+            #endif
             impl_->unused.erase(iterator);
             return ptr;
         }
@@ -192,6 +200,13 @@ namespace troy::utils {
 
         if (is_global_pool) {
             global_pool = nullptr;
+        }
+    }
+
+    void MemoryPool::force_set_thread_id(std::thread::id id) {
+        std::unique_lock lock(impl_->mutex);
+        for (auto it = impl_->unused.begin(); it != impl_->unused.end(); ++it) {
+            it->second.second = id;
         }
     }
 

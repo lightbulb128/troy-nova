@@ -44,7 +44,7 @@ namespace troy {namespace utils {
         }
 
         // move constructor
-        DynamicArray(DynamicArray&& other) : inner(std::move(other.inner)) {}
+        DynamicArray(DynamicArray&& other): inner(std::move(other.inner)) {}
 
         // copy constructor deleted
         DynamicArray(const DynamicArray& other) = delete;

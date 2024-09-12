@@ -2,8 +2,10 @@
 #include <cstdint>
 #include "basics.h"
 #include "../modulus.h"
+#include "memory_pool.h"
 #include "uint_small_mod.h"
 #include "number_theory.h"
+#include "box_batch.h"
 
 namespace troy {namespace utils {
 
@@ -127,10 +129,15 @@ namespace troy {namespace utils {
         ConstSlice<NTTTables> tables_;
     };
 
-    void ntt_transfer_to_rev_inplace(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, NTTTableIndexer tables);
+    void ntt_transfer_to_rev_inplace  (Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, NTTTableIndexer tables);
     void ntt_transfer_from_rev_inplace(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, NTTTableIndexer tables);
-    void ntt_transfer_to_rev(ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, Slice<uint64_t> result, NTTTableIndexer tables);
+    void ntt_transfer_to_rev  (ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, Slice<uint64_t> result, NTTTableIndexer tables);
     void ntt_transfer_from_rev(ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, Slice<uint64_t> result, NTTTableIndexer tables);
+    
+    void ntt_transfer_to_rev_inplace_batched  (const SliceVec<uint64_t>& operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, NTTTableIndexer tables, MemoryPoolHandle pool);
+    void ntt_transfer_from_rev_inplace_batched(const SliceVec<uint64_t>& operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, NTTTableIndexer tables, MemoryPoolHandle pool);
+    void ntt_transfer_to_rev_batched  (const ConstSliceVec<uint64_t>& operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, const SliceVec<uint64_t>& result, NTTTableIndexer tables, MemoryPoolHandle pool);
+    void ntt_transfer_from_rev_batched(const ConstSliceVec<uint64_t>& operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, const SliceVec<uint64_t>& result, NTTTableIndexer tables, MemoryPoolHandle pool);
 
     void ntt_transfer_last_reduce(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, NTTTableIndexer tables);
     void ntt_multiply_inv_degree(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, NTTTableIndexer tables);
@@ -142,10 +149,13 @@ namespace troy {namespace utils {
         ntt_multiply_inv_degree(operand, pcount, tables.size(), log_degree, NTTTableIndexer(tables));
     }
 
-    /*
-        Note: originally the implementations of ntt_lazy and ntt were different, where the lazy does not execute the last 4m to m reduction. (ntt_transfer_last_reduce)
-        but for GPU this difference would make a new kernel launch which might be slower than just doing the last reduction.
-    */
+
+
+
+
+    // =================================================
+    //        NTT/INTT inplace with NTTTableIndexer
+    // =================================================
 
     inline void ntt_inplace_ps(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t degree, NTTTableIndexer tables) {
         int logd = utils::get_power_of_two(degree);
@@ -154,6 +164,14 @@ namespace troy {namespace utils {
         }
         size_t log_degree = static_cast<size_t>(logd);
         ntt_transfer_to_rev_inplace(operand, pcount, component_count, log_degree, false, tables);
+    }
+    inline void ntt_inplace_bps(const SliceVec<uint64_t>& operand, size_t pcount, size_t component_count, size_t degree, NTTTableIndexer tables, MemoryPoolHandle pool) {
+        int logd = utils::get_power_of_two(degree);
+        if (logd < 0) {
+            throw std::invalid_argument("[ntt_inplace_ps] degree is invalid");
+        }
+        size_t log_degree = static_cast<size_t>(logd);
+        ntt_transfer_to_rev_inplace_batched(operand, pcount, component_count, log_degree, false, tables, pool);
     }
 
     inline void intt_inplace_ps(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t degree, NTTTableIndexer tables) {
@@ -164,19 +182,46 @@ namespace troy {namespace utils {
         size_t log_degree = static_cast<size_t>(logd);
         ntt_transfer_from_rev_inplace(operand, pcount, component_count, log_degree, true, tables);
     }
+    inline void intt_inplace_bps(const SliceVec<uint64_t>& operand, size_t pcount, size_t component_count, size_t degree, NTTTableIndexer tables, MemoryPoolHandle pool) {
+        int logd = utils::get_power_of_two(degree);
+        if (logd < 0) {
+            throw std::invalid_argument("[inverse_ntt_negacyclic_harvey_lazy_ps] degree is invalid");
+        }
+        size_t log_degree = static_cast<size_t>(logd);
+        ntt_transfer_from_rev_inplace_batched(operand, pcount, component_count, log_degree, true, tables, pool);
+    }
 
     inline void ntt_inplace_p(Slice<uint64_t> operand, size_t component_count, size_t degree, NTTTableIndexer tables) {
         ntt_inplace_ps(operand, 1, component_count, degree, tables);
+    }
+    inline void ntt_inplace_bp(const SliceVec<uint64_t>& operand, size_t component_count, size_t degree, NTTTableIndexer tables, MemoryPoolHandle pool) {
+        ntt_inplace_bps(operand, 1, component_count, degree, tables, pool);
     }
 
     inline void intt_inplace_p(Slice<uint64_t> operand, size_t component_count, size_t degree, NTTTableIndexer tables) {
         intt_inplace_ps(operand, 1, component_count, degree, tables);
     }
+    inline void intt_inplace_bp(const SliceVec<uint64_t>& operand, size_t component_count, size_t degree, NTTTableIndexer tables, MemoryPoolHandle pool) {
+        intt_inplace_bps(operand, 1, component_count, degree, tables, pool);
+    }
+
+
+
+
+
+    // =================================================
+    //        NTT/INTT inplace with only one table
+    // =================================================
 
     inline void ntt_inplace(Slice<uint64_t> operand, size_t degree, ConstPointer<NTTTables> tables) {
         ConstSlice<NTTTables> table_one_slice(tables);
         NTTTableIndexer indexer(table_one_slice);
         ntt_inplace_ps(operand, 1, 1, degree, indexer);
+    }
+    inline void ntt_inplace_b(const SliceVec<uint64_t>& operand, size_t degree, ConstPointer<NTTTables> tables, MemoryPoolHandle pool) {
+        ConstSlice<NTTTables> table_one_slice(tables);
+        NTTTableIndexer indexer(table_one_slice);
+        ntt_inplace_bps(operand, 1, 1, degree, indexer, pool);
     }
 
     inline void intt_inplace(Slice<uint64_t> operand, size_t degree, ConstPointer<NTTTables> tables) {
@@ -184,23 +229,44 @@ namespace troy {namespace utils {
         NTTTableIndexer indexer(table_one_slice);
         intt_inplace_ps(operand, 1, 1, degree, indexer);
     }
+    inline void intt_inplace_b(const SliceVec<uint64_t>& operand, size_t degree, ConstPointer<NTTTables> tables, MemoryPoolHandle pool) {
+        ConstSlice<NTTTables> table_one_slice(tables);
+        NTTTableIndexer indexer(table_one_slice);
+        intt_inplace_bps(operand, 1, 1, degree, indexer, pool);
+    }
+
+
+
+
+
+    // =================================================
+    //        NTT/INTT assign with NTTTableIndexer
+    // =================================================
 
     inline void ntt_ps(ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t degree, Slice<uint64_t> result, NTTTableIndexer tables) {
         int logd = utils::get_power_of_two(degree);
         if (logd < 0) {
-            throw std::invalid_argument("[inverse_ntt_negacyclic_harvey_lazy_ps] degree is invalid");
+            throw std::invalid_argument("[ntt_ps] degree is invalid");
         }
         size_t log_degree = static_cast<size_t>(logd);
         ntt_transfer_to_rev(operand, pcount, component_count, log_degree, false, result, tables);
     }
+    inline void ntt_bps(const ConstSliceVec<uint64_t>& operand, size_t pcount, size_t component_count, size_t degree, const SliceVec<uint64_t>& result, NTTTableIndexer tables, MemoryPoolHandle pool) {
+        int logd = utils::get_power_of_two(degree);
+        if (logd < 0) {
+            throw std::invalid_argument("[ntt_ps] degree is invalid");
+        }
+        size_t log_degree = static_cast<size_t>(logd);
+        ntt_transfer_to_rev_batched(operand, pcount, component_count, log_degree, false, result, tables, pool);
+    }
+    
     inline void ntt_p(ConstSlice<uint64_t> operand, size_t component_count, size_t degree, Slice<uint64_t> result, NTTTableIndexer tables) {
         ntt_ps(operand, 1, component_count, degree, result, tables);
     }
-    inline void ntt(ConstSlice<uint64_t> operand, size_t degree, ConstPointer<NTTTables> tables, Slice<uint64_t> result) {
-        ConstSlice<NTTTables> table_one_slice(tables);
-        NTTTableIndexer indexer(table_one_slice);
-        ntt_ps(operand, 1, 1, degree, result, indexer);
+    inline void ntt_bp(const ConstSliceVec<uint64_t>& operand, size_t component_count, size_t degree, const SliceVec<uint64_t>& result, NTTTableIndexer tables, MemoryPoolHandle pool) {
+        ntt_bps(operand, 1, component_count, degree, result, tables, pool);
     }
+
     inline void intt_ps(ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t degree, Slice<uint64_t> result, NTTTableIndexer tables) {
         int logd = utils::get_power_of_two(degree);
         if (logd < 0) {
@@ -209,15 +275,58 @@ namespace troy {namespace utils {
         size_t log_degree = static_cast<size_t>(logd);
         ntt_transfer_from_rev(operand, pcount, component_count, log_degree, true, result, tables);
     }
+    inline void intt_bps(const ConstSliceVec<uint64_t>& operand, size_t pcount, size_t component_count, size_t degree, const SliceVec<uint64_t>& result, NTTTableIndexer tables, MemoryPoolHandle pool) {
+        int logd = utils::get_power_of_two(degree);
+        if (logd < 0) {
+            throw std::invalid_argument("[inverse_ntt_negacyclic_harvey_lazy_ps] degree is invalid");
+        }
+        size_t log_degree = static_cast<size_t>(logd);
+        ntt_transfer_from_rev_batched(operand, pcount, component_count, log_degree, true, result, tables, pool);
+    }
     inline void intt_p(ConstSlice<uint64_t> operand, size_t component_count, size_t degree, Slice<uint64_t> result, NTTTableIndexer tables) {
         intt_ps(operand, 1, component_count, degree, result, tables);
     }
+    inline void intt_bp(const ConstSliceVec<uint64_t>& operand, size_t component_count, size_t degree, const SliceVec<uint64_t>& result, NTTTableIndexer tables, MemoryPoolHandle pool) {
+        intt_bps(operand, 1, component_count, degree, result, tables, pool);
+    }
+    
+
+
+
+
+    // ======================================================
+    //        NTT/INTT assign with only one table
+    // ======================================================
+
+    inline void ntt(ConstSlice<uint64_t> operand, size_t degree, ConstPointer<NTTTables> tables, Slice<uint64_t> result) {
+        ConstSlice<NTTTables> table_one_slice(tables);
+        NTTTableIndexer indexer(table_one_slice);
+        ntt_ps(operand, 1, 1, degree, result, indexer);
+    }
+    inline void ntt_b(const ConstSliceVec<uint64_t>& operand, size_t degree, ConstPointer<NTTTables> tables, const SliceVec<uint64_t>& result, MemoryPoolHandle pool) {
+        ConstSlice<NTTTables> table_one_slice(tables);
+        NTTTableIndexer indexer(table_one_slice);
+        ntt_bps(operand, 1, 1, degree, result, indexer, pool);
+    }
+
     inline void intt(ConstSlice<uint64_t> operand, size_t degree, ConstPointer<NTTTables> tables, Slice<uint64_t> result) {
         ConstSlice<NTTTables> table_one_slice(tables);
         NTTTableIndexer indexer(table_one_slice);
         intt_ps(operand, 1, 1, degree, result, indexer);
     }
+    inline void intt_b(const ConstSliceVec<uint64_t>& operand, size_t degree, ConstPointer<NTTTables> tables, const SliceVec<uint64_t>& result, MemoryPoolHandle pool) {
+        ConstSlice<NTTTables> table_one_slice(tables);
+        NTTTableIndexer indexer(table_one_slice);
+        intt_bps(operand, 1, 1, degree, result, indexer, pool);
+    }
 
+
+
+
+
+    // ======================================================
+    //        NTT/INTT inplace with default table indexer
+    // ======================================================
 
     inline void ntt_inplace_ps(Slice<uint64_t> operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables) {
         ntt_inplace_ps(operand, pcount, tables.size(), degree, NTTTableIndexer(tables));
@@ -231,6 +340,27 @@ namespace troy {namespace utils {
     inline void intt_inplace_p(Slice<uint64_t> operand, size_t degree, ConstSlice<NTTTables> tables) {
         intt_inplace_ps(operand, 1, tables.size(), degree, NTTTableIndexer(tables));
     }
+    inline void ntt_inplace_bps(const SliceVec<uint64_t>& operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables, MemoryPoolHandle pool) {
+        ntt_inplace_bps(operand, pcount, tables.size(), degree, NTTTableIndexer(tables), pool);
+    }
+    inline void ntt_inplace_bp(const SliceVec<uint64_t>& operand, size_t degree, ConstSlice<NTTTables> tables, MemoryPoolHandle pool) {
+        ntt_inplace_bps(operand, 1, tables.size(), degree, NTTTableIndexer(tables), pool);
+    }
+    inline void intt_inplace_bps(const SliceVec<uint64_t>& operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables, MemoryPoolHandle pool) {
+        intt_inplace_bps(operand, pcount, tables.size(), degree, NTTTableIndexer(tables), pool);
+    }
+    inline void intt_inplace_bp(const SliceVec<uint64_t>& operand, size_t degree, ConstSlice<NTTTables> tables, MemoryPoolHandle pool) {
+        intt_inplace_bps(operand, 1, tables.size(), degree, NTTTableIndexer(tables), pool);
+    }
+
+
+
+
+
+    // ======================================================
+    //        NTT/INTT assign with default table indexer
+    // ======================================================
+
     inline void ntt_ps(ConstSlice<uint64_t> operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables, Slice<uint64_t> result) {
         ntt_ps(operand, pcount, tables.size(), degree, result, NTTTableIndexer(tables));
     }
@@ -242,6 +372,18 @@ namespace troy {namespace utils {
     }
     inline void intt_p(ConstSlice<uint64_t> operand, size_t degree, ConstSlice<NTTTables> tables, Slice<uint64_t> result) {
         intt_ps(operand, 1, tables.size(), degree, result, NTTTableIndexer(tables));
+    }
+    inline void ntt_bps(const ConstSliceVec<uint64_t>& operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables, const SliceVec<uint64_t>& result, MemoryPoolHandle pool) {
+        ntt_bps(operand, pcount, tables.size(), degree, result, NTTTableIndexer(tables), pool);
+    }
+    inline void ntt_bp(const ConstSliceVec<uint64_t>& operand, size_t degree, ConstSlice<NTTTables> tables, const SliceVec<uint64_t>& result, MemoryPoolHandle pool) {
+        ntt_bps(operand, 1, tables.size(), degree, result, NTTTableIndexer(tables), pool);
+    }
+    inline void intt_bps(const ConstSliceVec<uint64_t>& operand, size_t pcount, size_t degree, ConstSlice<NTTTables> tables, const SliceVec<uint64_t>& result, MemoryPoolHandle pool) {
+        intt_bps(operand, pcount, tables.size(), degree, result, NTTTableIndexer(tables), pool);
+    }
+    inline void intt_bp(const ConstSliceVec<uint64_t>& operand, size_t degree, ConstSlice<NTTTables> tables, const SliceVec<uint64_t>& result, MemoryPoolHandle pool) {
+        intt_bps(operand, 1, tables.size(), degree, result, NTTTableIndexer(tables), pool);
     }
 
 }}

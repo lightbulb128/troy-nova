@@ -4,12 +4,12 @@ using namespace std;
 using namespace troy;
 using namespace troy::linear;
 
-inline uint64_t multiply_mod(uint64_t a, uint64_t b, uint64_t t) {
+static inline uint64_t multiply_mod(uint64_t a, uint64_t b, uint64_t t) {
     __uint128_t c = static_cast<__uint128_t>(a) * static_cast<__uint128_t>(b);
     return static_cast<uint64_t>(c % static_cast<__uint128_t>(t));
 }
 
-inline uint64_t add_mod(uint64_t a, uint64_t b, uint64_t t) {
+static inline uint64_t add_mod(uint64_t a, uint64_t b, uint64_t t) {
     if (a + b >= t) {
         return a + b - t;
     } else {
@@ -17,11 +17,11 @@ inline uint64_t add_mod(uint64_t a, uint64_t b, uint64_t t) {
     }
 }
 
-inline void add_mod_inplace(uint64_t& a, uint64_t b, uint64_t t) {
+static inline void add_mod_inplace(uint64_t& a, uint64_t b, uint64_t t) {
     a = add_mod(a, b, t);
 }
 
-std::vector<uint64_t> random_polynomial(size_t size, uint64_t max_value = 10) {
+static std::vector<uint64_t> random_polynomial(size_t size, uint64_t max_value = 10) {
     std::vector<uint64_t> result(size);
     for (size_t i = 0; i < size; i++) {
         result[i] = rand() % max_value;
@@ -29,7 +29,7 @@ std::vector<uint64_t> random_polynomial(size_t size, uint64_t max_value = 10) {
     return result;
 }
 
-bool vector_equal(const vector<uint64_t>& a, const vector<uint64_t>& b) {
+static bool vector_equal(const vector<uint64_t>& a, const vector<uint64_t>& b) {
     if (a.size() != b.size()) return false;
     for (size_t i = 0; i < a.size(); i++) {
         if (a[i] != b[i]) return false;
@@ -37,7 +37,7 @@ bool vector_equal(const vector<uint64_t>& a, const vector<uint64_t>& b) {
     return true;
 }
 
-void test_bfv_matmul(
+static void test_bfv_matmul(
     bool is_bgv,
     size_t poly_modulus_degree,
     const Modulus& plain_modulus,

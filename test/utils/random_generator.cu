@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include "../test.h"
 #include "../../src/utils/random_generator.h"
+#include "../../src/batch_utils.h"
 
 using namespace troy;
 using namespace troy::utils;
@@ -233,6 +234,7 @@ namespace random_generator {
             for (size_t i = 0; i < n * moduli_count; i++) {
                 ASSERT_EQ(buffer_host[i], buffer_device[i]);
             }
+            ASSERT_EQ(rng1.get_counter(), rng2.get_counter());
         }
 
         { // centered binomial
@@ -246,6 +248,7 @@ namespace random_generator {
             for (size_t i = 0; i < n * moduli_count; i++) {
                 ASSERT_EQ(buffer_host[i], buffer_device[i]);
             }
+            ASSERT_EQ(rng1.get_counter(), rng2.get_counter());
         }
 
         { // uniform
@@ -259,10 +262,113 @@ namespace random_generator {
             for (size_t i = 0; i < n * moduli_count; i++) {
                 ASSERT_EQ(buffer_host[i], buffer_device[i]);
             }
+            ASSERT_EQ(rng1.get_counter(), rng2.get_counter());
 
         }
 
     }
 
+
+    TEST(RandomGeneratorTest, DeviceBatchConsistency) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        constexpr size_t batch_size = 16;
+
+        RandomGenerator rng1(36);
+        RandomGenerator rng2(36);
+
+        for (size_t produce_count: {3, 8, 16, 123, 128}) { // fill bytes
+            std::vector<Array<uint8_t>> buffers1(batch_size);
+            std::vector<Array<uint8_t>> buffers2(batch_size);
+            for (size_t i = 0; i < batch_size; i++) {
+                buffers1[i] = Array<uint8_t>(produce_count, true);
+                buffers2[i] = Array<uint8_t>(produce_count, true);
+            }
+            auto buffers1_references = batch_utils::rcollect_reference<Array<uint8_t>, uint8_t>(buffers1);
+
+            rng1.fill_bytes_batched(buffers1_references, MemoryPool::GlobalPool());
+            for (size_t i = 0; i < batch_size; i++) {
+                rng2.fill_bytes(buffers2[i].reference());
+            }
+
+            for (size_t i = 0; i < batch_size; i++) {
+                buffers1[i].to_host_inplace();
+                buffers2[i].to_host_inplace();
+                for (size_t j = 0; j < produce_count; j++) {
+                    ASSERT_EQ(buffers1[i][j], buffers2[i][j]);
+                }
+            }
+            ASSERT_EQ(rng1.get_counter(), rng2.get_counter());
+        }
+
+        size_t moduli_count = 3;
+        Array<Modulus> moduli(moduli_count, false);
+        moduli[0] = Modulus(12345);
+        moduli[1] = Modulus(23456);
+        moduli[2] = Modulus(56789);
+        Array<Modulus> modulus_device = moduli.to_device();
+
+        size_t n = 123;
+
+        { 
+            std::vector<Array<uint64_t>> buffers1(batch_size);
+            std::vector<Array<uint64_t>> buffers2(batch_size);
+            for (size_t i = 0; i < batch_size; i++) {
+                buffers1[i] = Array<uint64_t>(n * moduli_count, true);
+                buffers2[i] = Array<uint64_t>(n * moduli_count, true);
+            }
+            auto buffers1_references = batch_utils::rcollect_reference<Array<uint64_t>, uint64_t>(buffers1);
+
+            // ternary
+            rng1.sample_poly_ternary_batched(buffers1_references, n, modulus_device.const_reference());
+            for (size_t i = 0; i < batch_size; i++) {
+                rng2.sample_poly_ternary(buffers2[i].reference(), n, modulus_device.const_reference());
+            }
+            for (size_t i = 0; i < batch_size; i++) {
+                buffers1[i].to_host_inplace();
+                buffers2[i].to_host_inplace();
+                for (size_t j = 0; j < n * moduli_count; j++) {
+                    ASSERT_EQ(buffers1[i][j], buffers2[i][j]);
+                }
+            }
+            ASSERT_EQ(rng1.get_counter(), rng2.get_counter());
+
+            // centered binomial
+            for (size_t i = 0; i < batch_size; i++) {
+                buffers1[i] = Array<uint64_t>(n * moduli_count, true);
+                buffers2[i] = Array<uint64_t>(n * moduli_count, true);
+            }
+            rng1.sample_poly_centered_binomial_batched(buffers1_references, n, modulus_device.const_reference());
+            for (size_t i = 0; i < batch_size; i++) {
+                rng2.sample_poly_centered_binomial(buffers2[i].reference(), n, modulus_device.const_reference());
+            }
+            for (size_t i = 0; i < batch_size; i++) {
+                buffers1[i].to_host_inplace();
+                buffers2[i].to_host_inplace();
+                for (size_t j = 0; j < n * moduli_count; j++) {
+                    ASSERT_EQ(buffers1[i][j], buffers2[i][j]);
+                }
+            }
+            ASSERT_EQ(rng1.get_counter(), rng2.get_counter());
+
+            // uniform
+            for (size_t i = 0; i < batch_size; i++) {
+                buffers1[i] = Array<uint64_t>(n * moduli_count, true);
+                buffers2[i] = Array<uint64_t>(n * moduli_count, true);
+            }
+            rng1.sample_poly_uniform_batched(buffers1_references, n, modulus_device.const_reference());
+            for (size_t i = 0; i < batch_size; i++) {
+                rng2.sample_poly_uniform(buffers2[i].reference(), n, modulus_device.const_reference());
+            }
+            for (size_t i = 0; i < batch_size; i++) {
+                buffers1[i].to_host_inplace();
+                buffers2[i].to_host_inplace();
+                for (size_t j = 0; j < n * moduli_count; j++) {
+                    ASSERT_EQ(buffers1[i][j], buffers2[i][j]);
+                }
+            }
+            ASSERT_EQ(rng1.get_counter(), rng2.get_counter());
+        }
+        
+    }
 
 }

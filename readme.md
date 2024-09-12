@@ -124,15 +124,17 @@ int main() {
 
 # Memory Pool
 
-Troy uses memory pools to manage device memory, and some APIs take a memory pool handle as an argument. By default, you can omit this argument and Troy will use a default global memory pool for all those operations. This default memory pool will be created on device 0 (the first visible CUDA device). All memory pools are thread safe so a lazy user simply use defaults and be free of any concerns of memory pools. 
+Troy uses memory pools to manage device memory, and some APIs take a memory pool handle as an argument. By default, you can omit this argument and Troy will use a default global memory pool for all those operations. This default memory pool will be created on device 0 (the first visible CUDA device). All memory pools are thread safe so a lazy user simply use defaults and be free of any concerns of memory pools. You can disable the management of device memory by memory pools by applying `TROY_MEMORY_POOL=OFF` to cmake. If so, although memory pools can still be created, they do not manage the memory but simply call cudaMalloc and cudaFree whenever their methods are called.
 
 Note that if you use the default memory pool, it is recommented that you call `MemoryPool::Destroy` before the program exits to safely release the static memory pool. But not doing it may just still go smoothly.
-
-You can disable the management of device memory by memory pools by applying `TROY_MEMORY_POOL=OFF` to cmake. If so, although memory pools can still be created, they do not manage the memory but simply call cudaMalloc and cudaFree whenever their methods are called. When memory pool is enabled, some users report unexpected exceptions complaining `"[MemoryPool::get] The singleton has been destroyed."` when using the library. One could check if `MemoryPool::Destroy()` has been called prematurely in your program to locate the problem, or one could simply provide a `TROY_MEMORY_POOL_UNSAFE=OFF` to try to avoid it. This `TROY_MEMORY_POOL_UNSAFE` is an experimental hacking solution (because I have not reproduced the error on my machine yet 😢), so if you still get the errors please file an issue.
 
 ## Multithreading or multiple devices usage with memory pools
 
 Some programs could benefit from multithreading, but running multiple threads with memory pools could be tricky. You could implement your multithread application with the following paradigms, and for example you can see `examples/20_memory_pools.cu`.
+
+### Multithreading issue
+
+Please note that, all kernels in this library runs on the default stream, and by default we compile with `per-thread default streams`. That is, if two kernels is triggered from two different threads, one cannot guarantee their finish order is the same as launch order. It is **your duty** to ensure that the data racing is handled when using multithreading. We illustrate this issue by an example when this is not handled properly. See `examples/30_issue_multithread.cu`.
 
 ### Multithreading with a single device
 

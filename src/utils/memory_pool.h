@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <iostream>
 #include <set>
+#include <thread>
 
 namespace troy {namespace utils {
 
@@ -61,8 +62,12 @@ namespace troy {namespace utils {
         struct Impl;
         std::shared_ptr<Impl> impl_;
         inline static void ensure_global_pool() {
-            std::unique_lock<std::mutex> lock(global_pool_mutex);
-            if (global_pool == nullptr) {
+            // Don't directly exclusively lock but check established first.
+            if (!established) {
+                std::unique_lock lock(global_pool_mutex);
+                if (global_pool != nullptr) {
+                    return;
+                }
                 int count = device_count();
                 has_device = count > 0;
                 if (!has_device) {
@@ -70,6 +75,7 @@ namespace troy {namespace utils {
                 }
                 global_pool = std::make_shared<MemoryPool>(0);
                 global_pool->is_global_pool = true;
+                established = true;
             }
         }
         inline static void runtime_error(const char* prompt, cudaError_t status) {
@@ -100,6 +106,7 @@ namespace troy {namespace utils {
         void release(void* ptr);
         void destroy();
         void release_unused();
+        void force_set_thread_id(std::thread::id id);
         inline static void* Allocate(size_t required) {
             ensure_global_pool();
             return global_pool->allocate(required);

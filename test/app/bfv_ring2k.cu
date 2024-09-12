@@ -59,6 +59,7 @@ namespace bfv_ring2k {
     template <typename T>
     void template_test_scale_up_down(bool device, vector<size_t> q_bits, vector<size_t> t_bits) {
         for (size_t t_bit_length: t_bits) {
+
             size_t poly_modulus_degree = 32;
             EncryptionParameters parms = EncryptionParameters(SchemeType::BFV);
             parms.set_plain_modulus(PlainModulus::batching(poly_modulus_degree, 30)); // this does not affect anything
@@ -87,6 +88,28 @@ namespace bfv_ring2k {
             plaintext = encoder.scale_up_new(message, second_parms_id);
             result = encoder.scale_down_new(plaintext);
             ASSERT_TRUE(same_vector(message, result));
+
+            // we should be able to scale down more than poly degree's slots
+            {
+                constexpr size_t n = 54;
+                auto message = random_sampler<T>(n, t_bit_length);
+                Plaintext total;
+                if (device) total.to_device_inplace();
+                total.resize_rns_partial(*he_context, he_context->first_parms_id(), n, false, false);
+                for (size_t i = 0; i < n; i += poly_modulus_degree) {
+                    size_t len = std::min(poly_modulus_degree, n - i);
+                    vector<T> partial_message(message.begin() + i, message.begin() + i + len);
+                    Plaintext plaintext = encoder.scale_up_new(partial_message, std::nullopt);
+                    ASSERT_TRUE(plaintext.coeff_count() == len);
+                    ASSERT_TRUE(plaintext.poly_modulus_degree() == poly_modulus_degree);
+                    ASSERT_TRUE(plaintext.data().size() == plaintext.coeff_modulus_size() * len);
+                    for (size_t j = 0; j < plaintext.coeff_modulus_size(); j++) {
+                        total.component(j).slice(i, i + len).copy_from_slice(plaintext.const_component(j));
+                    }
+                }
+                std::vector<T> result = encoder.scale_down_new(total);
+                ASSERT_TRUE(same_vector(message, result));
+            }
         }
     }
 
@@ -125,6 +148,83 @@ namespace bfv_ring2k {
     TEST(BFVRing2kTest, DeviceScaleUpDownU128Test) {
         SKIP_WHEN_NO_CUDA_DEVICE;
         template_test_scale_up_down<uint128_t>(true, 
+            {60, 60, 60, 60, 60, 60},
+            {128, 100, 65}
+        );
+    }
+
+
+    template <typename T>
+    void template_test_scale_up_down_batched(vector<size_t> q_bits, vector<size_t> t_bits) {
+        constexpr bool device = true;
+        for (size_t t_bit_length: t_bits) {
+
+            constexpr size_t poly_modulus_degree = 32;
+            constexpr size_t batch_size = 16;
+            EncryptionParameters parms = EncryptionParameters(SchemeType::BFV);
+            parms.set_plain_modulus(PlainModulus::batching(poly_modulus_degree, 30)); // this does not affect anything
+            parms.set_poly_modulus_degree(poly_modulus_degree);
+            parms.set_coeff_modulus(CoeffModulus::create(poly_modulus_degree, q_bits));
+            HeContextPointer he_context = HeContext::create(parms, true, SecurityLevel::Nil, 0x123);
+            PolynomialEncoderRing2k<T> encoder(he_context, t_bit_length);
+
+            if (device) {
+                he_context->to_device_inplace();
+                encoder.to_device_inplace();
+            }
+
+            std::vector<size_t> ns; for (size_t i = 0; i < batch_size; i++) ns.push_back(i);
+            std::vector<utils::Array<T>> message(batch_size);
+            for (size_t i = 0; i < batch_size; i++) {
+                message[i] = utils::Array<T>::from_vector(random_sampler<T>(ns[i], t_bit_length));
+                message[i].to_device_inplace();
+            }
+
+            {
+                std::vector<Plaintext> plaintext(batch_size);
+                encoder.scale_up_slice_batched(batch_utils::rcollect_const_reference<utils::Array<T>, T>(message), std::nullopt, batch_utils::collect_pointer(plaintext));
+                for (size_t i = 0; i < batch_size; i++) {
+                    ASSERT_TRUE(plaintext[i].coeff_count() == ns[i]);
+                    ASSERT_TRUE(plaintext[i].poly_modulus_degree() == poly_modulus_degree);
+                    ASSERT_TRUE(plaintext[i].data().size() == plaintext[i].coeff_modulus_size() * ns[i]);
+                    std::vector<T> result = encoder.scale_down_new(plaintext[i]);
+                    ASSERT_TRUE(same_vector(message[i].to_vector(), result));
+                }
+            }
+            
+            {
+                ParmsID second_parms_id = he_context->first_context_data_pointer()->next_context_data_pointer()->parms_id();
+                std::vector<Plaintext> plaintext(batch_size);
+                encoder.scale_up_slice_batched(batch_utils::rcollect_const_reference<utils::Array<T>, T>(message), second_parms_id, batch_utils::collect_pointer(plaintext));
+                for (size_t i = 0; i < batch_size; i++) {
+                    ASSERT_TRUE(plaintext[i].coeff_count() == ns[i]);
+                    ASSERT_TRUE(plaintext[i].poly_modulus_degree() == poly_modulus_degree);
+                    ASSERT_TRUE(plaintext[i].data().size() == plaintext[i].coeff_modulus_size() * ns[i]);
+                    std::vector<T> result = encoder.scale_down_new(plaintext[i]);
+                    ASSERT_TRUE(same_vector(message[i].to_vector(), result));
+                }
+            }
+        }
+    }
+
+
+    TEST(BFVRing2kTest, DeviceScaleUpDownBatchedU32Test) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        template_test_scale_up_down_batched<uint32_t>( 
+            {40, 40, 40}, 
+            {32, 20, 17}
+        );
+    }
+    TEST(BFVRing2kTest, DeviceScaleUpDownBatchedU64Test) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        template_test_scale_up_down_batched<uint64_t>( 
+            {40, 40, 40, 40}, 
+            {64, 50, 33}
+        );
+    }
+    TEST(BFVRing2kTest, DeviceScaleUpDownBatchedU128Test) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        template_test_scale_up_down_batched<uint128_t>( 
             {60, 60, 60, 60, 60, 60},
             {128, 100, 65}
         );
@@ -204,6 +304,84 @@ namespace bfv_ring2k {
             {128, 100, 65}
         );
     }
+
+    
+    template <typename T>
+    void template_test_centralize_decentralize_batched(vector<size_t> q_bits, vector<size_t> t_bits) {
+        constexpr bool device = true;
+        for (size_t t_bit_length: t_bits) {
+
+            constexpr size_t poly_modulus_degree = 32;
+            constexpr size_t batch_size = 16;
+            EncryptionParameters parms = EncryptionParameters(SchemeType::BFV);
+            parms.set_plain_modulus(PlainModulus::batching(poly_modulus_degree, 30)); // this does not affect anything
+            parms.set_poly_modulus_degree(poly_modulus_degree);
+            parms.set_coeff_modulus(CoeffModulus::create(poly_modulus_degree, q_bits));
+            HeContextPointer he_context = HeContext::create(parms, true, SecurityLevel::Nil, 0x123);
+            PolynomialEncoderRing2k<T> encoder(he_context, t_bit_length);
+
+            if (device) {
+                he_context->to_device_inplace();
+                encoder.to_device_inplace();
+            }
+
+            std::vector<size_t> ns; for (size_t i = 0; i < batch_size; i++) ns.push_back(i);
+            std::vector<utils::Array<T>> message(batch_size);
+            for (size_t i = 0; i < batch_size; i++) {
+                message[i] = utils::Array<T>::from_vector(random_sampler<T>(ns[i], t_bit_length));
+                message[i].to_device_inplace();
+            }
+
+            {
+                std::vector<Plaintext> plaintext(batch_size);
+                encoder.centralize_slice_batched(batch_utils::rcollect_const_reference<utils::Array<T>, T>(message), std::nullopt, batch_utils::collect_pointer(plaintext));
+                for (size_t i = 0; i < batch_size; i++) {
+                    ASSERT_TRUE(plaintext[i].coeff_count() == ns[i]);
+                    ASSERT_TRUE(plaintext[i].poly_modulus_degree() == poly_modulus_degree);
+                    ASSERT_TRUE(plaintext[i].data().size() == plaintext[i].coeff_modulus_size() * ns[i]);
+                    std::vector<T> result = encoder.decentralize_new(plaintext[i]);
+                    ASSERT_TRUE(same_vector(message[i].to_vector(), result));
+                }
+            }
+            
+            {
+                ParmsID second_parms_id = he_context->first_context_data_pointer()->next_context_data_pointer()->parms_id();
+                std::vector<Plaintext> plaintext(batch_size);
+                encoder.centralize_slice_batched(batch_utils::rcollect_const_reference<utils::Array<T>, T>(message), second_parms_id, batch_utils::collect_pointer(plaintext));
+                for (size_t i = 0; i < batch_size; i++) {
+                    ASSERT_TRUE(plaintext[i].coeff_count() == ns[i]);
+                    ASSERT_TRUE(plaintext[i].poly_modulus_degree() == poly_modulus_degree);
+                    ASSERT_TRUE(plaintext[i].data().size() == plaintext[i].coeff_modulus_size() * ns[i]);
+                    std::vector<T> result = encoder.decentralize_new(plaintext[i]);
+                    ASSERT_TRUE(same_vector(message[i].to_vector(), result));
+                }
+            }
+        }
+    }
+
+    TEST(BFVRing2kTest, DeviceCentralizeDecentralizeBatchedU32Test) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        template_test_centralize_decentralize_batched<uint32_t>( 
+            {40, 40, 40}, 
+            {32, 20, 17}
+        );
+    }
+    TEST(BFVRing2kTest, DeviceCentralizeDecentralizeBatchedU64Test) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        template_test_centralize_decentralize_batched<uint64_t>( 
+            {40, 40, 40, 40}, 
+            {64, 50, 33}
+        );
+    }
+    TEST(BFVRing2kTest, DeviceCentralizeDecentralizeBatchedU128Test) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        template_test_centralize_decentralize_batched<uint128_t>( 
+            {60, 60, 60, 60, 60, 60},
+            {128, 100, 65}
+        );
+    }
+
+
 
     template <typename T>
     void template_test_encrypt(bool device, vector<size_t> q_bits, vector<size_t> t_bits) {
