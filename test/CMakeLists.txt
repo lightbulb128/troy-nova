@@ -45,6 +45,7 @@ if(TROY_TEST)
         multithread.cu
         # temp.cu
 
+        batch_encoder_batched.cu
         encryptor_batched.cu
         evaluator_batched.cu
     )
