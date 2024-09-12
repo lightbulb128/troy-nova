@@ -13,7 +13,7 @@ namespace troy::utils {
     struct MemoryPool::Impl {
         static const int PRESERVED_MEMORY_BYTES = 1024 * 1024 * 32;
         std::shared_mutex mutex;
-        
+
         // key-value pairs are (allocated memory size, (pointer address, last used thread id))
         std::multimap<size_t, std::pair<void*, std::thread::id>> unused;
 
