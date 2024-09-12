@@ -13,7 +13,7 @@ namespace troy::utils {
     struct MemoryPool::Impl {
         static const int PRESERVED_MEMORY_BYTES = 1024 * 1024 * 32;
         std::shared_mutex mutex;
-
+        
         // key-value pairs are (allocated memory size, (pointer address, last used thread id))
         std::multimap<size_t, std::pair<void*, std::thread::id>> unused;
 
@@ -53,7 +53,7 @@ namespace troy::utils {
     }
     
     void* MemoryPool::try_allocate(size_t required) {
-        std::unique_lock lock(impl_->mutex);
+        std::unique_lock<std::shared_mutex> lock(impl_->mutex);
         size_t free, total;
         set_device();
         cudaError_t status = cudaMemGetInfo(&free, &total);
@@ -91,7 +91,7 @@ namespace troy::utils {
         if (impl_->destroyed) {
 
             // the ptr given back should be in the zombie set
-            std::unique_lock lock(impl_->mutex);
+            std::unique_lock<std::shared_mutex> lock(impl_->mutex);
             auto iterator = impl_->zombie.find(ptr);
             if (iterator == impl_->zombie.end()) {
                 throw std::runtime_error("[MemoryPool(safe)::release] The pointer is not in the zombie set.");
@@ -101,7 +101,7 @@ namespace troy::utils {
 
         }
 
-        std::unique_lock lock(impl_->mutex);
+        std::unique_lock<std::shared_mutex> lock(impl_->mutex);
         auto iterator = impl_->allocated.find(ptr);
         if (iterator == impl_->allocated.end()) {
             throw std::runtime_error("[MemoryPool(safe)::release] The pointer is not in the allocated set.");
@@ -117,7 +117,7 @@ namespace troy::utils {
         if (impl_->destroyed) {
             throw std::runtime_error("[MemoryPool(safe)::get] The singleton has been destroyed.");
         }
-        std::unique_lock lock(impl_->mutex);
+        std::unique_lock<std::shared_mutex> lock(impl_->mutex);
         auto iterator = impl_->unused.lower_bound(required);
         if (iterator == impl_->unused.end() || iterator->first >= required * 2) {
             lock.unlock();
@@ -140,7 +140,7 @@ namespace troy::utils {
     }
 
     void MemoryPool::release_unused() {
-        std::unique_lock lock(impl_->mutex);
+        std::unique_lock<std::shared_mutex> lock(impl_->mutex);
         for (auto it = impl_->unused.begin(); it != impl_->unused.end();) {
             set_device();
             cudaError_t status = cudaFree(it->second.first);
@@ -158,7 +158,7 @@ namespace troy::utils {
     }
 
     void MemoryPool::destroy() {
-        std::unique_lock lock(impl_->mutex);
+        std::unique_lock<std::shared_mutex> lock(impl_->mutex);
         // first release all unused
         for (auto it = impl_->unused.begin(); it != impl_->unused.end();) {
             set_device();
@@ -188,6 +188,11 @@ namespace troy::utils {
         impl_->unused.clear();
         impl_->total_allocated = 0;
         impl_->destroyed = true;
+        established = false;
+
+        if (is_global_pool) {
+            global_pool = nullptr;
+        }
     }
 
 }

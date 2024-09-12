@@ -61,19 +61,18 @@ namespace troy {namespace utils {
         struct Impl;
         std::shared_ptr<Impl> impl_;
         inline static void ensure_global_pool() {
-            if (!established) {
-                std::unique_lock lock(global_pool_mutex);
-                if (global_pool != nullptr) {
-                    return;
+
+            std::unique_lock<std::mutex> lock(global_pool_mutex);
+            if (global_pool == nullptr) {
+                if (global_pool == nullptr) {
+                    int count = device_count();
+                    has_device = count > 0;
+                    if (!has_device) {
+                        return;
+                    }
+                    global_pool = std::make_shared<MemoryPool>(0);
+                    global_pool->is_global_pool = true;
                 }
-                int count = device_count();
-                has_device = count > 0;
-                established = true;
-                if (!has_device) {
-                    return;
-                }
-                global_pool = std::make_shared<MemoryPool>(0);
-                global_pool->is_global_pool = true;
             }
         }
         inline static void runtime_error(const char* prompt, cudaError_t status) {
