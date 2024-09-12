@@ -62,7 +62,10 @@ namespace troy {
         void relinearize_internal(const Ciphertext& encrypted, const RelinKeys& relin_keys, size_t destination_size, Ciphertext& destination, MemoryPoolHandle pool) const;
 
         void mod_switch_scale_to_next_internal(const Ciphertext& encrypted, Ciphertext& destination, MemoryPoolHandle pool) const;
+        void mod_switch_scale_to_next_internal_batched(const std::vector<const Ciphertext*>& encrypted, const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool) const;
+
         void mod_switch_drop_to_internal(const Ciphertext& encrypted, Ciphertext& destination, ParmsID target_parms_id, MemoryPoolHandle pool) const;
+        void mod_switch_drop_to_internal_batched(const std::vector<const Ciphertext*>& encrypted, const std::vector<Ciphertext*>& destination, ParmsID target_parms_id, MemoryPoolHandle pool) const;
         void mod_switch_drop_to_plain_internal(const Plaintext& plain, Plaintext& destination, ParmsID target_parms_id, MemoryPoolHandle pool) const;
 
         void translate_plain_inplace(Ciphertext& encrypted, const Plaintext& plain, bool subtract, MemoryPoolHandle pool) const;
@@ -314,6 +317,18 @@ namespace troy {
             mod_switch_to_next(encrypted, destination, pool);
             return destination;
         }
+        
+        void mod_switch_to_next_batched(const std::vector<const Ciphertext*>& encrypted, const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        inline void mod_switch_to_next_inplace_batched(std::vector<Ciphertext*>& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            std::vector<Ciphertext> destination(encrypted.size());
+            mod_switch_to_next_batched(batch_utils::pcollect_const_pointer(encrypted), batch_utils::collect_pointer(destination), pool);
+            for (size_t i = 0; i < encrypted.size(); i++) *encrypted[i] = std::move(destination[i]);
+        }
+        inline std::vector<Ciphertext> mod_switch_to_next_new_batched(const std::vector<const Ciphertext*>& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            std::vector<Ciphertext> destination(encrypted.size());
+            mod_switch_to_next_batched(encrypted, batch_utils::collect_pointer(destination), pool);
+            return destination;
+        }
 
         inline void mod_switch_plain_to_next(const Plaintext& plain, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             auto context_data = this->get_context_data("[Evaluator::mod_switch_plain_to_next]", plain.parms_id());
@@ -499,7 +514,7 @@ namespace troy {
         //       bfv centralize / scale up
         // ==================================
 
-                void bfv_centralize(const Plaintext& plain, const ParmsID& parms_id, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        void bfv_centralize(const Plaintext& plain, const ParmsID& parms_id, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline Plaintext bfv_centralize_new(const Plaintext& plain, const ParmsID& parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Plaintext destination;
             bfv_centralize(plain, parms_id, destination, pool);

@@ -1,3 +1,4 @@
+#include "constants.h"
 #include "rns_tool.h"
 #include "uint_small_mod.h"
 #include "polynomial_buffer.h"
@@ -370,7 +371,7 @@ namespace troy {namespace utils {
         this->device = true;
     }
 
-    __global__ static void kernel_divide_and_round_q_last(
+    __device__ static void device_divide_and_round_q_last(
         ConstSlice<Modulus> base_q, size_t coeff_count, size_t q_last_half,
         ConstSlice<MultiplyUint64Operand> inv_q_last_mod_q, 
         ConstSlice<uint64_t> input, size_t input_pcount, Slice<uint64_t> destination
@@ -398,6 +399,23 @@ namespace troy {namespace utils {
             }
         }
 
+    }
+
+    __global__ static void kernel_divide_and_round_q_last(
+        ConstSlice<Modulus> base_q, size_t coeff_count, size_t q_last_half,
+        ConstSlice<MultiplyUint64Operand> inv_q_last_mod_q, 
+        ConstSlice<uint64_t> input, size_t input_pcount, Slice<uint64_t> destination
+    ) {
+        device_divide_and_round_q_last(base_q, coeff_count, q_last_half, inv_q_last_mod_q, input, input_pcount, destination);
+    }
+
+    __global__ static void kernel_divide_and_round_q_last_batched(
+        ConstSlice<Modulus> base_q, size_t coeff_count, size_t q_last_half,
+        ConstSlice<MultiplyUint64Operand> inv_q_last_mod_q, 
+        ConstSliceArrayRef<uint64_t> input, size_t input_pcount, SliceArrayRef<uint64_t> destination
+    ) {
+        size_t i = blockIdx.y;
+        device_divide_and_round_q_last(base_q, coeff_count, q_last_half, inv_q_last_mod_q, input[i], input_pcount, destination[i]);
     }
 
     void RNSTool::divide_and_round_q_last(ConstSlice<uint64_t> input, size_t input_pcount, Slice<uint64_t> destination) const {
@@ -446,6 +464,37 @@ namespace troy {namespace utils {
 
         }
     }
+    
+    void RNSTool::divide_and_round_q_last_batched(const ConstSliceVec<uint64_t>& input, size_t input_pcount, const SliceVec<uint64_t>& destination, MemoryPoolHandle pool) const {
+        if (input.size() != destination.size()) {
+            throw std::invalid_argument("[RNSTool::divide_and_round_q_last_batched] input and destination must have the same number of elements.");
+        }
+        if (input.size() == 0) return;
+        bool device = this->on_device();
+        size_t n = input.size();
+        if (!device || n < BATCH_OP_THRESHOLD) {
+            for (size_t i = 0; i < n; i++) {
+                this->divide_and_round_q_last(input[i], input_pcount, destination[i]);
+            }
+        } else {
+            size_t coeff_count = this->coeff_count();
+            size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
+            auto comp_ref = this->base_q().base();
+            auto input_batched = construct_batch(input, pool, comp_ref);
+            auto destination_batched = construct_batch(destination, pool, comp_ref);
+            utils::set_device(comp_ref.device_index());
+            dim3 block_dims(block_count, n);
+            kernel_divide_and_round_q_last_batched<<<block_dims, utils::KERNEL_THREAD_COUNT>>>(
+                this->base_q().base(),
+                this->coeff_count(),
+                this->q_last_half(),
+                this->inv_q_last_mod_q(),
+                input_batched,
+                input_pcount, destination_batched
+            );
+            utils::stream_sync();
+        }
+    }
 
     static void host_divide_and_round_q_last_ntt_step1(const RNSTool& self, Slice<uint64_t> input, size_t pcount, Slice<uint64_t> temp) {
         size_t base_q_size = self.base_q().size();
@@ -471,9 +520,9 @@ namespace troy {namespace utils {
         }
     }
 
-    __global__ static void kernel_divide_and_round_q_last_ntt_step1(
+    __device__ static void device_divide_and_round_q_last_ntt_step1(
         ConstSlice<Modulus> base_q, size_t coeff_count, size_t q_last_half,
-        Slice<uint64_t> input, size_t pcount, Slice<uint64_t> temp
+        ConstSlice<uint64_t> input, size_t pcount, Slice<uint64_t> temp
     ) {
         size_t j = blockIdx.x * blockDim.x + threadIdx.x;
         size_t base_q_size = base_q.size();
@@ -498,6 +547,21 @@ namespace troy {namespace utils {
                 temp[toffset + i * coeff_count + j] = temp_value;
             }
         }
+    }
+
+    __global__ static void kernel_divide_and_round_q_last_ntt_step1(
+        ConstSlice<Modulus> base_q, size_t coeff_count, size_t q_last_half,
+        ConstSlice<uint64_t> input, size_t pcount, Slice<uint64_t> temp
+    ) {
+        device_divide_and_round_q_last_ntt_step1(base_q, coeff_count, q_last_half, input, pcount, temp);
+    }
+
+    __global__ static void kernel_divide_and_round_q_last_ntt_step1_batched(
+        ConstSlice<Modulus> base_q, size_t coeff_count, size_t q_last_half,
+        ConstSliceArrayRef<uint64_t> input, size_t pcount, SliceArrayRef<uint64_t> temp
+    ) {
+        size_t i = blockIdx.y;
+        device_divide_and_round_q_last_ntt_step1(base_q, coeff_count, q_last_half, input[i], pcount, temp[i]);
     }
 
     static void divide_and_round_q_last_ntt_step1(const RNSTool& self, Slice<uint64_t> input, size_t pcount, Slice<uint64_t> temp) {
@@ -540,7 +604,7 @@ namespace troy {namespace utils {
         }
     }
 
-    __global__ static void kernel_divide_and_round_q_last_ntt_step2(
+    __device__ static void device_divide_and_round_q_last_ntt_step2(
         ConstSlice<Modulus> base_q, size_t coeff_count,
         ConstSlice<MultiplyUint64Operand> inv_q_last_mod_q, ConstSlice<uint64_t> input, 
         Slice<uint64_t> destination, size_t pcount, ConstSlice<uint64_t> temp
@@ -562,9 +626,25 @@ namespace troy {namespace utils {
         }
     }
 
+    __global__ static void kernel_divide_and_round_q_last_ntt_step2(
+        ConstSlice<Modulus> base_q, size_t coeff_count,
+        ConstSlice<MultiplyUint64Operand> inv_q_last_mod_q, ConstSlice<uint64_t> input, 
+        Slice<uint64_t> destination, size_t pcount, ConstSlice<uint64_t> temp
+    ) {
+        device_divide_and_round_q_last_ntt_step2(base_q, coeff_count, inv_q_last_mod_q, input, destination, pcount, temp);
+    }
+
+    __global__ static void kernel_divide_and_round_q_last_ntt_step2_batched(
+        ConstSlice<Modulus> base_q, size_t coeff_count,
+        ConstSlice<MultiplyUint64Operand> inv_q_last_mod_q, ConstSliceArrayRef<uint64_t> input, 
+        SliceArrayRef<uint64_t> destination, size_t pcount, ConstSliceArrayRef<uint64_t> temp
+    ) {
+        size_t i = blockIdx.y;
+        device_divide_and_round_q_last_ntt_step2(base_q, coeff_count, inv_q_last_mod_q, input[i], destination[i], pcount, temp[i]);
+    }
+
     static void divide_and_round_q_last_ntt_step2(const RNSTool& self, ConstSlice<uint64_t> input, Slice<uint64_t> destination, size_t pcount, ConstSlice<uint64_t> temp) {
         bool device = self.on_device();
-        size_t base_q_size = self.base_q().size();
         if (device) {
             size_t block_count = utils::ceil_div(self.coeff_count(), utils::KERNEL_THREAD_COUNT);
             utils::set_device(destination.device_index());
@@ -611,6 +691,72 @@ namespace troy {namespace utils {
         utils::ntt_inplace_ps(temp.reference(), pcount, coeff_count, rns_ntt_tables.const_slice(0, base_q_size - 1));
     
         divide_and_round_q_last_ntt_step2(*this, input, destination, pcount, temp.const_reference());
+    }
+
+    void RNSTool::divide_and_round_q_last_ntt_batched(
+        const ConstSliceVec<uint64_t>& input, size_t input_pcount, 
+        const SliceVec<uint64_t>& destination, ConstSlice<NTTTables> rns_ntt_tables, 
+        MemoryPoolHandle pool
+    ) const {
+        if (input.size() != destination.size()) {
+            throw std::invalid_argument("[RNSTool::divide_and_round_q_last_ntt_batched] input and destination must have the same number of elements.");
+        }
+        if (input.size() == 0) return;
+        bool device = this->on_device();
+        size_t n = input.size();
+        if (!device || n < BATCH_OP_THRESHOLD) {
+            for (size_t i = 0; i < n; i++) {
+                this->divide_and_round_q_last_ntt(input[i], input_pcount, destination[i], rns_ntt_tables, pool);
+            }
+        } else {
+            std::vector<Buffer<uint64_t>> input_intt; input_intt.reserve(n);
+            for (size_t i = 0; i < n; i++) {
+                input_intt.push_back(Buffer<uint64_t>(input_pcount, this->base_q().size(), this->coeff_count(), device, pool));
+            }
+            size_t coeff_count = this->coeff_count();
+            size_t base_q_size = this->base_q().size();
+            utils::intt_bps(input, input_pcount, coeff_count, rns_ntt_tables, rcollect_reference(input_intt), pool);
+            std::vector<Buffer<uint64_t>> temp; temp.reserve(n);
+            for (size_t i = 0; i < n; i++) {
+                temp.push_back(Buffer<uint64_t>(input_pcount, base_q_size - 1, coeff_count, device, pool));
+            }
+            size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
+            dim3 block_dims(block_count, n);
+            utils::set_device(this->device_index());
+            auto comp_ref = this->base_q().base();
+
+            auto input_intt_batched = construct_batch(rcollect_reference(input_intt), pool, comp_ref);
+            auto input_intt_const_batched = construct_batch(rcollect_const_reference(input_intt), pool, comp_ref);
+            auto temp_batched = construct_batch(rcollect_reference(temp), pool, comp_ref);
+            utils::set_device(comp_ref.device_index());
+            kernel_divide_and_round_q_last_ntt_step1_batched<<<block_dims, utils::KERNEL_THREAD_COUNT>>>(
+                this->base_q().base(),
+                this->coeff_count(),
+                this->q_last_half(),
+                input_intt_const_batched,
+                input_pcount,
+                temp_batched
+            );
+            utils::stream_sync();
+
+            utils::ntt_inplace_bps(rcollect_reference(temp), input_pcount, coeff_count, rns_ntt_tables.const_slice(0, base_q_size - 1), pool);
+
+            auto input_batched = construct_batch(input, pool, comp_ref);
+            auto destination_batched = construct_batch(destination, pool, comp_ref);
+            auto temp_const_batched = construct_batch(rcollect_const_reference(temp), pool, comp_ref);
+            utils::set_device(comp_ref.device_index());
+            kernel_divide_and_round_q_last_ntt_step2_batched<<<block_dims, utils::KERNEL_THREAD_COUNT>>>(
+                this->base_q().base(),
+                this->coeff_count(),
+                this->inv_q_last_mod_q(),
+                input_batched,
+                destination_batched,
+                input_pcount,
+                temp_const_batched
+            );
+            utils::stream_sync();
+
+        }
     }
 
     static void host_fast_b_conv_sk_step1(const RNSTool& self, ConstSlice<uint64_t> input, Slice<uint64_t> destination, ConstSlice<uint64_t> temp) {
@@ -1237,7 +1383,7 @@ namespace troy {namespace utils {
         }
     }
 
-    __global__ static void kernel_mod_t_and_divide_q_last_ntt_step1(
+    __device__ static void device_mod_t_and_divide_q_last_ntt_step1(
         ConstSlice<Modulus> base_q,
         ConstPointer<Modulus> t,
         size_t coeff_count,
@@ -1278,7 +1424,32 @@ namespace troy {namespace utils {
         }
     }
 
-    __global__ static void kernel_mod_t_and_divide_q_last_ntt_step2(
+    __global__ static void kernel_mod_t_and_divide_q_last_ntt_step1(
+        ConstSlice<Modulus> base_q,
+        ConstPointer<Modulus> t,
+        size_t coeff_count,
+        ConstSlice<uint64_t> input_intt,
+        size_t pcount,
+        uint64_t inv_q_last_mod_t,
+        Slice<uint64_t> delta_mod_q_i
+    ) {
+        device_mod_t_and_divide_q_last_ntt_step1(base_q, t, coeff_count, input_intt, pcount, inv_q_last_mod_t, delta_mod_q_i);
+    }
+
+    __global__ static void kernel_mod_t_and_divide_q_last_ntt_step1_batched(
+        ConstSlice<Modulus> base_q,
+        ConstPointer<Modulus> t,
+        size_t coeff_count,
+        ConstSliceArrayRef<uint64_t> input_intt,
+        size_t pcount,
+        uint64_t inv_q_last_mod_t,
+        SliceArrayRef<uint64_t> delta_mod_q_i
+    ) {
+        size_t i = blockIdx.y;
+        device_mod_t_and_divide_q_last_ntt_step1(base_q, t, coeff_count, input_intt[i], pcount, inv_q_last_mod_t, delta_mod_q_i[i]);
+    }
+
+    __device__ static void device_mod_t_and_divide_q_last_ntt_step2(
         ConstSlice<Modulus> base_q,
         size_t coeff_count,
         ConstSlice<MultiplyUint64Operand> inv_q_last_mod_q,
@@ -1304,6 +1475,30 @@ namespace troy {namespace utils {
                 destination[doffset + i * coeff_count + j] = dest;
             }
         }
+    }
+
+    __global__ static void kernel_mod_t_and_divide_q_last_ntt_step2(
+        ConstSlice<Modulus> base_q,
+        size_t coeff_count,
+        ConstSlice<MultiplyUint64Operand> inv_q_last_mod_q,
+        ConstSlice<uint64_t> input,
+        size_t pcount,
+        Slice<uint64_t> destination,
+        ConstSlice<uint64_t> delta_mod_q_i
+    ) {
+        device_mod_t_and_divide_q_last_ntt_step2(base_q, coeff_count, inv_q_last_mod_q, input, pcount, destination, delta_mod_q_i);
+    }
+    __global__ static void kernel_mod_t_and_divide_q_last_ntt_step2_batched(
+        ConstSlice<Modulus> base_q,
+        size_t coeff_count,
+        ConstSlice<MultiplyUint64Operand> inv_q_last_mod_q,
+        ConstSliceArrayRef<uint64_t> input,
+        size_t pcount,
+        SliceArrayRef<uint64_t> destination,
+        ConstSliceArrayRef<uint64_t> delta_mod_q_i
+    ) {
+        size_t i = blockIdx.y;
+        device_mod_t_and_divide_q_last_ntt_step2(base_q, coeff_count, inv_q_last_mod_q, input[i], pcount, destination[i], delta_mod_q_i[i]);
     }
 
     static void mod_t_and_divide_q_last_ntt_step(const RNSTool& self, ConstSlice<uint64_t> input, ConstSlice<uint64_t> input_intt, size_t pcount, Slice<uint64_t> destination, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool) {
@@ -1365,6 +1560,67 @@ namespace troy {namespace utils {
 
         mod_t_and_divide_q_last_ntt_step(*this, input, input_intt.const_reference(), pcount, destination, rns_ntt_tables, pool);
 
+    }
+    
+    void RNSTool::mod_t_and_divide_q_last_ntt_batched(const ConstSliceVec<uint64_t>& input, size_t pcount, const SliceVec<uint64_t>& destination, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool) const {
+        if (input.size() != destination.size()) {
+            throw std::invalid_argument("[RNSTool::mod_t_and_divide_q_last_ntt_batched] input and destination must have the same size.");
+        }
+        if (input.size() == 0) return;
+        size_t n = input.size();
+        bool device = this->on_device();
+        if (!device || n < BATCH_OP_THRESHOLD) {
+            for (size_t i = 0; i < n; i++) {
+                this->mod_t_and_divide_q_last_ntt(input.at(i), pcount, destination.at(i), rns_ntt_tables, pool);
+            }
+        } else {
+            size_t modulus_size = this->base_q().size();
+            size_t coeff_count = this->coeff_count();
+            std::vector<Buffer<uint64_t>> input_intt; input_intt.reserve(n);
+            for (size_t i = 0; i < n; i++) {
+                input_intt.emplace_back(pcount, this->base_q().size(), this->coeff_count(), device, pool);
+            }
+            utils::intt_bps(input, pcount, coeff_count, rns_ntt_tables, rcollect_reference(input_intt), pool);
+
+            auto comp_ref = this->base_q().base();
+
+            size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
+            dim3 block_dims(block_count, n);
+
+            std::vector<Buffer<uint64_t>> delta_mod_q_i; delta_mod_q_i.reserve(n);
+            for (size_t i = 0; i < n; i++) {
+                delta_mod_q_i.emplace_back(pcount, modulus_size - 1, coeff_count, device, pool);
+            }
+            auto input_intt_const_batched = construct_batch(rcollect_const_reference(input_intt), pool, comp_ref);
+            auto delta_mod_q_i_batched = construct_batch(rcollect_reference(delta_mod_q_i), pool, comp_ref);
+
+            utils::set_device(comp_ref.device_index());
+            kernel_mod_t_and_divide_q_last_ntt_step1_batched<<<block_dims, utils::KERNEL_THREAD_COUNT>>>(
+                this->base_q().base(),
+                this->t(),
+                coeff_count,
+                input_intt_const_batched, pcount, this->inv_q_last_mod_t(),
+                delta_mod_q_i_batched
+            );
+            utils::stream_sync();
+            utils::ntt_inplace_bps(rcollect_reference(delta_mod_q_i), pcount, coeff_count, rns_ntt_tables.const_slice(0, modulus_size - 1), pool);
+            utils::set_device(comp_ref.device_index());
+
+            auto input_batched = construct_batch(input, pool, comp_ref);
+            auto delta_mod_q_i_const_batched = construct_batch(rcollect_const_reference(delta_mod_q_i), pool, comp_ref);
+            auto destination_batched = construct_batch(destination, pool, comp_ref);
+            kernel_mod_t_and_divide_q_last_ntt_step2_batched<<<block_dims, utils::KERNEL_THREAD_COUNT>>>(
+                this->base_q().base(),
+                coeff_count,
+                this->inv_q_last_mod_q(),
+                input_batched,
+                pcount,
+                destination_batched,
+                delta_mod_q_i_const_batched
+            );
+            utils::stream_sync();
+
+        }
     }
 
 }}

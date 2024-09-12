@@ -727,12 +727,21 @@ namespace troy {namespace utils {
         }
     }
 
-    __global__ void kernel_multiply_uint64operand_ps(ConstSlice<uint64_t> polys, ConstSlice<MultiplyUint64Operand> operand, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
+    __device__ void device_multiply_uint64operand_ps(ConstSlice<uint64_t> polys, ConstSlice<MultiplyUint64Operand> operand, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
         if (idx < pcount * moduli.size() * degree) {
             size_t j = (idx / degree) % moduli.size();
             result[idx] = multiply_uint64operand_mod(polys[idx], operand[j], moduli[j]);
         }
+    }
+
+    __global__ void kernel_multiply_uint64operand_ps(ConstSlice<uint64_t> polys, ConstSlice<MultiplyUint64Operand> operand, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
+        device_multiply_uint64operand_ps(polys, operand, pcount, degree, moduli, result);
+    }
+
+    __global__ void kernel_multiply_uint64operand_bps(ConstSliceArrayRef<uint64_t> polys, ConstSlice<MultiplyUint64Operand> operand, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, SliceArrayRef<uint64_t> result) {
+        size_t i = blockIdx.y;
+        device_multiply_uint64operand_ps(polys[i], operand, pcount, degree, moduli, result[i]);
     }
 
     void multiply_uint64operand_ps(ConstSlice<uint64_t> polys, ConstSlice<MultiplyUint64Operand> operand, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
@@ -747,6 +756,27 @@ namespace troy {namespace utils {
             utils::stream_sync();
         } else {
             host_multiply_uint64operand_ps(polys, operand, pcount, degree, moduli, result);
+        }
+    }
+    
+
+    void multiply_uint64operand_bps(const ConstSliceVec<uint64_t>& polys, ConstSlice<MultiplyUint64Operand> operand, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, MemoryPoolHandle pool) {
+        if (polys.size() != result.size()) {
+            throw std::runtime_error("[multiply_uint64operand_bps] polys and result must have the same size");
+        }
+        if (polys.size() == 0) return;
+        if (!moduli.on_device() || polys.size() < BATCH_OP_THRESHOLD) {
+            for (size_t i = 0; i < polys.size(); i++) {
+                multiply_uint64operand_ps(polys[i], operand, pcount, degree, moduli, result[i]);
+            }
+        } else {
+            size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
+            dim3 block_dims(block_count, polys.size());
+            auto polys_batched = construct_batch(polys, pool, moduli);
+            auto result_batched = construct_batch(result, pool, moduli);
+            set_device(moduli.device_index());
+            kernel_multiply_uint64operand_bps<<<dim3(block_count, polys.size()), KERNEL_THREAD_COUNT>>>(polys_batched, operand, pcount, degree, moduli, result_batched);
+            utils::stream_sync();
         }
     }
 

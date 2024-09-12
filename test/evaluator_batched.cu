@@ -1,4 +1,3 @@
-#include "cuda_runtime.h"
 #include <gtest/gtest.h>
 #include "test.h"
 #include "test_adv.h"
@@ -382,9 +381,7 @@ namespace evaluator_batched {
     }
 
     void test_multiply_plain_centralized(const GeneralHeContext& context) {
-        uint64_t t = context.t();
         double scale = context.scale();
-        double tolerance = context.tolerance();
 
         {
             auto message1 = context.batch_random_simd_full(batch_size);
@@ -750,4 +747,56 @@ namespace evaluator_batched {
         auto truth = context.batch_conjugate(message);
         ASSERT_TRUE(context.batch_near_equal(truth, result));
     }
+
+    void test_mod_switch_to_next(const GeneralHeContext& context) {
+        double scale = context.scale();
+
+        auto message = context.batch_random_simd_full(batch_size);
+        auto encoded = context.encoder().batch_encode_simd(message, std::nullopt, scale);
+        auto encrypted = context.batch_encrypt_asymmetric(encoded);
+        auto encrypted_ptrs = batch_utils::collect_const_pointer(encrypted);
+        auto switched = context.evaluator().mod_switch_to_next_new_batched(encrypted_ptrs);
+        auto decrypted = context.batch_decrypt(switched);
+        auto result = context.encoder().batch_decode_simd(decrypted);
+        // result should be same with message
+        ASSERT_TRUE(context.batch_near_equal(message, result));
+
+        // switched = context.evaluator().mod_switch_to_new(encrypted, context.context()->last_parms_id());
+        // decrypted = context.decryptor().decrypt_new(switched);
+        // result = context.encoder().decode_simd(decrypted);
+        // // result should be same with message
+        // ASSERT_TRUE(message.near_equal(result, tolerance));
+    }
+
+    TEST(EvaluatorBatchedTest, HostBFVModSwitchToNext) {
+        GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_mod_switch_to_next(ghe);
+    }
+    TEST(EvaluatorBatchedTest, HostBGVModSwitchToNext) {
+        GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_mod_switch_to_next(ghe);
+    }
+    TEST(EvaluatorBatchedTest, HostCKKSModSwitchToNext) {
+        GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
+        test_mod_switch_to_next(ghe);
+    }
+    TEST(EvaluatorBatchedTest, DeviceBFVModSwitchToNext) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_mod_switch_to_next(ghe);
+        utils::MemoryPool::Destroy();
+    }
+    TEST(EvaluatorBatchedTest, DeviceBGVModSwitchToNext) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_mod_switch_to_next(ghe);
+        utils::MemoryPool::Destroy();
+    }
+    TEST(EvaluatorBatchedTest, DeviceCKKSModSwitchToNext) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
+        test_mod_switch_to_next(ghe);
+        utils::MemoryPool::Destroy();
+    }
+
 }

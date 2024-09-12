@@ -2,6 +2,7 @@
 #include "box.h"
 #include "box_batch.h"
 #include "../modulus.h"
+#include "memory_pool.h"
 #include "uint_small_mod.h"
 
 namespace troy {namespace utils {
@@ -375,13 +376,33 @@ namespace troy {namespace utils {
     
 
     void multiply_uint64operand_ps(ConstSlice<uint64_t> polys, ConstSlice<MultiplyUint64Operand> operand, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result);
+    void multiply_uint64operand_bps(
+        const ConstSliceVec<uint64_t>& polys, ConstSlice<MultiplyUint64Operand> operand, 
+        size_t pcount, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, 
+        MemoryPoolHandle pool = MemoryPool::GlobalPool()
+    );
 
     inline void multiply_uint64operand_p(ConstSlice<uint64_t> poly, ConstSlice<MultiplyUint64Operand> operand, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         multiply_uint64operand_ps(poly, operand, 1, degree, moduli, result);
     }
+    inline void multiply_uint64operand_bp(
+        const ConstSliceVec<uint64_t>& polys, ConstSlice<MultiplyUint64Operand> operand, 
+        size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, 
+        MemoryPoolHandle pool = MemoryPool::GlobalPool()
+    ) {
+        multiply_uint64operand_bps(polys, operand, 1, degree, moduli, result, pool);
+    }
 
     inline void multiply_uint64operand(ConstSlice<uint64_t> poly, ConstPointer<MultiplyUint64Operand> operand, ConstPointer<Modulus> modulus, Slice<uint64_t> result) {
         multiply_uint64operand_ps(poly, ConstSlice<MultiplyUint64Operand>::from_pointer(operand), 1, poly.size(), ConstSlice<Modulus>::from_pointer(modulus), result);
+    }
+    inline void multiply_uint64operand_b(
+        const ConstSliceVec<uint64_t>& polys, ConstPointer<MultiplyUint64Operand> operand, 
+        ConstPointer<Modulus> modulus, const SliceVec<uint64_t>& result, 
+        MemoryPoolHandle pool = MemoryPool::GlobalPool()
+    ) {
+        if (polys.size() != result.size()) throw std::invalid_argument("[multiply_uint64operand_b] polys.size() != result.size()");
+        if (polys.size() > 0) multiply_uint64operand_bps(polys, ConstSlice<MultiplyUint64Operand>::from_pointer(operand), 1, polys[0].size(), ConstSlice<Modulus>::from_pointer(modulus), result, pool);
     }
 
 
@@ -389,13 +410,32 @@ namespace troy {namespace utils {
     inline void multiply_uint64operand_inplace_ps(Slice<uint64_t> polys, ConstSlice<MultiplyUint64Operand> operand, size_t pcount, size_t degree, ConstSlice<Modulus> moduli) {
         multiply_uint64operand_ps(polys.as_const(), operand, pcount, degree, moduli, polys);
     }
+    inline void multiply_uint64operand_inplace_bps(
+        const SliceVec<uint64_t>& polys, ConstSlice<MultiplyUint64Operand> operand, 
+        size_t pcount, size_t degree, ConstSlice<Modulus> moduli, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+    ) {
+        ConstSliceVec<uint64_t> polys_const = rcollect_as_const(polys);
+        multiply_uint64operand_bps(polys_const, operand, pcount, degree, moduli, polys, pool);
+    }
 
     inline void multiply_uint64operand_inplace_p(Slice<uint64_t> poly, ConstSlice<MultiplyUint64Operand> operand, size_t degree, ConstSlice<Modulus> moduli) {
         multiply_uint64operand_inplace_ps(poly, operand, 1, degree, moduli);
     }
+    inline void multiply_uint64operand_inplace_bp(
+        const SliceVec<uint64_t>& polys, ConstSlice<MultiplyUint64Operand> operand, 
+        size_t degree, ConstSlice<Modulus> moduli, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+    ) {
+        multiply_uint64operand_inplace_bps(polys, operand, 1, degree, moduli, pool);
+    }
 
     inline void multiply_uint64operand_inplace(Slice<uint64_t> poly, ConstPointer<MultiplyUint64Operand> operand, ConstPointer<Modulus> modulus) {
         multiply_uint64operand_inplace_ps(poly, ConstSlice<MultiplyUint64Operand>::from_pointer(operand), 1, poly.size(), ConstSlice<Modulus>::from_pointer(modulus));
+    }
+    inline void multiply_uint64operand_inplace_b(
+        const SliceVec<uint64_t>& polys, ConstPointer<MultiplyUint64Operand> operand, 
+        ConstPointer<Modulus> modulus, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+    ) {
+        if (polys.size() > 0) multiply_uint64operand_inplace_bps(polys, ConstSlice<MultiplyUint64Operand>::from_pointer(operand), 1, polys[0].size(), ConstSlice<Modulus>::from_pointer(modulus), pool);
     }
 
 
