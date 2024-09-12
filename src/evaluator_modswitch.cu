@@ -397,6 +397,36 @@ namespace troy {
         }
     }
 
+    void Evaluator::mod_switch_to_batched(const std::vector<const Ciphertext*>& encrypted, const ParmsID& parms_id, const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool) const {
+        if (encrypted.size() != destination.size()) {
+            throw std::invalid_argument("[Evaluator::mod_switch_to_batched] Size mismatch.");
+        }
+        if (encrypted.size() == 0) return;
+        ParmsID original_parms_id = get_vec_parms_id(encrypted);
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::mod_switch_to_inplace]", original_parms_id);
+        ContextDataPointer target_context_data = this->get_context_data("[Evaluator::mod_switch_to_inplace]", parms_id);
+        if (context_data->chain_index() < target_context_data->chain_index()) {
+            throw std::invalid_argument("[Evaluator::mod_switch_to_inplace] Cannot switch to a higher level.");
+        }
+        if (original_parms_id == parms_id) {
+            for (size_t i = 0; i < encrypted.size(); i++) {
+                *destination[i] = encrypted[i]->clone(pool); 
+            }
+            return;
+        }
+        if (context_data->parms().scheme() == SchemeType::CKKS) {
+            this->mod_switch_drop_to_internal_batched(encrypted, destination, parms_id, pool);
+        } else {
+            bool first = true;
+            while (true) {
+                if (first) {this->mod_switch_to_next_batched(encrypted, destination, pool); first = false;}
+                else this->mod_switch_to_next_inplace_batched(destination, pool);
+                if (destination[0]->parms_id() == parms_id) break;
+            }
+        }
+    }
+
+
     void Evaluator::mod_switch_plain_to(const Plaintext& plain, const ParmsID& parms_id, Plaintext& destination, MemoryPoolHandle pool) const {
         if (!plain.is_ntt_form()) {
             throw std::invalid_argument("[Evaluator::mod_switch_plain_to_inplace] Plaintext is not in NTT form.");

@@ -761,38 +761,38 @@ namespace evaluator_batched {
         // result should be same with message
         ASSERT_TRUE(context.batch_near_equal(message, result));
 
-        // switched = context.evaluator().mod_switch_to_new(encrypted, context.context()->last_parms_id());
-        // decrypted = context.decryptor().decrypt_new(switched);
-        // result = context.encoder().decode_simd(decrypted);
-        // // result should be same with message
-        // ASSERT_TRUE(message.near_equal(result, tolerance));
+        switched = context.evaluator().mod_switch_to_new_batched(encrypted_ptrs, context.context()->last_parms_id());
+        decrypted = context.batch_decrypt(switched);
+        result = context.encoder().batch_decode_simd(decrypted);
+        // result should be same with message
+        ASSERT_TRUE(context.batch_near_equal(message, result));
     }
 
-    TEST(EvaluatorBatchedTest, HostBFVModSwitchToNext) {
+    TEST(EvaluatorBatchTest, HostBFVModSwitchToNext) {
         GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_mod_switch_to_next(ghe);
     }
-    TEST(EvaluatorBatchedTest, HostBGVModSwitchToNext) {
+    TEST(EvaluatorBatchTest, HostBGVModSwitchToNext) {
         GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_mod_switch_to_next(ghe);
     }
-    TEST(EvaluatorBatchedTest, HostCKKSModSwitchToNext) {
+    TEST(EvaluatorBatchTest, HostCKKSModSwitchToNext) {
         GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
         test_mod_switch_to_next(ghe);
     }
-    TEST(EvaluatorBatchedTest, DeviceBFVModSwitchToNext) {
+    TEST(EvaluatorBatchTest, DeviceBFVModSwitchToNext) {
         SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_mod_switch_to_next(ghe);
         utils::MemoryPool::Destroy();
     }
-    TEST(EvaluatorBatchedTest, DeviceBGVModSwitchToNext) {
+    TEST(EvaluatorBatchTest, DeviceBGVModSwitchToNext) {
         SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
         test_mod_switch_to_next(ghe);
         utils::MemoryPool::Destroy();
     }
-    TEST(EvaluatorBatchedTest, DeviceCKKSModSwitchToNext) {
+    TEST(EvaluatorBatchTest, DeviceCKKSModSwitchToNext) {
         SKIP_WHEN_NO_CUDA_DEVICE;
         GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
         test_mod_switch_to_next(ghe);

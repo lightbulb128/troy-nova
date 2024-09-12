@@ -319,7 +319,7 @@ namespace troy {
         }
         
         void mod_switch_to_next_batched(const std::vector<const Ciphertext*>& encrypted, const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
-        inline void mod_switch_to_next_inplace_batched(std::vector<Ciphertext*>& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+        inline void mod_switch_to_next_inplace_batched(const std::vector<Ciphertext*>& encrypted, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             std::vector<Ciphertext> destination(encrypted.size());
             mod_switch_to_next_batched(batch_utils::pcollect_const_pointer(encrypted), batch_utils::collect_pointer(destination), pool);
             for (size_t i = 0; i < encrypted.size(); i++) *encrypted[i] = std::move(destination[i]);
@@ -360,6 +360,20 @@ namespace troy {
             mod_switch_to(encrypted, parms_id, destination, pool);
             return destination;
         }
+
+        
+        void mod_switch_to_batched(const std::vector<const Ciphertext*>& encrypted, const ParmsID& parms_id, const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        inline void mod_switch_to_inplace_batched(const std::vector<Ciphertext*>& encrypted, const ParmsID& parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            std::vector<Ciphertext> destination(encrypted.size());
+            mod_switch_to_batched(batch_utils::pcollect_const_pointer(encrypted), parms_id, batch_utils::collect_pointer(destination), pool);
+            for (size_t i = 0; i < encrypted.size(); i++) *encrypted[i] = std::move(destination[i]);
+        }
+        inline std::vector<Ciphertext> mod_switch_to_new_batched(const std::vector<const Ciphertext*>& encrypted, const ParmsID& parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            std::vector<Ciphertext> destination(encrypted.size());
+            mod_switch_to_batched(encrypted, parms_id, batch_utils::collect_pointer(destination), pool);
+            return destination;
+        }
+        
 
         void mod_switch_plain_to(const Plaintext& plain, const ParmsID& parms_id, Plaintext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline void mod_switch_plain_to_inplace(Plaintext& plain, const ParmsID& parms_id, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
