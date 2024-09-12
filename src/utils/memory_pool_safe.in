@@ -188,6 +188,11 @@ namespace troy::utils {
         impl_->unused.clear();
         impl_->total_allocated = 0;
         impl_->destroyed = true;
+        established = false;
+
+        if (is_global_pool) {
+            global_pool = nullptr;
+        }
     }
 
 }
