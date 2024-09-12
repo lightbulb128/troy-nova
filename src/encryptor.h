@@ -1,4 +1,5 @@
 #pragma once
+#include "batch_utils.h"
 #include "encryption_parameters.h"
 #include "key.h"
 #include "he_context.h"
@@ -23,11 +24,26 @@ namespace troy {
             Ciphertext& destination,
             MemoryPoolHandle pool) const;
 
+        void encrypt_zero_internal_batched(
+            const ParmsID& parms_id, 
+            bool is_ntt_form,
+            bool is_asymmetric, bool save_seed, 
+            utils::RandomGenerator* u_prng, 
+            const std::vector<Ciphertext*>& destination,
+            MemoryPoolHandle pool) const;
+
         void encrypt_internal(
             const Plaintext& plain,
             bool is_asymmetric, bool save_seed,
             utils::RandomGenerator* u_prng,
             Ciphertext& destination,
+            MemoryPoolHandle pool) const;
+            
+        void encrypt_internal_batched(
+            const std::vector<const Plaintext*>& plain,
+            bool is_asymmetric, bool save_seed,
+            utils::RandomGenerator* u_prng,
+            const std::vector<Ciphertext*>& destination,
             MemoryPoolHandle pool) const;
 
     public:
@@ -99,6 +115,10 @@ namespace troy {
             }
         }
 
+        // ------------------------
+        //    asymmetric single
+        // ------------------------
+
         inline void encrypt_asymmetric(const Plaintext& plain, Ciphertext& destination, utils::RandomGenerator* u_prng = nullptr, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             encrypt_internal(plain, true, false, u_prng, destination, pool);
         }
@@ -121,6 +141,41 @@ namespace troy {
             return destination;
         }
 
+
+        // ------------------------
+        //    asymmetric batched
+        // ------------------------
+
+        
+        inline void encrypt_asymmetric_batched(const std::vector<const Plaintext*>& plain, const std::vector<Ciphertext*>& destination, utils::RandomGenerator* u_prng = nullptr, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            encrypt_internal_batched(plain, true, false, u_prng, destination, pool);
+        }
+
+        inline std::vector<Ciphertext> encrypt_asymmetric_new_batched(const std::vector<const Plaintext*>& plain, utils::RandomGenerator* u_prng = nullptr, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            std::vector<Ciphertext> destination(plain.size());
+            encrypt_asymmetric_batched(plain, batch_utils::collect_pointer(destination), u_prng, pool);
+            return destination;
+        }
+
+        inline void encrypt_zero_asymmetric_batched(const std::vector<Ciphertext*>& destination, std::optional<ParmsID> parms_id = std::nullopt, utils::RandomGenerator* u_prng = nullptr, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            SchemeType scheme = context_->first_context_data_pointer()->parms().scheme();
+            bool is_ntt_form = scheme == SchemeType::CKKS || scheme == SchemeType::BGV;
+            encrypt_zero_internal_batched(parms_id.value_or(context_->first_parms_id()), is_ntt_form, true, false, u_prng, destination, pool);
+        }
+
+        inline std::vector<Ciphertext> encrypt_zero_asymmetric_new_batched(size_t count, std::optional<ParmsID> parms_id = std::nullopt, utils::RandomGenerator* u_prng = nullptr, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            std::vector<Ciphertext> destination(count);
+            encrypt_zero_asymmetric_batched(batch_utils::collect_pointer(destination), parms_id, u_prng, pool);
+            return destination;
+        }
+
+
+
+
+        // ------------------------
+        //    symmetric single
+        // ------------------------
+
         inline void encrypt_symmetric(const Plaintext& plain, bool save_seed, Ciphertext& destination, utils::RandomGenerator* u_prng = nullptr, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             encrypt_internal(plain, false, save_seed, u_prng, destination, pool);
         }
@@ -140,6 +195,33 @@ namespace troy {
         inline Ciphertext encrypt_zero_symmetric_new(bool save_seed, std::optional<ParmsID> parms_id = std::nullopt, utils::RandomGenerator* u_prng = nullptr, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
             Ciphertext destination;
             encrypt_zero_symmetric(save_seed, destination, parms_id, u_prng, pool);
+            return destination;
+        }
+
+        
+        // ------------------------
+        //    symmetric batched
+        // ------------------------
+
+        inline void encrypt_symmetric_batched(const std::vector<const Plaintext*>& plain, bool save_seed, const std::vector<Ciphertext*>& destination, utils::RandomGenerator* u_prng = nullptr, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            encrypt_internal_batched(plain, false, save_seed, u_prng, destination, pool);
+        }
+
+        inline std::vector<Ciphertext> encrypt_symmetric_new_batched(const std::vector<const Plaintext*>& plain, bool save_seed, utils::RandomGenerator* u_prng = nullptr, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            std::vector<Ciphertext> destination(plain.size());
+            encrypt_symmetric_batched(plain, save_seed, batch_utils::collect_pointer(destination), u_prng, pool);
+            return destination;
+        }
+
+        inline void encrypt_zero_symmetric_batched(bool save_seed, const std::vector<Ciphertext*>& destination, std::optional<ParmsID> parms_id = std::nullopt, utils::RandomGenerator* u_prng = nullptr, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            SchemeType scheme = context_->first_context_data_pointer()->parms().scheme();
+            bool is_ntt_form = scheme == SchemeType::CKKS || scheme == SchemeType::BGV;
+            encrypt_zero_internal_batched(parms_id.value_or(context_->first_parms_id()), is_ntt_form, false, save_seed, u_prng, destination, pool);
+        }
+
+        inline std::vector<Ciphertext> encrypt_zero_symmetric_new_batched(size_t count, bool save_seed, std::optional<ParmsID> parms_id = std::nullopt, utils::RandomGenerator* u_prng = nullptr, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
+            std::vector<Ciphertext> destination(count);
+            encrypt_zero_symmetric_batched(save_seed, batch_utils::collect_pointer(destination), parms_id, u_prng, pool);
             return destination;
         }
 

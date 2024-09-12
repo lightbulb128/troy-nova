@@ -16,6 +16,7 @@ namespace troy {namespace utils {
     }
 
     void copy_slice_b(const ConstSliceVec<uint64_t>& from, const SliceVec<uint64_t>& to, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+    void copy_slice_b(const ConstSliceVec<uint8_t>& from, const SliceVec<uint8_t>& to, MemoryPoolHandle pool = MemoryPool::GlobalPool());
     void set_slice_b(const uint64_t value, const SliceVec<uint64_t>& to, MemoryPoolHandle pool = MemoryPool::GlobalPool());
 
     void modulo_ps(ConstSlice<uint64_t> polys, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result);
@@ -442,12 +443,35 @@ namespace troy {namespace utils {
 
     void dyadic_product_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result);
 
+    void dyadic_product_bps(
+        const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, 
+        size_t pcount, size_t degree, ConstSlice<Modulus> moduli, 
+        const SliceVec<uint64_t>& result, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+    );
+
     inline void dyadic_product_p(ConstSlice<uint64_t> poly1, ConstSlice<uint64_t> poly2, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         dyadic_product_ps(poly1, poly2, 1, degree, moduli, result);
     }
 
+    inline void dyadic_product_bp(
+        const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, 
+        size_t degree, ConstSlice<Modulus> moduli, 
+        const SliceVec<uint64_t>& result, MemoryPoolHandle pool = MemoryPool::GlobalPool()
+    ) {
+        dyadic_product_bps(polys1, polys2, 1, degree, moduli, result, pool);
+    }
+
     inline void dyadic_product(ConstSlice<uint64_t> poly1, ConstSlice<uint64_t> poly2, ConstPointer<Modulus> modulus, Slice<uint64_t> result) {
         dyadic_product_ps(poly1, poly2, 1, poly1.size(), ConstSlice<Modulus>::from_pointer(modulus), result);
+    }
+
+    inline void dyadic_product_b(
+        const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, 
+        ConstPointer<Modulus> modulus, const SliceVec<uint64_t>& result, 
+        MemoryPoolHandle pool = MemoryPool::GlobalPool()
+    ) {
+        if (polys1.size() != polys2.size() || polys1.size() != result.size()) throw std::invalid_argument("[dyadic_product_b] polys1.size() != polys2.size() || polys1.size() != result.size()");
+        if (polys1.size() > 0) dyadic_product_bps(polys1, polys2, 1, polys1[0].size(), ConstSlice<Modulus>::from_pointer(modulus), result, pool);
     }
 
 
@@ -456,12 +480,37 @@ namespace troy {namespace utils {
         dyadic_product_ps(polys1.as_const(), polys2, pcount, degree, moduli, polys1);
     }
 
+    inline void dyadic_product_inplace_bps(
+        const SliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, 
+        size_t pcount, size_t degree, ConstSlice<Modulus> moduli, 
+        MemoryPoolHandle pool = MemoryPool::GlobalPool()
+    ) {
+        dyadic_product_bps(slice_vec_to_const(polys1), polys2, pcount, degree, moduli, polys1, pool);
+    }
+
     inline void dyadic_product_inplace_p(Slice<uint64_t> poly1, ConstSlice<uint64_t> poly2, size_t degree, ConstSlice<Modulus> moduli) {
         dyadic_product_inplace_ps(poly1, poly2, 1, degree, moduli);
     }
 
+    inline void dyadic_product_inplace_bp(
+        const SliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, 
+        size_t degree, ConstSlice<Modulus> moduli, 
+        MemoryPoolHandle pool = MemoryPool::GlobalPool()
+    ) {
+        dyadic_product_inplace_bps(polys1, polys2, 1, degree, moduli, pool);
+    }
+
     inline void dyadic_product_inplace(Slice<uint64_t> poly1, ConstSlice<uint64_t> poly2, ConstPointer<Modulus> modulus) {
         dyadic_product_inplace_ps(poly1, poly2, 1, poly1.size(), ConstSlice<Modulus>::from_pointer(modulus));
+    }
+
+    inline void dyadic_product_inplace_b(
+        const SliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, 
+        ConstPointer<Modulus> modulus, 
+        MemoryPoolHandle pool = MemoryPool::GlobalPool()
+    ) {
+        if (polys1.size() != polys2.size()) throw std::invalid_argument("[dyadic_product_inplace_b] polys1.size() != polys2.size()");
+        if (polys1.size() > 0) dyadic_product_inplace_bps(polys1, polys2, 1, polys1[0].size(), ConstSlice<Modulus>::from_pointer(modulus), pool);
     }
 
 

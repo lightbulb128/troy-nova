@@ -1,3 +1,5 @@
+#pragma once
+
 #include "cuda_runtime.h"
 #include "../src/he_context.h"
 #include "../src/batch_encoder.h"

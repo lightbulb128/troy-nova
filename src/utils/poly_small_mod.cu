@@ -17,6 +17,16 @@ namespace troy {namespace utils {
             to_i[idx] = from_i[idx];
         }
     }
+    
+    static __global__ void kernel_copy_slice_b(ConstSliceArrayRef<uint8_t> from, SliceArrayRef<uint8_t> to) {
+        size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        size_t i = blockIdx.y;
+        ConstSlice<uint8_t> from_i = from[i];
+        Slice<uint8_t> to_i = to[i];
+        if (idx < from_i.size()) {
+            to_i[idx] = from_i[idx];
+        }
+    }
 
     static __global__ void kernel_set_slice(uint64_t value, Slice<uint64_t> to) {
         size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -47,6 +57,29 @@ namespace troy {namespace utils {
         } else {
             ConstSliceArray<uint64_t> from_arr = construct_batch(from, pool, device_reference);
             SliceArray<uint64_t> to_arr = construct_batch(to, pool, device_reference);
+            size_t block_count = ceil_div<size_t>(device_reference.size(), KERNEL_THREAD_COUNT);
+            set_device(device_reference.device_index());
+            dim3 block_dims(block_count, from.size());
+            kernel_copy_slice_b<<<block_dims, KERNEL_THREAD_COUNT>>>(from_arr, to_arr);
+            utils::stream_sync();
+        }
+    }
+
+    
+    void copy_slice_b(const ConstSliceVec<uint8_t>& from, const SliceVec<uint8_t>& to, MemoryPoolHandle pool) {
+        if (from.size() != to.size()) {
+            throw std::runtime_error("[copy_slice_b] from and to must have the same size");
+        }
+        if (from.size() == 0) return;
+        auto device_reference = from[0];
+        bool device = device_reference.on_device();
+        if (!device || from.size() < BATCH_OP_THRESHOLD) {
+            for (size_t i = 0; i < from.size(); i++) {
+                to[i].copy_from_slice(from[i]);
+            }
+        } else {
+            ConstSliceArray<uint8_t> from_arr = construct_batch(from, pool, device_reference);
+            SliceArray<uint8_t> to_arr = construct_batch(to, pool, device_reference);
             size_t block_count = ceil_div<size_t>(device_reference.size(), KERNEL_THREAD_COUNT);
             set_device(device_reference.device_index());
             dim3 block_dims(block_count, from.size());
@@ -814,12 +847,19 @@ namespace troy {namespace utils {
         }
     }
 
-    __global__ void kernel_dyadic_product_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
+    __device__ void device_dyadic_product_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
         size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
         if (idx < pcount * moduli.size() * degree) {
             size_t j = (idx / degree) % moduli.size();
             result[idx] = multiply_uint64_mod(polys1[idx], polys2[idx], moduli[j]);
         }
+    }
+    __global__ void kernel_dyadic_product_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
+        device_dyadic_product_ps(polys1, polys2, pcount, degree, moduli, result);
+    }
+    __global__ void kernel_dyadic_product_bps(ConstSliceArrayRef<uint64_t> polys1, ConstSliceArrayRef<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, SliceArrayRef<uint64_t> result) {
+        size_t i = blockIdx.y;
+        device_dyadic_product_ps(polys1[i], polys2[i], pcount, degree, moduli, result[i]);
     }
 
     void dyadic_product_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
@@ -834,6 +874,28 @@ namespace troy {namespace utils {
             utils::stream_sync();
         } else {
             host_dyadic_product_ps(polys1, polys2, pcount, degree, moduli, result);
+        }
+    }
+
+    void dyadic_product_bps(const ConstSliceVec<uint64_t>& polys1, const ConstSliceVec<uint64_t>& polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, const SliceVec<uint64_t>& result, MemoryPoolHandle pool) {
+        if (polys1.size() != polys2.size() || polys1.size() != result.size()) {
+            throw std::runtime_error("[dyadic_product_bps] polys1, polys2, and result must have the same size");
+        }
+        if (polys1.size() == 0) return;
+        bool device = moduli.on_device();
+        if (!device || polys1.size() < BATCH_OP_THRESHOLD) {
+            for (size_t i = 0; i < polys1.size(); i++) {
+                dyadic_product_ps(polys1[i], polys2[i], pcount, degree, moduli, result[i]);
+            }
+        } else {
+            size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
+            auto polys1_batched = construct_batch(polys1, pool, moduli);
+            auto polys2_batched = construct_batch(polys2, pool, moduli);
+            auto result_batched = construct_batch(result, pool, moduli);
+            utils::set_device(moduli.device_index());
+            dim3 block_dims(block_count, polys1.size());
+            kernel_dyadic_product_bps<<<block_dims, KERNEL_THREAD_COUNT>>>(polys1_batched, polys2_batched, pcount, degree, moduli, result_batched);
+            utils::stream_sync();
         }
     }
 
