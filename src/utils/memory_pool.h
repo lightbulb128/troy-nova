@@ -62,6 +62,7 @@ namespace troy {namespace utils {
         struct Impl;
         std::shared_ptr<Impl> impl_;
         inline static void ensure_global_pool() {
+            // Don't directly exclusively lock but check established first.
             if (!established) {
                 std::unique_lock lock(global_pool_mutex);
                 if (global_pool != nullptr) {

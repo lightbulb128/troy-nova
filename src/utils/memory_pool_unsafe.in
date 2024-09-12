@@ -23,7 +23,7 @@ namespace troy::utils {
         cudaDeviceProp props;
         cudaError_t status = cudaGetDeviceProperties(&props, device_index);
         if (status != cudaSuccess) {
-            runtime_error("[MemoryPool::MemoryPool] cudaGetDeviceProperties failed.", status);
+            runtime_error("[MemoryPool(unsafe)::MemoryPool] cudaGetDeviceProperties failed.", status);
         }
     }
 
