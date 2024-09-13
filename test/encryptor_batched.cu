@@ -48,7 +48,7 @@ namespace encryptor_batched {
         auto cipher = encryptor.encrypt_zero_symmetric_new_batched(batch_size, false);
         if (scheme == SchemeType::CKKS) for (size_t i = 0; i < batch_size; i++) cipher[i].scale() = 1e6;
         ASSERT_TRUE(all_parms_id(cipher, first_parms_id));
-        auto decrypted = context.batch_decrypt(cipher);
+        auto decrypted = decryptor.decrypt_batched_new(batch_utils::collect_const_pointer(cipher));
         auto decoded = context.encoder().batch_decode_simd(decrypted);
         auto zeros = context.batch_zeros_simd(batch_size);
         ASSERT_TRUE(context.batch_near_equal(decoded, zeros));
@@ -57,7 +57,7 @@ namespace encryptor_batched {
         cipher = encryptor.encrypt_zero_asymmetric_new_batched(batch_size);
         if (scheme == SchemeType::CKKS) for (size_t i = 0; i < batch_size; i++) cipher[i].scale() = 1e6;
         ASSERT_TRUE(all_parms_id(cipher, first_parms_id));
-        decrypted = context.batch_decrypt(cipher);
+        decrypted = decryptor.decrypt_batched_new(batch_utils::collect_const_pointer(cipher));
         decoded = context.encoder().batch_decode_simd(decrypted);
         ASSERT_TRUE(context.batch_near_equal(decoded, zeros));
 
@@ -68,14 +68,14 @@ namespace encryptor_batched {
             cipher = encryptor.encrypt_zero_asymmetric_new_batched(batch_size, second_parms_id);
             if (scheme == SchemeType::CKKS) for (size_t i = 0; i < batch_size; i++) cipher[i].scale() = 1e6;
             ASSERT_TRUE(all_parms_id(cipher, second_parms_id));
-            decrypted = context.batch_decrypt(cipher);
+            decrypted = decryptor.decrypt_batched_new(batch_utils::collect_const_pointer(cipher));
             decoded = context.encoder().batch_decode_simd(decrypted);
             ASSERT_TRUE(context.batch_near_equal(decoded, zeros));
             // symmetric
             cipher = encryptor.encrypt_zero_asymmetric_new_batched(batch_size, second_parms_id);
             if (scheme == SchemeType::CKKS) for (size_t i = 0; i < batch_size; i++) cipher[i].scale() = 1e6;
             ASSERT_TRUE(all_parms_id(cipher, second_parms_id));
-            decrypted = context.batch_decrypt(cipher);
+            decrypted = decryptor.decrypt_batched_new(batch_utils::collect_const_pointer(cipher));
             decoded = context.encoder().batch_decode_simd(decrypted);
             ASSERT_TRUE(context.batch_near_equal(decoded, zeros));
         }
@@ -85,7 +85,7 @@ namespace encryptor_batched {
         auto plain = context.encoder().batch_encode_simd(message);
         auto plain_ptrs = batch_utils::collect_const_pointer(plain);
         cipher = encryptor.encrypt_symmetric_new_batched(plain_ptrs, false);
-        decrypted = context.batch_decrypt(cipher);
+        decrypted = decryptor.decrypt_batched_new(batch_utils::collect_const_pointer(cipher));
         decoded = context.encoder().batch_decode_simd(decrypted);
         ASSERT_TRUE(context.batch_near_equal(decoded, message));
 
@@ -96,7 +96,7 @@ namespace encryptor_batched {
             for (size_t i = 0; i < batch_size; i++) plain[i] = encoder.batch().scale_up_new(plain[i], std::nullopt);
             auto plain_ptrs = batch_utils::collect_const_pointer(plain);
             cipher = encryptor.encrypt_symmetric_new_batched(plain_ptrs, false);
-            decrypted = context.batch_decrypt(cipher);
+            decrypted = decryptor.decrypt_batched_new(batch_utils::collect_const_pointer(cipher));
             decoded = context.encoder().batch_decode_simd(decrypted);
             ASSERT_TRUE(context.batch_near_equal(decoded, message));
 
@@ -114,7 +114,7 @@ namespace encryptor_batched {
         plain = context.encoder().batch_encode_simd(message);
         plain_ptrs = batch_utils::collect_const_pointer(plain);
         cipher = encryptor.encrypt_asymmetric_new_batched(plain_ptrs);
-        decrypted = context.batch_decrypt(cipher);
+        decrypted = decryptor.decrypt_batched_new(batch_utils::collect_const_pointer(cipher));
         decoded = context.encoder().batch_decode_simd(decrypted);
         ASSERT_TRUE(context.batch_near_equal(decoded, message));
 
@@ -124,7 +124,7 @@ namespace encryptor_batched {
         plain = context.encoder().batch_encode_simd(message);
         plain_ptrs = batch_utils::collect_const_pointer(plain);
         cipher = encryptor.encrypt_asymmetric_new_batched(plain_ptrs);
-        decrypted = context.batch_decrypt(cipher);
+        decrypted = decryptor.decrypt_batched_new(batch_utils::collect_const_pointer(cipher));
         decoded = context.encoder().batch_decode_simd(decrypted);
         for (size_t i = 0; i < batch_size; i++) message[i].resize(decoded[i].size());
         ASSERT_TRUE(context.batch_near_equal(decoded, message));
@@ -134,7 +134,7 @@ namespace encryptor_batched {
         plain = context.encoder().batch_encode_simd(message);
         plain_ptrs = batch_utils::collect_const_pointer(plain);
         cipher = encryptor.encrypt_symmetric_new_batched(plain_ptrs, false);
-        decrypted = context.batch_decrypt(cipher);
+        decrypted = decryptor.decrypt_batched_new(batch_utils::collect_const_pointer(cipher));
         decoded = context.encoder().batch_decode_simd(decrypted);
         for (size_t i = 0; i < batch_size; i++) message[i].resize(decoded[i].size());
         ASSERT_TRUE(context.batch_near_equal(decoded, message));

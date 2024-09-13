@@ -136,6 +136,8 @@ namespace troy {namespace utils {
 
         void decrypt_scale_and_round(ConstSlice<uint64_t> phase, size_t phase_coeff_count, Slice<uint64_t> destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
 
+        void decrypt_scale_and_round_batched(const ConstSliceVec<uint64_t>& phase, size_t phase_coeff_count, const SliceVec<uint64_t>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+
         void mod_t_and_divide_q_last_inplace(Slice<uint64_t> input, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
 
         void mod_t_and_divide_q_last_ntt(ConstSlice<uint64_t> input, size_t pcount, Slice<uint64_t> destination, ConstSlice<NTTTables> rns_ntt_tables, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
