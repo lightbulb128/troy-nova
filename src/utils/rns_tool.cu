@@ -1135,7 +1135,7 @@ namespace troy {namespace utils {
         }
     }
 
-    __global__ static void kernel_host_decrypt_scale_and_round_step1(
+    __global__ static void kernel_decrypt_scale_and_round_step1(
         ConstPointer<Modulus> gamma,
         ConstPointer<Modulus> t,
         MultiplyUint64Operand inv_gamma_mod_t,
@@ -1170,7 +1170,7 @@ namespace troy {namespace utils {
         if (device) {
             size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
             utils::set_device(destination.device_index());
-            kernel_host_decrypt_scale_and_round_step1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+            kernel_decrypt_scale_and_round_step1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 self.gamma(),
                 self.t(),
                 self.inv_gamma_mod_t(),
@@ -1193,7 +1193,7 @@ namespace troy {namespace utils {
         size_t base_t_gamma_size = this->base_t_gamma().size();
 
         // Compute |gamma * t|_qi * ct(s)
-        Array<uint64_t> temp(phase_coeff_count * base_q_size, device, pool);
+        Array<uint64_t> temp = Array<uint64_t>::create_uninitialized(phase_coeff_count * base_q_size, device, pool);
         utils::multiply_uint64operand_p(
             phase.const_slice(0, base_q_size * phase_coeff_count),
             this->prod_t_gamma_mod_q(),
@@ -1203,7 +1203,7 @@ namespace troy {namespace utils {
         );
 
         // Make another temp destination to get the poly in mod {t, gamma}
-        Array<uint64_t> temp_t_gamma(phase_coeff_count * base_t_gamma_size, device, pool);
+        Array<uint64_t> temp_t_gamma = Array<uint64_t>::create_uninitialized(phase_coeff_count * base_t_gamma_size, device, pool);
         this->base_q_to_t_gamma_conv()
             .fast_convert_array(temp.const_reference(), temp_t_gamma.reference(), pool);
         
