@@ -333,6 +333,15 @@ namespace troy {namespace rlwe {
         if (n == 0) return;
 
         bool device = sk.on_device();
+        if (!device) {
+            // directly use symmetric_with_c1_prng
+            for (size_t i = 0; i < n; i++) {
+                symmetric_with_c1_prng(
+                    sk, context, parms_id, is_ntt_form, c1_prng, save_seed, *destination[i], pool
+                );
+            }
+            return;
+        }
         
         std::optional<ContextDataPointer> context_data_optional = context->get_context_data(parms_id);
         if (!context_data_optional.has_value()) {
@@ -369,22 +378,21 @@ namespace troy {namespace rlwe {
         // Generate ciphertext: (c[0], c[1]) = ([-(as+ e)]_q, a) in BFV/CKKS
         // Generate ciphertext: (c[0], c[1]) = ([-(as+pe)]_q, a) in BGV
 
+        utils::Array<uint64_t> seeds(n, false); 
         for (size_t i = 0; i < n; i++) {
             uint64_t seed = 0;
             while (seed == 0) seed = c1_prng.sample_uint64();
-            RandomGenerator c1_new_prng(seed);
-            if (is_ntt_form || !save_seed) {
-                // Directly sample NTT form
-                c1_new_prng.sample_poly_uniform(destination[i]->poly(1), coeff_count, coeff_modulus);
-            } else if (save_seed) {
-                // Sample non-NTT form and store the seed
-                c1_new_prng.sample_poly_uniform(destination[i]->poly(1), coeff_count, coeff_modulus);
-            }
-            if (save_seed) {
-                destination[i]->seed() = seed;
-            }
+            seeds[i] = seed;
+            if (save_seed) destination[i]->seed() = seed;
         }
+        seeds.to_device_inplace(pool);
         auto destination_poly1 = batch_utils::pcollect_poly(destination, 1);
+        RandomGenerator::sample_poly_uniform_many(
+            seeds.const_reference(),
+            destination_poly1,
+            coeff_count, coeff_modulus, pool
+        );
+
         if (!is_ntt_form && save_seed) {
             // Transform the c1 into NTT representation
             utils::ntt_inplace_bp(destination_poly1, coeff_count, ntt_tables, pool);

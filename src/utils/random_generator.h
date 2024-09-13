@@ -70,18 +70,26 @@ namespace troy { namespace utils {
 
         void fill_bytes(Slice<uint8_t> bytes);
         void fill_bytes_batched(const SliceVec<uint8_t>& bytes, MemoryPoolHandle pool);
+        /*
+          Diff between batched and many
+          batched: use the same seed, so the counter is added batch_size * length
+          many: use different seeds for each item in batch, counter is starting from 0
+        */
+        static void fill_bytes_many(const ConstSlice<uint64_t> seeds, const SliceVec<uint8_t>& destination, MemoryPoolHandle pool);
         void fill_uint64s(Slice<uint64_t> uint64s);
         void fill_uint64s_batched(const SliceVec<uint64_t>& uint64s, MemoryPoolHandle pool);
+        static void fill_uint64s_many(const ConstSlice<uint64_t> seeds, const SliceVec<uint64_t>& destination, MemoryPoolHandle pool);
         uint64_t sample_uint64();
 
         void sample_poly_ternary(Slice<uint64_t> destination, size_t degree, ConstSlice<Modulus> moduli);
         void sample_poly_centered_binomial(Slice<uint64_t> destination, size_t degree, ConstSlice<Modulus> moduli);
         void sample_poly_uniform(Slice<uint64_t> destination, size_t degree, ConstSlice<Modulus> moduli);
-
         
         void sample_poly_ternary_batched(const SliceVec<uint64_t>& destination, size_t degree, ConstSlice<Modulus> moduli, MemoryPoolHandle pool = MemoryPool::GlobalPool());
         void sample_poly_centered_binomial_batched(const SliceVec<uint64_t>& destination, size_t degree, ConstSlice<Modulus> moduli, MemoryPoolHandle pool = MemoryPool::GlobalPool());
         void sample_poly_uniform_batched(const SliceVec<uint64_t>& destination, size_t degree, ConstSlice<Modulus> moduli, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+
+        static void sample_poly_uniform_many(const ConstSlice<uint64_t> seeds, const SliceVec<uint64_t>& destination, size_t degree, ConstSlice<Modulus> moduli, MemoryPoolHandle pool = MemoryPool::GlobalPool());
 
     };
 
