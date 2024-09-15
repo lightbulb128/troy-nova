@@ -34,7 +34,8 @@ namespace bench::he_operations {
         bool multiple_devices = false;
 
         bool no_test_correct = false;
-        bool no_bench_encode = false;
+        bool no_bench_encode_simd = false;
+        bool no_bench_encode_polynomial = false;
         bool no_bench_encrypt = false;
         bool no_bench_negate = false;
         bool no_bench_translate = false;
@@ -87,7 +88,8 @@ namespace bench::he_operations {
             multiple_devices = parser.get_bool_store_true("-md").value_or(parser.get_bool_store_true("--multiple-devices").value_or(false));
 
             no_test_correct = parser.get_bool_store_true("--no-test-correct").value_or(false);
-            no_bench_encode = parser.get_bool_store_true("--no-bench-encode").value_or(false);
+            no_bench_encode_simd = parser.get_bool_store_true("--no-bench-encode-simd").value_or(false);
+            no_bench_encode_polynomial = parser.get_bool_store_true("--no-bench-encode-polynomial").value_or(false);
             no_bench_encrypt = parser.get_bool_store_true("--no-bench-encrypt").value_or(false);
             no_bench_negate = parser.get_bool_store_true("--no-bench-negate").value_or(false);
             no_bench_translate = parser.get_bool_store_true("--no-bench-translate").value_or(false);
@@ -102,13 +104,32 @@ namespace bench::he_operations {
             no_bench_complex_conjugate = parser.get_bool_store_true("--no-bench-complex-conjugate").value_or(false);
 
             if (batch_size > 1) {
-                std::cout << "Batch size is greater than 1. Some tests are disabled because those batch operations are not implemented yet.\n";
-                no_bench_encode = true;
-                no_bench_encrypt = true;
-                no_bench_translate_plain = true;
-                no_bench_multiply_relinearize = true;
-                no_bench_mod_switch_to_next = true;
-                no_bench_rescale_to_next = true;
+                bool flag = false;
+                std::stringstream ss;
+                if (!no_bench_encode_polynomial) {
+                    no_bench_encode_polynomial = true;
+                    ss << "  --no-bench-encode-polynomial\n";
+                    flag = true;
+                }
+                if (!no_bench_translate_plain) {
+                    no_bench_translate_plain = true;
+                    ss << "  --no-bench-translate-plain\n";
+                    flag = true;
+                }
+                if (!no_bench_multiply_relinearize) {
+                    no_bench_multiply_relinearize = true;
+                    ss << "  --no-bench-multiply-relinearize\n";
+                    flag = true;
+                }
+                if (!no_bench_rescale_to_next) {
+                    no_bench_rescale_to_next = true;
+                    ss << "  --no-bench-rescale-to-next\n";
+                    flag = true;
+                }
+                if (flag) {
+                    std::cout << "Batch size is greater than 1. Some tests are disabled because those batch operations are not implemented yet:\n";
+                    std::cout << ss.str();
+                }
             }
 
             if (threads < 1) {
@@ -161,7 +182,8 @@ namespace bench::he_operations {
             std::cout << std::endl;
             std::cout << "  --no-test-correct           Skip correctness test" << std::endl;
             // no explain
-            std::cout << "  --no-bench-encode" << std::endl;
+            std::cout << "  --no-bench-encode-simd" << std::endl;
+            std::cout << "  --no-bench-encode-polynomial" << std::endl;
             std::cout << "  --no-bench-encrypt" << std::endl;
             std::cout << "  --no-bench-negate" << std::endl;
             std::cout << "  --no-bench-translate" << std::endl;
@@ -357,6 +379,11 @@ namespace bench::he_operations {
             }
 
             void test_encode_simd() {
+
+                // Batch op for simd encoding is only implemented for BFV now.
+                bool has_batch_op = scheme == SchemeType::BFV;
+                if (batch_size > 1 && !has_batch_op) return;
+
                 auto thread_lambda = [this](size_t thread_index) {
                     double scale = args.scale;
                     const GeneralHeContext& context = get_context(thread_index);
@@ -365,17 +392,78 @@ namespace bench::he_operations {
                     Timer timer;
                     size_t timer_encode = timer.register_timer(name + ".EncodeSimd");
                     size_t timer_decode = timer.register_timer(name + ".DecodeSimd");
+                    auto message = context.batch_random_simd_full(batch_size);
                     for (size_t i = 0; i < repeat + warm_up_repeat; i++) {
-                        GeneralVector message = context.random_simd_full();
+
                         timer.tick(timer_encode);
-                        Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
+                        vector<Plaintext> plain;
+                        if (batch_size == 1) {
+                            plain.resize(1);
+                            plain[0] = context.encoder().encode_simd(message[0], std::nullopt, scale, pool);
+                        } else {
+                            if (context.encoder().is_batch()) {
+                                const BatchEncoder& encoder = context.encoder().batch(); 
+                                size_t n = encoder.slot_count();
+                                // Collect all message integers into one continuous array
+                                utils::Array<uint64_t> message_total = utils::Array<uint64_t>::create_uninitialized(n * batch_size, false);
+                                for (size_t j = 0; j < batch_size; j++) {
+                                    message_total.slice(j * n, (j + 1) * n).copy_from_slice(
+                                        utils::ConstSlice<uint64_t>(message[j].integers().data(), n, false, nullptr)
+                                    );
+                                }
+                                // Convey to device
+                                if (device) message_total.to_device_inplace(pool);
+                                // Batched encode
+                                plain.resize(batch_size);
+                                vector<utils::ConstSlice<uint64_t>> slices; slices.reserve(batch_size);
+                                vector<Plaintext*> plain_ptrs; plain_ptrs.reserve(batch_size);
+                                for (size_t j = 0; j < batch_size; j++) {
+                                    slices.push_back(message_total.slice(j * n, (j + 1) * n));
+                                    plain_ptrs.push_back(&plain[j]);
+                                }
+                                encoder.encode_slice_batched(slices, plain_ptrs, pool);
+                            } else {
+                                throw std::runtime_error("Batch op for simd encoding is only implemented for BFV now.");
+                            }
+                        }
                         if (device) cudaStreamSynchronize(0);
                         if (i >= warm_up_repeat) timer.tock(timer_encode);
+
                         timer.tick(timer_decode);
-                        GeneralVector decoded = context.encoder().decode_simd(plain, pool);
+                        vector<GeneralVector> decoded;
+                        if (batch_size == 1) {
+                            decoded.resize(1);
+                            decoded[0] = context.encoder().decode_simd(plain[0], pool);
+                        } else {
+                            if (context.encoder().is_batch()) {
+                                const BatchEncoder& encoder = context.encoder().batch(); 
+                                size_t n = encoder.slot_count();
+                                decoded.resize(batch_size);
+                                utils::Array<uint64_t> decoded_total = utils::Array<uint64_t>::create_uninitialized(
+                                    n * batch_size, device, pool
+                                );
+                                vector<utils::Slice<uint64_t>> slices; slices.reserve(batch_size);
+                                for (size_t j = 0; j < batch_size; j++) {
+                                    slices.push_back(decoded_total.slice(j * n, (j + 1) * n));
+                                }
+                                encoder.decode_slice_batched(batch_utils::collect_const_pointer(plain), slices, pool);
+                                decoded_total.to_host_inplace();
+                                for (size_t j = 0; j < batch_size; j++) {
+                                    std::vector<uint64_t> decoded_vec; decoded_vec.reserve(n);
+                                    for (size_t k = 0; k < n; k++) {
+                                        decoded_vec.push_back(decoded_total[j * n + k]);
+                                    }
+                                    decoded[j] = GeneralVector(std::move(decoded_vec), false);
+                                }
+                            } else {
+                                throw std::runtime_error("Batch op for simd encoding is only implemented for BFV now.");
+                            }
+                        }
                         if (device) cudaStreamSynchronize(0);
                         if (i >= warm_up_repeat) timer.tock(timer_decode);
-                        assert_true(context.near_equal(message, decoded), "test_encode_simd failed.");
+                        if (i == 0 && !args.no_test_correct) {
+                            assert_true(context.batch_near_equal(message, decoded), "test_encode_simd failed.");
+                        }
                     }
                     return timer;
                 };
@@ -391,8 +479,8 @@ namespace bench::he_operations {
                     Timer timer;
                     size_t timer_encode = timer.register_timer(name + ".EncodePoly");
                     size_t timer_decode = timer.register_timer(name + ".DecodePoly");
+                    GeneralVector message = context.random_polynomial_full();
                     for (size_t i = 0; i < repeat + warm_up_repeat; i++) {
-                        GeneralVector message = context.random_polynomial_full();
                         timer.tick(timer_encode);
                         Plaintext plain = context.encoder().encode_polynomial(message, std::nullopt, scale, pool);
                         if (device) cudaStreamSynchronize(0);
@@ -420,28 +508,58 @@ namespace bench::he_operations {
                     size_t timer_enc_asym = timer.register_timer(name + ".EncryptAsym");
                     size_t timer_enc_sym = timer.register_timer(name + ".EncryptSym");
                     size_t timer_dec = timer.register_timer(name + ".Decrypt");
-                    GeneralVector message = context.random_simd_full();
-                    Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
+                    auto message = context.batch_random_simd_full(batch_size);
+                    auto plain = context.encoder().batch_encode_simd(message, std::nullopt, scale, pool);
                     for (size_t i = 0; i < repeat + warm_up_repeat; i++) {
+
                         timer.tick(timer_enc_asym);
-                        Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain, nullptr, pool);
+                        std::vector<Ciphertext> cipher;
+                        if (batch_size == 1) {
+                            cipher.resize(1);
+                            cipher[0] = context.encryptor().encrypt_asymmetric_new(plain[0], nullptr, pool);
+                        } else {
+                            cipher.resize(batch_size);
+                            auto plain_ptrs = batch_utils::collect_const_pointer(plain);
+                            auto cipher_ptrs = batch_utils::collect_pointer(cipher);
+                            context.encryptor().encrypt_asymmetric_batched(plain_ptrs, cipher_ptrs, nullptr, pool);
+                        }
                         if (device) cudaStreamSynchronize(0);
                         if (i >= warm_up_repeat) timer.tock(timer_enc_asym);
+
                         timer.tick(timer_enc_sym);
-                        Ciphertext cipher_sym = context.encryptor().encrypt_symmetric_new(plain, true, nullptr, pool);
+                        std::vector<Ciphertext> cipher_sym;
+                        if (batch_size == 1) {
+                            cipher_sym.resize(1);
+                            cipher_sym[0] = context.encryptor().encrypt_symmetric_new(plain[0], true, nullptr, pool);
+                        } else {
+                            cipher_sym.resize(batch_size);
+                            auto cipher_ptrs = batch_utils::collect_pointer(cipher_sym);
+                            auto plain_ptrs = batch_utils::collect_const_pointer(plain);
+                            context.encryptor().encrypt_symmetric_batched(plain_ptrs, true, cipher_ptrs, nullptr, pool);
+                        }
                         if (device) cudaStreamSynchronize(0);
                         if (i >= warm_up_repeat) timer.tock(timer_enc_sym);
+
                         timer.tick(timer_dec);
-                        Plaintext plain_dec = context.decryptor().decrypt_new(cipher, pool);
+                        std::vector<Plaintext> plain_dec;
+                        if (batch_size == 1) {
+                            plain_dec.resize(1);
+                            plain_dec[0] = context.decryptor().decrypt_new(cipher[0], pool);
+                        } else {
+                            plain_dec.resize(batch_size);
+                            auto plain_dec_ptrs = batch_utils::collect_pointer(plain_dec);
+                            auto cipher_ptrs = batch_utils::collect_const_pointer(cipher);
+                            context.decryptor().decrypt_batched(cipher_ptrs, plain_dec_ptrs, pool);
+                        }
                         if (device) cudaStreamSynchronize(0);
                         if (i >= warm_up_repeat) timer.tock(timer_dec);
                         
                         if (i == 0 && !args.no_test_correct) {
-                            auto decoded = context.encoder().decode_simd(plain_dec, pool);
-                            assert_true(context.near_equal(message, decoded), "test_encrypt/asymmetric failed.");
-                            cipher_sym.expand_seed(context.context());
-                            decoded = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_sym, pool), pool);
-                            assert_true(context.near_equal(message, decoded), "test_encrypt/symmetric failed.");
+                            auto decoded = context.encoder().batch_decode_simd(plain_dec, pool);
+                            assert_true(context.batch_near_equal(message, decoded), "test_encrypt/asymmetric failed.");
+                            for (auto& each: cipher_sym) each.expand_seed(context.context());
+                            decoded = context.encoder().batch_decode_simd(context.batch_decrypt(cipher_sym), pool);
+                            assert_true(context.batch_near_equal(message, decoded), "test_encrypt/symmetric failed.");
                         }
                     }
                     return timer;
@@ -473,7 +591,6 @@ namespace bench::he_operations {
                             auto result_ptrs = batch_utils::collect_pointer(cipher_neg);
                             context.evaluator().negate_batched(cipher_ptrs, result_ptrs, pool);
                         }
-                        // context.evaluator().add(cipher, cipher, result);
                         if (device) cudaStreamSynchronize(0);
                         if (i >= warm_up_repeat) timer.tock(timer_neg);
                         if (i == 0 && !args.no_test_correct) {
@@ -664,17 +781,26 @@ namespace bench::he_operations {
                     size_t repeat = get_repeat(thread_index);
                     Timer timer;
                     size_t timer_mod = timer.register_timer(name + ".ModSwitchToNext");
-                    GeneralVector message = context.random_simd_full();
-                    Plaintext plain = context.encoder().encode_simd(message, std::nullopt, scale, pool);
-                    Ciphertext cipher = context.encryptor().encrypt_asymmetric_new(plain, nullptr, pool);
+                    auto message = context.batch_random_simd_full(batch_size);
+                    auto plain = context.encoder().batch_encode_simd(message, std::nullopt, scale, pool);
+                    auto cipher = context.batch_encrypt_asymmetric(plain);
                     for (size_t i = 0; i < repeat + warm_up_repeat; i++) {
                         timer.tick(timer_mod);
-                        Ciphertext cipher_mod = context.evaluator().mod_switch_to_next_new(cipher, pool);
+                        vector<Ciphertext> cipher_mod;
+                        if (batch_size == 1) {
+                            cipher_mod.resize(1);
+                            cipher_mod[0] = context.evaluator().mod_switch_to_next_new(cipher[0], pool);
+                        } else {
+                            auto cipher_ptrs = batch_utils::collect_const_pointer(cipher);
+                            cipher_mod.resize(batch_size);
+                            auto result_ptrs = batch_utils::collect_pointer(cipher_mod);
+                            context.evaluator().mod_switch_to_next_batched(cipher_ptrs, result_ptrs, pool);
+                        };
                         if (device) cudaStreamSynchronize(0);
                         if (i >= warm_up_repeat) timer.tock(timer_mod);
                         if (i == 0 && !args.no_test_correct) {
-                            auto decrypted = context.encoder().decode_simd(context.decryptor().decrypt_new(cipher_mod, pool), pool);
-                            assert_true(context.near_equal(message, decrypted), "test_mod_switch_to_next failed.");
+                            auto decrypted = context.encoder().batch_decode_simd(context.batch_decrypt(cipher_mod), pool);
+                            assert_true(context.batch_near_equal(message, decrypted), "test_mod_switch_to_next failed.");
                         }
                     }
                     return timer;
@@ -877,8 +1003,8 @@ namespace bench::he_operations {
 
             void test_suite() {
                 bool is_ckks = scheme == SchemeType::CKKS;
-                if (!args.no_bench_encode) test_encode_simd();
-                if (!args.no_bench_encode) test_encode_polynomial();
+                if (!args.no_bench_encode_simd) test_encode_simd();
+                if (!args.no_bench_encode_polynomial) test_encode_polynomial();
                 if (!args.no_bench_encrypt) test_encrypt();
                 if (!args.no_bench_negate) test_negate();
                 if (!args.no_bench_translate) test_translate();

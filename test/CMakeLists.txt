@@ -99,8 +99,8 @@ if(TROY_BENCH)
 
 endif()
 
-# add_executable(custom3)
-# target_sources(custom3 PRIVATE 
-# custom3.cu
-# )
-# target_link_libraries(custom3 troy)
+add_executable(custom3)
+target_sources(custom3 PRIVATE 
+custom3.cu
+)
+target_link_libraries(custom3 troy)
