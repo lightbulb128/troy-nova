@@ -182,6 +182,12 @@ void register_evaluator(pybind11::module& m) {
         .def("multiply_plain_new", [](const Evaluator& self, const Ciphertext& encrypted, const Plaintext& plain, MemoryPoolHandleArgument pool) {
             return self.multiply_plain_new(encrypted, plain, nullopt_default_pool(pool));
         }, py::arg("encrypted"), py::arg("plain"), MEMORY_POOL_ARGUMENT)
+        .def("multiply_plain_new_batched", [](const Evaluator& self, const py::list& encrypted, const py::list& plain, MemoryPoolHandleArgument pool) {
+            return self.multiply_plain_new_batched(
+                cast_list<const Ciphertext*>(encrypted), cast_list<const Plaintext*>(plain), 
+                nullopt_default_pool(pool)
+            );
+        }, py::arg("encrypted"), py::arg("plain"), MEMORY_POOL_ARGUMENT)
 
         // transform_plain_to_ntt(plain, parms_id, destination, pool)
         .def("transform_plain_to_ntt", [](const Evaluator& self, const Plaintext& plain, ParmsID parms_id, Plaintext& destination, MemoryPoolHandleArgument pool) {

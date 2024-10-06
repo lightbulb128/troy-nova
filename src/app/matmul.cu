@@ -547,9 +547,9 @@ namespace troy { namespace linear {
             Cipher2d ret; ret.data().push_back(std::vector<Ciphertext>());
             return ret;
         }
-        size_t packSlots = this->input_block;
+        size_t pack_slots = this->input_block;
         size_t totalCount = cipher.data().size() * cipher.data()[0].size();
-        std::vector<Ciphertext> output; output.reserve(ceil_div(totalCount, packSlots));
+        std::vector<Ciphertext> output; output.reserve(ceil_div(totalCount, pack_slots));
         Ciphertext current; bool currentSet = false;
         size_t currentSlot = 0;
 
@@ -557,7 +557,7 @@ namespace troy { namespace linear {
         
         size_t field_trace_logn = 0;
         size_t field_trace_n = 1;
-        while (field_trace_n != slot_count / packSlots) {
+        while (field_trace_n != slot_count / pack_slots) {
             field_trace_logn += 1;
             field_trace_n *= 2;
         }
@@ -566,7 +566,7 @@ namespace troy { namespace linear {
         Ciphertext shifted = buffer.clone(pool);
         for (size_t i = 0; i < cipher.data().size(); i++) {
             for (size_t j = 0; j < cipher.data()[0].size(); j++) {
-                size_t shift = packSlots - 1;
+                size_t shift = pack_slots - 1;
                 Ciphertext ciphertext = cipher.data()[i][j].clone(pool);
                 if (is_ntt) evaluator.transform_from_ntt_inplace(ciphertext);
                 if (shift != 0) {
@@ -575,7 +575,7 @@ namespace troy { namespace linear {
                     buffer = ciphertext.clone(pool);
                 }
                 
-                evaluator.divide_by_poly_modulus_degree_inplace(buffer, slot_count / packSlots);
+                evaluator.divide_by_poly_modulus_degree_inplace(buffer, slot_count / pack_slots);
                 if (is_ntt) evaluator.transform_to_ntt_inplace(buffer);
                 
                 evaluator.field_trace_inplace(buffer, autoKey, field_trace_logn, pool);
@@ -596,7 +596,7 @@ namespace troy { namespace linear {
                 }
 
                 currentSlot += 1;
-                if (currentSlot == packSlots) {
+                if (currentSlot == pack_slots) {
                     currentSlot = 0; currentSet = false;
                     output.push_back(std::move(current));
                 }

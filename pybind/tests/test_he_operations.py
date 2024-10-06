@@ -203,6 +203,18 @@ class HeTest:
             decoded = ghe.encoder.decode_simd(ghe.decryptor.decrypt_new(multiplied))
             self.tester.assertTrue(ghe.near_equal(ghe.mul(message1, message2), decoded))
 
+        # test multiply plain batched
+        batch_size = 16
+        message1 = [ghe.random_simd_full() for _ in range(batch_size)]
+        message2 = [ghe.random_simd_full() for _ in range(batch_size)]
+        plain1 = [ghe.encoder.encode_simd(message1[i]) for i in range(batch_size)]
+        plain2 = [ghe.encoder.encode_simd(message2[i]) for i in range(batch_size)]
+        cipher1 = [ghe.encryptor.encrypt_symmetric_new(plain1[i], False) for i in range(batch_size)]
+        multiplied = ghe.evaluator.multiply_plain_new_batched(cipher1, plain2)
+        decoded = [ghe.encoder.decode_simd(ghe.decryptor.decrypt_new(multiplied[i])) for i in range(batch_size)]
+        for i in range(batch_size):
+            self.tester.assertTrue(ghe.near_equal(ghe.mul(message1[i], message2[i]), decoded[i]))
+
     def test_rotate(self):
         ghe = self.ghe
         message = ghe.random_simd_full()
