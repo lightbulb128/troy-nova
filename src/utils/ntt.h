@@ -140,13 +140,13 @@ namespace troy {namespace utils {
     void ntt_transfer_from_rev_batched(const ConstSliceVec<uint64_t>& operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, const SliceVec<uint64_t>& result, NTTTableIndexer tables, MemoryPoolHandle pool);
 
     void ntt_transfer_last_reduce(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, NTTTableIndexer tables);
-    void ntt_multiply_inv_degree(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, NTTTableIndexer tables);
+    void ntt_multiply_inv_degree(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, NTTTableIndexer tables, uint64_t scalar);
 
     inline void ntt_transfer_last_reduce(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables) {
         ntt_transfer_last_reduce(operand, pcount, tables.size(), log_degree, NTTTableIndexer(tables));
     }
-    inline void ntt_multiply_inv_degree(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables) {
-        ntt_multiply_inv_degree(operand, pcount, tables.size(), log_degree, NTTTableIndexer(tables));
+    inline void ntt_multiply_inv_degree(Slice<uint64_t> operand, size_t pcount, size_t log_degree, ConstSlice<NTTTables> tables, uint64_t scalar) {
+        ntt_multiply_inv_degree(operand, pcount, tables.size(), log_degree, NTTTableIndexer(tables), scalar);
     }
 
 

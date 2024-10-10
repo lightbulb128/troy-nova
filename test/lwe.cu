@@ -133,4 +133,73 @@ namespace lwe {
         utils::MemoryPool::Destroy();
     }
 
+
+    void test_pack_rlwes(const GeneralHeContext& context) {
+        uint64_t t = context.t();
+        std::cerr << "t = " << t << std::endl;
+        double scale = context.scale();
+        double tolerance = context.tolerance();
+
+        const size_t poly_modulus_degree = context.params_host().poly_modulus_degree();
+        ASSERT_TRUE(context.params_host().poly_modulus_degree() == 32);
+
+        GaloisKeys automorphism_key = context.key_generator().create_automorphism_keys(false);
+
+        // pack 7 lwes with shift -3, input interval 8, output interval 1
+        auto test_setting = [&](size_t n, size_t input_interval, size_t output_interval, int shift_){
+            ASSERT_TRUE(n <= input_interval / output_interval);
+            ASSERT_TRUE(shift_ <= 0 && static_cast<size_t>(-shift_) < input_interval);
+            size_t shift = 2 * poly_modulus_degree + shift_;
+            auto message = context.batch_random_polynomial_full(n);
+            auto encoded = context.encoder().batch_encode_polynomial(message, std::nullopt, scale);
+            auto encrypted = context.batch_encrypt_asymmetric(encoded);
+            GeneralVector truth = GeneralVector::zeros_like(message[0], message[0].size());
+            for (size_t i = 0; i < n; i++) {
+                for (size_t j = 0; j < poly_modulus_degree; j += input_interval) {
+                    truth.set(i * output_interval + j, message[i].element(j - shift_));
+                }
+            }
+
+            Ciphertext assembled = context.evaluator().pack_rlwe_ciphertexts_new(batch_utils::collect_const_pointer(encrypted),  automorphism_key, shift, input_interval, output_interval); 
+            Plaintext decrypted = context.decryptor().decrypt_new(assembled);
+            GeneralVector decoded = context.encoder().decode_polynomial(decrypted);
+            ASSERT_TRUE(truth.near_equal(decoded, tolerance));
+        };
+
+        test_setting(32, 32, 1, 0);
+        test_setting(16, 16, 1, 0);
+        test_setting(3, 8, 2, -3);
+    }
+
+    TEST(LweTest, HostBFVPackRLWEs) {
+        GeneralHeContext ghe(false, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_pack_rlwes(ghe);
+    }
+    TEST(LweTest, HostBGVPackRLWEs) {
+        GeneralHeContext ghe(false, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_pack_rlwes(ghe);
+    }
+    TEST(LweTest, HostCKKSPackRLWEs) {
+        GeneralHeContext ghe(false, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
+        test_pack_rlwes(ghe);
+    }
+    TEST(LweTest, DeviceBFVPackRLWEs) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::BFV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_pack_rlwes(ghe);
+        utils::MemoryPool::Destroy();
+    }
+    TEST(LweTest, DeviceBGVPackRLWEs) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::BGV, 32, 20, { 60, 40, 40, 60 }, true, 0x123, 0);
+        test_pack_rlwes(ghe);
+        utils::MemoryPool::Destroy();
+    }
+    TEST(LweTest, DeviceCKKSPackRLWEs) {
+        SKIP_WHEN_NO_CUDA_DEVICE;
+        GeneralHeContext ghe(true, SchemeType::CKKS, 32, 0, { 60, 40, 40, 60 }, true, 0x123, 10, 1ull<<20, 1e-2);
+        test_pack_rlwes(ghe);
+        utils::MemoryPool::Destroy();
+    }
+
 }

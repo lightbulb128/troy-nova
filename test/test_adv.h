@@ -218,8 +218,31 @@ namespace tool {
             }
         }
 
-        inline GeneralVector element(size_t index) {
+        inline GeneralVector element(size_t index) const {
             return subvector(index, index + 1);
+        }
+
+        inline GeneralVector get(size_t index) const {
+            return element(index);
+        }
+
+        inline void set(size_t index, const GeneralVector& element) {
+            if (element.size() != 1) throw std::invalid_argument("[GeneralVector::set] element.size() != 1");
+            if (complexes_) {
+                complexes_->at(index) = element.complexes().at(0);
+            } else if (integers_) {
+                integers_->at(index) = element.integers().at(0);
+            } else if (doubles_) {
+                doubles_->at(index) = element.doubles().at(0);
+            } else if (uint32s_) {
+                uint32s_->at(index) = element.uint32s().at(0);
+            } else if (uint64s_) {
+                uint64s_->at(index) = element.uint64s().at(0);
+            } else if (uint128s_) {
+                uint128s_->at(index) = element.uint128s().at(0);
+            } else {
+                throw std::invalid_argument("[GeneralVector::set] Cannot set empty vector");
+            }
         }
 
         inline bool is_complexes() const {

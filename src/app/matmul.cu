@@ -539,7 +539,7 @@ namespace troy { namespace linear {
     D_IMPL_ALL
     #undef D_IMPL
 
-    Cipher2d MatmulHelper::pack_outputs(const Evaluator& evaluator, const GaloisKeys& autoKey, const Cipher2d& cipher) const {
+    Cipher2d MatmulHelper::pack_outputs(const Evaluator& evaluator, const GaloisKeys& auto_key, const Cipher2d& cipher) const {
         if (!this->pack_lwe) {
             throw std::invalid_argument("[MatmulHelper::packOutputs] PackLwe not enabled");
         }
@@ -550,8 +550,8 @@ namespace troy { namespace linear {
         size_t pack_slots = this->input_block;
         size_t totalCount = cipher.data().size() * cipher.data()[0].size();
         std::vector<Ciphertext> output; output.reserve(ceil_div(totalCount, pack_slots));
-        Ciphertext current; bool currentSet = false;
-        size_t currentSlot = 0;
+        Ciphertext current; bool current_set = false;
+        size_t current_slot = 0;
 
         bool is_ntt = cipher.data()[0][0].is_ntt_form();
         
@@ -564,13 +564,13 @@ namespace troy { namespace linear {
 
         Ciphertext buffer = cipher.data()[0][0].clone(pool);
         Ciphertext shifted = buffer.clone(pool);
+        size_t first_shift = pack_slots == 1 ? 0 : 2 * slot_count - (pack_slots - 1);
         for (size_t i = 0; i < cipher.data().size(); i++) {
             for (size_t j = 0; j < cipher.data()[0].size(); j++) {
-                size_t shift = pack_slots - 1;
                 Ciphertext ciphertext = cipher.data()[i][j].clone(pool);
                 if (is_ntt) evaluator.transform_from_ntt_inplace(ciphertext);
-                if (shift != 0) {
-                    evaluator.negacyclic_shift(ciphertext, 2 * slot_count - shift, buffer, pool);
+                if (first_shift != 0) {
+                    evaluator.negacyclic_shift(ciphertext, first_shift, buffer, pool);
                 } else {
                     buffer = ciphertext.clone(pool);
                 }
@@ -578,31 +578,31 @@ namespace troy { namespace linear {
                 evaluator.divide_by_poly_modulus_degree_inplace(buffer, slot_count / pack_slots);
                 if (is_ntt) evaluator.transform_to_ntt_inplace(buffer);
                 
-                evaluator.field_trace_inplace(buffer, autoKey, field_trace_logn, pool);
+                evaluator.field_trace_inplace(buffer, auto_key, field_trace_logn, pool);
                 if (is_ntt) evaluator.transform_from_ntt_inplace(buffer);
                 
-                shift = currentSlot;
+                size_t shift = current_slot;
                 if (shift != 0) {
                     evaluator.negacyclic_shift(buffer, shift, shifted, pool);
                 } else {
                     shifted = buffer.clone(pool);
                 }
 
-                if (currentSet == false) {
+                if (current_set == false) {
                     current = shifted.clone(pool);
-                    currentSet = true;
+                    current_set = true;
                 } else {
                     evaluator.add_inplace(current, shifted, pool);
                 }
 
-                currentSlot += 1;
-                if (currentSlot == pack_slots) {
-                    currentSlot = 0; currentSet = false;
+                current_slot += 1;
+                if (current_slot == pack_slots) {
+                    current_slot = 0; current_set = false;
                     output.push_back(std::move(current));
                 }
             }
         }
-        if (currentSet) {
+        if (current_set) {
             output.push_back(std::move(current));
         }
         if (is_ntt) for (Ciphertext& c : output) {

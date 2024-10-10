@@ -958,11 +958,27 @@ namespace troy {
             return lwe_encrypted.assemble_lwe(pool);
         }
         
+        /*
+            logn: (1 << logn) coefficients are kept after the field trace.
+        */
         void field_trace_inplace(Ciphertext& encrypted, const GaloisKeys& automorphism_keys, size_t logn, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         
         void divide_by_poly_modulus_degree_inplace(Ciphertext& encrypted, uint64_t mul = 1) const;
         
         Ciphertext pack_lwe_ciphertexts_new(const std::vector<LWECiphertext>& lwe_encrypted, const GaloisKeys& automorphism_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool(), bool apply_field_trace = true) const;
+        
+        /*
+            - shift: how many degree to shift before packing.
+            - input_interval: the kept coefficient interval in the input ciphertexts.
+            - output_interval: the kept coefficient interval in the output ciphertext, usually this should be 1
+            
+            the number of ciphers should not exceed input_interval / output_interval
+        */
+        Ciphertext pack_rlwe_ciphertexts_new(
+            const std::vector<const Ciphertext*>& ciphers, const GaloisKeys& automorphism_keys, size_t shift, size_t input_interval, size_t output_interval,
+            bool apply_field_trace = true,
+            MemoryPoolHandle pool = MemoryPool::GlobalPool()
+        ) const;
 
         void negacyclic_shift(const Ciphertext& encrypted, size_t shift, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline Ciphertext negacyclic_shift_new(const Ciphertext& encrypted, size_t shift, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {
