@@ -964,6 +964,7 @@ namespace troy {
         void field_trace_inplace(Ciphertext& encrypted, const GaloisKeys& automorphism_keys, size_t logn, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         
         void divide_by_poly_modulus_degree_inplace(Ciphertext& encrypted, uint64_t mul = 1) const;
+        void divide_by_poly_modulus_degree_inplace_batched(const std::vector<Ciphertext*>& encrypted, uint64_t mul = 1, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         
         Ciphertext pack_lwe_ciphertexts_new(const std::vector<LWECiphertext>& lwe_encrypted, const GaloisKeys& automorphism_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool(), bool apply_field_trace = true) const;
         

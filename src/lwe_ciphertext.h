@@ -1,4 +1,5 @@
 #pragma once
+#include "batch_utils.h"
 #include "he_context.h"
 #include "utils/dynamic_array.h"
 #include "ciphertext.h"
@@ -108,6 +109,12 @@ namespace troy {
         inline uint64_t& correction_factor() { return correction_factor_; }
 
         Ciphertext assemble_lwe(MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        static void assemble_lwe_batched(const std::vector<const LWECiphertext*>& source, const std::vector<Ciphertext*>& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool());
+        inline static std::vector<Ciphertext> assemble_lwe_batched_new(const std::vector<const LWECiphertext*>& source, MemoryPoolHandle pool = MemoryPool::GlobalPool()) {
+            std::vector<Ciphertext> destination(source.size());
+            assemble_lwe_batched(source, batch_utils::collect_pointer(destination), pool);
+            return destination;
+        }
 
     };
 

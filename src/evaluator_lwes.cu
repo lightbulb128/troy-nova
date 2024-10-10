@@ -4,6 +4,7 @@
 #include "evaluator_utils.h"
 #include "decryptor.h"
 #include "batch_encoder.h"
+#include "lwe_ciphertext.h"
 
 namespace troy {
     
@@ -113,6 +114,18 @@ namespace troy {
             encrypted.polys(0, size), size, logn, ntt_tables, mul
         );
     }
+
+    void Evaluator::divide_by_poly_modulus_degree_inplace_batched(const std::vector<Ciphertext*>& encrypted, uint64_t mul, MemoryPoolHandle pool) const {
+        auto parms_id = get_vec_parms_id(encrypted);
+        auto size = get_vec_polynomial_count(encrypted);
+        auto context_data = this->get_context_data("[Evaluator::divide_by_poly_modulus_degree_inplace_batched]", parms_id);
+        ConstSlice<NTTTables> ntt_tables = context_data->small_ntt_tables();
+        size_t n = context_data->parms().poly_modulus_degree();
+        size_t logn = static_cast<size_t>(utils::get_power_of_two(n));
+        utils::ntt_multiply_inv_degree_batched(
+            batch_utils::pcollect_reference(encrypted), size, logn, ntt_tables, mul, pool
+        );
+    }
     
 
     void Evaluator::negacyclic_shift(const Ciphertext& encrypted, size_t shift, Ciphertext& destination, MemoryPoolHandle pool) const {
@@ -182,10 +195,7 @@ namespace troy {
         size_t l = 0;
         while ((static_cast<size_t>(1) << l) < lwes_count) l += 1;
 
-        std::vector<Ciphertext> rlwes(lwes_count);
-        for (size_t i = 0; i < rlwes.size(); i++) {
-            rlwes[i] = this->assemble_lwe_new(lwes[i], pool);
-        }
+        std::vector<Ciphertext> rlwes = LWECiphertext::assemble_lwe_batched_new(batch_utils::collect_const_pointer(lwes), pool);
 
         return this->pack_rlwe_ciphertexts_new(
             batch_utils::collect_const_pointer(rlwes), 
@@ -257,9 +267,7 @@ namespace troy {
         if (input_ntt_form) {
             this->transform_from_ntt_inplace_batched(rlwes_ptr, pool);
         }
-        for (size_t i = 0; i < ciphers.size(); i++) {
-            this->divide_by_poly_modulus_degree_inplace(*rlwes_ptr[i], poly_modulus_degree / input_interval);
-        }
+        this->divide_by_poly_modulus_degree_inplace_batched(rlwes_ptr, poly_modulus_degree / input_interval, pool);
         if (shift != 0) {
             this->negacyclic_shift_inplace_batched(rlwes_ptr, shift, pool);
         }
@@ -323,28 +331,58 @@ namespace troy {
                 }
                 utils::set_slice_b(0, to_set_zeros, pool);
             }
-            Ciphertext temp = Ciphertext::like(rlwes[0], false, pool);
+
+            std::vector<Ciphertext> temps(max_cipher_count / 2);
+            for (size_t i = 0; i < max_cipher_count / 2; i++) {
+                temps[i] = Ciphertext::like(rlwes[0], false, pool);
+                if (device) temps[i].to_device_inplace(pool);
+            }
+
             for (size_t layer = 0; layer < layers_required; layer++) {
+
                 size_t gap = 1 << layer;
                 size_t shift = input_interval >> (layer + 1);
-                for (size_t offset = 0; offset < max_cipher_count; offset += gap * 2) {
+                size_t galois_element = (poly_modulus_degree / input_interval) * (1 << (layer + 1)) + 1;
+                size_t pair_count = max_cipher_count / (gap * 2);
+
+                std::vector<Ciphertext*> odds(pair_count);
+                std::vector<const Ciphertext*> odds_const(pair_count);
+                std::vector<Ciphertext*> evens(pair_count);
+                std::vector<const Ciphertext*> evens_const(pair_count);
+                std::vector<Ciphertext*> temps_ptr(pair_count);
+                std::vector<const Ciphertext*> temps_const_ptr(pair_count);
+                size_t odd_polynomial_count = 0;
+                for (size_t i = 0; i < pair_count; i++) {
+                    size_t offset = i * gap * 2;
                     Ciphertext& even = rlwes[offset];
                     Ciphertext& odd = rlwes[offset + gap];
-                    if (even.polynomial_count() == 0 || odd.polynomial_count() == 0) {
-                        throw std::logic_error("[Evaluator::pack_rlwe_ciphertexts_new] Even or odd is empty. This should not happen.");
+                    if (i == 0) {
+                        odd_polynomial_count = odd.polynomial_count();
+                    } else {
+                        if (odd.polynomial_count() != odd_polynomial_count) {
+                            throw std::invalid_argument("[Evaluator::pack_rlwe_ciphertexts_new] Mismatched polynomial count.");
+                        }
                     }
-                    utils::negacyclic_shift_ps(
-                        odd.const_reference(), shift, odd.polynomial_count(), 
-                        poly_modulus_degree, coeff_modulus, temp.reference()
-                    );
-                    size_t galois_element = (poly_modulus_degree / input_interval) * (1 << (layer + 1)) + 1;
-                    this->sub(even, temp, odd, pool);
-                    this->add_inplace(even, temp, pool);
-                    if (output_ntt_form) this->transform_to_ntt_inplace(odd);
-                    this->apply_galois_inplace(odd, galois_element, automorphism_keys, pool);
-                    if (output_ntt_form) this->transform_from_ntt_inplace(odd);
-                    this->add_inplace(even, odd, pool);
+                    odds[i] = &odd;
+                    odds_const[i] = &odd;
+                    evens[i] = &even;
+                    evens_const[i] = &even;
+                    temps_ptr[i] = &temps[i];
+                    temps_const_ptr[i] = &temps[i];
                 }
+
+                utils::negacyclic_shift_bps(
+                    batch_utils::pcollect_const_reference(odds_const),
+                    shift, odd_polynomial_count, poly_modulus_degree, coeff_modulus,
+                    batch_utils::pcollect_reference(temps_ptr), pool
+                );
+                this->sub_batched(evens_const, temps_const_ptr, odds, pool);
+                this->add_inplace_batched(evens, temps_const_ptr, pool);
+                if (output_ntt_form) this->transform_to_ntt_inplace_batched(odds, pool);
+                this->apply_galois_inplace_batched(odds, galois_element, automorphism_keys, pool);
+                if (output_ntt_form) this->transform_from_ntt_inplace_batched(odds, pool);
+                this->add_inplace_batched(evens, odds_const, pool);
+
             }
         }
 
