@@ -240,11 +240,13 @@ namespace troy {
 
         std::vector<Ciphertext> rlwes(max_cipher_count);
         std::vector<Slice<uint64_t>> rlwes_slice(ciphers.size(), Slice<uint64_t>(nullptr, 0, false, nullptr));
+        std::vector<Ciphertext*> rlwes_ptr; rlwes_ptr.reserve(ciphers.size());
         for (size_t i = 0; i < max_cipher_count; i++) {
             size_t index = static_cast<size_t>(utils::reverse_bits_uint64(static_cast<uint64_t>(i), layers_required));
             if (index < ciphers.size()) {
                 rlwes[i] = Ciphertext::like(*ciphers[index], false, pool);
                 rlwes_slice[index] = rlwes[i].reference();
+                rlwes_ptr.push_back(&rlwes[i]);
             } else {
                 rlwes[i] = Ciphertext(); 
                 if (device) rlwes[i].to_device_inplace(pool);
@@ -252,70 +254,100 @@ namespace troy {
         }
         utils::copy_slice_b(batch_utils::pcollect_const_reference(ciphers), rlwes_slice, pool);
 
-        {
-            std::vector<Ciphertext*> rlwes_ptr(ciphers.size());
-            for (size_t i = 0; i < ciphers.size(); i++) {
-                rlwes_ptr[i] = &rlwes[i];
-            }
-            if (input_ntt_form) this->transform_from_ntt_inplace_batched(rlwes_ptr, pool);
-            for (size_t i = 0; i < ciphers.size(); i++) {
-                this->divide_by_poly_modulus_degree_inplace(rlwes[i], poly_modulus_degree / input_interval);
-            }
-            if (shift != 0) {
-                this->negacyclic_shift_inplace_batched(rlwes_ptr, shift, pool);
-            }
-            
+        if (input_ntt_form) {
+            this->transform_from_ntt_inplace_batched(rlwes_ptr, pool);
+        }
+        for (size_t i = 0; i < ciphers.size(); i++) {
+            this->divide_by_poly_modulus_degree_inplace(*rlwes_ptr[i], poly_modulus_degree / input_interval);
+        }
+        if (shift != 0) {
+            this->negacyclic_shift_inplace_batched(rlwes_ptr, shift, pool);
         }
         
-        Ciphertext temp = Ciphertext::like(rlwes[0], false, pool);
-        for (size_t layer = 0; layer < layers_required; layer++) {
-            size_t gap = 1 << layer;
-            size_t shift = input_interval >> (layer + 1);
-            for (size_t offset = 0; offset < max_cipher_count; offset += gap * 2) {
-                Ciphertext& even = rlwes[offset];
-                Ciphertext& odd = rlwes[offset + gap];
-                bool even_empty = even.polynomial_count() == 0;
-                bool odd_empty = odd.polynomial_count() == 0;
-
-                if (odd_empty && even_empty) {
-                    even = Ciphertext(); if (device) even.to_device_inplace(pool); continue;
+        if (!device) { // For host, we save some computation when the source even/odd is empty
+            Ciphertext temp = Ciphertext::like(rlwes[0], false, pool);
+            for (size_t layer = 0; layer < layers_required; layer++) {
+                size_t gap = 1 << layer;
+                size_t shift = input_interval >> (layer + 1);
+                for (size_t offset = 0; offset < max_cipher_count; offset += gap * 2) {
+                    Ciphertext& even = rlwes[offset];
+                    Ciphertext& odd = rlwes[offset + gap];
+                    bool even_empty = even.polynomial_count() == 0;
+                    bool odd_empty = odd.polynomial_count() == 0;
+                    if (odd_empty && even_empty) {
+                        even = Ciphertext(); if (device) even.to_device_inplace(pool); continue;
+                    }
+                    if (!odd_empty) {
+                        utils::negacyclic_shift_ps(
+                            odd.const_reference(), shift, odd.polynomial_count(), 
+                            poly_modulus_degree, coeff_modulus, temp.reference()
+                        );
+                    }
+                    size_t galois_element = (poly_modulus_degree / input_interval) * (1 << (layer + 1)) + 1;
+                    if (!even_empty) {
+                        if (!odd_empty) {
+                            this->sub(even, temp, odd, pool);
+                            this->add_inplace(even, temp, pool);
+                            if (output_ntt_form) this->transform_to_ntt_inplace(odd);
+                            this->apply_galois_inplace(odd, galois_element, automorphism_keys, pool);
+                            if (output_ntt_form) this->transform_from_ntt_inplace(odd);
+                            this->add_inplace(even, odd, pool);
+                        } else {
+                            if (output_ntt_form) {
+                                this->transform_to_ntt(even, temp, pool);
+                                this->apply_galois_inplace(temp, galois_element, automorphism_keys, pool);
+                                this->transform_from_ntt_inplace(temp);
+                            } else {
+                                this->apply_galois(even, galois_element, automorphism_keys, temp, pool);
+                            }
+                            this->add_inplace(even, temp, pool);
+                        }
+                    } else {
+                        this->negate(temp, even, pool);
+                        if (output_ntt_form) this->transform_to_ntt_inplace(even);
+                        this->apply_galois_inplace(even, galois_element, automorphism_keys, pool);
+                        if (output_ntt_form) this->transform_from_ntt_inplace(even);
+                        this->add_inplace(even, temp, pool);
+                    }
                 }
-
-                if (!odd_empty) {
+            }
+        } else { // For device code, it is more convenient to directly set the empties to zero
+            {
+                std::vector<Slice<uint64_t>> to_set_zeros;
+                for (size_t i = 0; i < max_cipher_count; i++) {
+                    if (rlwes[i].polynomial_count() == 0) {
+                        rlwes[i] = Ciphertext::like(rlwes[0], false, pool);
+                        if (device) rlwes[i].to_device_inplace(pool);
+                        to_set_zeros.push_back(rlwes[i].reference());
+                    }
+                }
+                utils::set_slice_b(0, to_set_zeros, pool);
+            }
+            Ciphertext temp = Ciphertext::like(rlwes[0], false, pool);
+            for (size_t layer = 0; layer < layers_required; layer++) {
+                size_t gap = 1 << layer;
+                size_t shift = input_interval >> (layer + 1);
+                for (size_t offset = 0; offset < max_cipher_count; offset += gap * 2) {
+                    Ciphertext& even = rlwes[offset];
+                    Ciphertext& odd = rlwes[offset + gap];
+                    if (even.polynomial_count() == 0 || odd.polynomial_count() == 0) {
+                        throw std::logic_error("[Evaluator::pack_rlwe_ciphertexts_new] Even or odd is empty. This should not happen.");
+                    }
                     utils::negacyclic_shift_ps(
                         odd.const_reference(), shift, odd.polynomial_count(), 
                         poly_modulus_degree, coeff_modulus, temp.reference()
                     );
-                }
-                
-                size_t galois_element = (poly_modulus_degree / input_interval) * (1 << (layer + 1)) + 1;
-                if (!even_empty) {
-                    if (!odd_empty) {
-                        this->sub(even, temp, odd, pool);
-                        this->add_inplace(even, temp, pool);
-                        if (output_ntt_form) this->transform_to_ntt_inplace(odd);
-                        this->apply_galois_inplace(odd, galois_element, automorphism_keys, pool);
-                        if (output_ntt_form) this->transform_from_ntt_inplace(odd);
-                        this->add_inplace(even, odd, pool);
-                    } else {
-                        if (output_ntt_form) {
-                            this->transform_to_ntt(even, temp, pool);
-                            this->apply_galois_inplace(temp, galois_element, automorphism_keys, pool);
-                            this->transform_from_ntt_inplace(temp);
-                        } else {
-                            this->apply_galois(even, galois_element, automorphism_keys, temp, pool);
-                        }
-                        this->add_inplace(even, temp, pool);
-                    }
-                } else {
-                    this->negate(temp, even, pool);
-                    if (output_ntt_form) this->transform_to_ntt_inplace(even);
-                    this->apply_galois_inplace(even, galois_element, automorphism_keys, pool);
-                    if (output_ntt_form) this->transform_from_ntt_inplace(even);
+                    size_t galois_element = (poly_modulus_degree / input_interval) * (1 << (layer + 1)) + 1;
+                    this->sub(even, temp, odd, pool);
                     this->add_inplace(even, temp, pool);
+                    if (output_ntt_form) this->transform_to_ntt_inplace(odd);
+                    this->apply_galois_inplace(odd, galois_element, automorphism_keys, pool);
+                    if (output_ntt_form) this->transform_from_ntt_inplace(odd);
+                    this->add_inplace(even, odd, pool);
                 }
             }
         }
+
         // take the first element
         Ciphertext ret = std::move(rlwes[0]);
         if (output_ntt_form) {

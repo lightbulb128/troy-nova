@@ -548,67 +548,36 @@ namespace troy { namespace linear {
             return ret;
         }
         size_t pack_slots = this->input_block;
-        size_t totalCount = cipher.data().size() * cipher.data()[0].size();
-        std::vector<Ciphertext> output; output.reserve(ceil_div(totalCount, pack_slots));
-        Ciphertext current; bool current_set = false;
-        size_t current_slot = 0;
+        size_t total_count = cipher.data().size() * cipher.data()[0].size();
+        std::vector<Ciphertext> output; output.reserve(ceil_div(total_count, pack_slots));
 
-        bool is_ntt = cipher.data()[0][0].is_ntt_form();
-        
-        size_t field_trace_logn = 0;
         size_t field_trace_n = 1;
         while (field_trace_n != slot_count / pack_slots) {
-            field_trace_logn += 1;
             field_trace_n *= 2;
         }
 
         Ciphertext buffer = cipher.data()[0][0].clone(pool);
         Ciphertext shifted = buffer.clone(pool);
-        size_t first_shift = pack_slots == 1 ? 0 : 2 * slot_count - (pack_slots - 1);
+        size_t inherent_shift = pack_slots == 1 ? 0 : 2 * slot_count - (pack_slots - 1);
+        
+        std::vector<std::vector<const Ciphertext*>> to_pack; to_pack.reserve(ceil_div(total_count, pack_slots));
+        to_pack.push_back(std::vector<const Ciphertext*>()); to_pack.back().reserve(pack_slots);
         for (size_t i = 0; i < cipher.data().size(); i++) {
             for (size_t j = 0; j < cipher.data()[0].size(); j++) {
-                Ciphertext ciphertext = cipher.data()[i][j].clone(pool);
-                if (is_ntt) evaluator.transform_from_ntt_inplace(ciphertext);
-                if (first_shift != 0) {
-                    evaluator.negacyclic_shift(ciphertext, first_shift, buffer, pool);
-                } else {
-                    buffer = ciphertext.clone(pool);
+                if (to_pack.size() == 0 || to_pack.back().size() == pack_slots) {
+                    to_pack.push_back(std::vector<const Ciphertext*>()); to_pack.back().reserve(pack_slots);
                 }
-                
-                evaluator.divide_by_poly_modulus_degree_inplace(buffer, slot_count / pack_slots);
-                if (is_ntt) evaluator.transform_to_ntt_inplace(buffer);
-                
-                evaluator.field_trace_inplace(buffer, auto_key, field_trace_logn, pool);
-                if (is_ntt) evaluator.transform_from_ntt_inplace(buffer);
-                
-                size_t shift = current_slot;
-                if (shift != 0) {
-                    evaluator.negacyclic_shift(buffer, shift, shifted, pool);
-                } else {
-                    shifted = buffer.clone(pool);
-                }
-
-                if (current_set == false) {
-                    current = shifted.clone(pool);
-                    current_set = true;
-                } else {
-                    evaluator.add_inplace(current, shifted, pool);
-                }
-
-                current_slot += 1;
-                if (current_slot == pack_slots) {
-                    current_slot = 0; current_set = false;
-                    output.push_back(std::move(current));
-                }
+                to_pack.back().push_back(&cipher.data()[i][j]);
             }
         }
-        if (current_set) {
-            output.push_back(std::move(current));
+
+        for (size_t i = 0; i < to_pack.size(); i++) {
+            output.push_back(evaluator.pack_rlwe_ciphertexts_new(
+                to_pack[i], auto_key, inherent_shift, input_block, 1, true, pool
+            ));
         }
-        if (is_ntt) for (Ciphertext& c : output) {
-            evaluator.transform_to_ntt_inplace(c);
-        }
-        Cipher2d ret; ret.data().push_back(output);
+
+        Cipher2d ret; ret.data().push_back(std::move(output));
         return ret;
     }
 
