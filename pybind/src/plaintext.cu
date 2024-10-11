@@ -4,6 +4,12 @@ void register_plaintext(pybind11::module& m) {
 
     py::class_<Plaintext>(m, "Plaintext")
         .def(py::init<>())
+        .def("address", [](const Plaintext& self){
+            return reinterpret_cast<uintptr_t>(&self);
+        })
+        .def("data_address", [](const Plaintext& self){
+            return reinterpret_cast<uintptr_t>(self.data().raw_pointer());
+        })
         .def("obtain_data", [](const Plaintext& self){
             troy::utils::DynamicArray<uint64_t> data = self.data().to_host();
             return get_buffer_from_slice(data.const_reference());

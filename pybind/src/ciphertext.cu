@@ -4,6 +4,12 @@ void register_ciphertext(pybind11::module& m) {
     
     py::class_<Ciphertext>(m, "Ciphertext")
         .def(py::init<>())
+        .def("address", [](const Ciphertext& self){
+            return reinterpret_cast<uintptr_t>(&self);
+        })
+        .def("data_address", [](const Ciphertext& self){
+            return reinterpret_cast<uintptr_t>(self.data().raw_pointer());
+        })
         .def("pool", &Ciphertext::pool)
         .def("device_index", &Ciphertext::device_index)
         .def("obtain_data", [](const Ciphertext& self){
