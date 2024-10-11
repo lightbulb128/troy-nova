@@ -962,12 +962,34 @@ namespace troy {
             logn: (1 << logn) coefficients are kept after the field trace.
         */
         void field_trace_inplace(Ciphertext& encrypted, const GaloisKeys& automorphism_keys, size_t logn, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
+        void field_trace_inplace_batched(const std::vector<Ciphertext*>& encrypted, const GaloisKeys& automorphism_keys, size_t logn, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         
         void divide_by_poly_modulus_degree_inplace(Ciphertext& encrypted, uint64_t mul = 1) const;
         void divide_by_poly_modulus_degree_inplace_batched(const std::vector<Ciphertext*>& encrypted, uint64_t mul = 1, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         
-        Ciphertext pack_lwe_ciphertexts_new(const std::vector<LWECiphertext>& lwe_encrypted, const GaloisKeys& automorphism_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool(), bool apply_field_trace = true) const;
-        
+        Ciphertext pack_lwe_ciphertexts_new(const std::vector<const LWECiphertext*>& lwe_encrypted, const GaloisKeys& automorphism_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool(), bool apply_field_trace = true) const;
+        // This API is kept for compatibility with older versions. Should use the `pack_lwe_ciphertexts_new` with vector of pointer input.
+        inline Ciphertext pack_lwe_ciphertexts_new(const std::vector<LWECiphertext>& lwe_encrypted, const GaloisKeys& automorphism_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool(), bool apply_field_trace = true) const {
+            return pack_lwe_ciphertexts_new(batch_utils::collect_const_pointer(lwe_encrypted), automorphism_keys, pool, apply_field_trace);
+        }
+        inline void pack_lwe_ciphertexts(const std::vector<const LWECiphertext*>& lwe_encrypted, const GaloisKeys& automorphism_keys, Ciphertext& output, MemoryPoolHandle pool = MemoryPool::GlobalPool(), bool apply_field_trace = true) const {
+            output = pack_lwe_ciphertexts_new(lwe_encrypted, automorphism_keys, pool, apply_field_trace);
+        }
+
+        // The number of ciphers in each group could be different, but each group must not be empty.
+        // The final output interval is selected by the group with most elements.
+        void pack_lwe_ciphertexts_batched(const std::vector<std::vector<const LWECiphertext*>>& lwes_groups, 
+            const GaloisKeys& automorphism_keys, const std::vector<Ciphertext*>& output, 
+            MemoryPoolHandle pool = MemoryPool::GlobalPool(), bool apply_field_trace = true
+        ) const;
+        inline std::vector<Ciphertext> pack_lwe_ciphertexts_new_batched(const std::vector<std::vector<const LWECiphertext*>>& lwes_groups, 
+            const GaloisKeys& automorphism_keys, MemoryPoolHandle pool = MemoryPool::GlobalPool(), bool apply_field_trace = true
+        ) const {
+            std::vector<Ciphertext> outputs(lwes_groups.size());
+            pack_lwe_ciphertexts_batched(lwes_groups, automorphism_keys, batch_utils::collect_pointer(outputs), pool, apply_field_trace);
+            return outputs;
+        }
+
         /*
             - shift: how many degree to shift before packing.
             - input_interval: the kept coefficient interval in the input ciphertexts.
@@ -977,9 +999,22 @@ namespace troy {
         */
         Ciphertext pack_rlwe_ciphertexts_new(
             const std::vector<const Ciphertext*>& ciphers, const GaloisKeys& automorphism_keys, size_t shift, size_t input_interval, size_t output_interval,
-            bool apply_field_trace = true,
-            MemoryPoolHandle pool = MemoryPool::GlobalPool()
+            MemoryPoolHandle pool = MemoryPool::GlobalPool(),
+            bool apply_field_trace = true
         ) const;
+        // The number of ciphers in each group could be different, but each group must not be empty.
+        void pack_rlwe_ciphertexts_batched(
+            const std::vector<std::vector<const Ciphertext*>>& cipher_groups, const GaloisKeys& automorphism_keys, size_t shift, size_t input_interval, size_t output_interval,
+            const std::vector<Ciphertext*> outputs, MemoryPoolHandle pool = MemoryPool::GlobalPool(), bool apply_field_trace = true
+        ) const;
+        inline std::vector<Ciphertext> pack_rlwe_ciphertexts_new_batched(
+            const std::vector<std::vector<const Ciphertext*>>& cipher_groups, const GaloisKeys& automorphism_keys, size_t shift, size_t input_interval, size_t output_interval,
+            MemoryPoolHandle pool = MemoryPool::GlobalPool(), bool apply_field_trace = true
+        ) const {
+            std::vector<Ciphertext> outputs(cipher_groups.size());
+            pack_rlwe_ciphertexts_batched(cipher_groups, automorphism_keys, shift, input_interval, output_interval, batch_utils::collect_pointer(outputs), pool, apply_field_trace);
+            return outputs;
+        }
 
         void negacyclic_shift(const Ciphertext& encrypted, size_t shift, Ciphertext& destination, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const;
         inline Ciphertext negacyclic_shift_new(const Ciphertext& encrypted, size_t shift, MemoryPoolHandle pool = MemoryPool::GlobalPool()) const {

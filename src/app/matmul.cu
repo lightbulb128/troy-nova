@@ -549,7 +549,7 @@ namespace troy { namespace linear {
         }
         size_t pack_slots = this->input_block;
         size_t total_count = cipher.data().size() * cipher.data()[0].size();
-        std::vector<Ciphertext> output; output.reserve(ceil_div(total_count, pack_slots));
+        std::vector<Ciphertext> output;
 
         size_t field_trace_n = 1;
         while (field_trace_n != slot_count / pack_slots) {
@@ -571,10 +571,17 @@ namespace troy { namespace linear {
             }
         }
 
-        for (size_t i = 0; i < to_pack.size(); i++) {
-            output.push_back(evaluator.pack_rlwe_ciphertexts_new(
-                to_pack[i], auto_key, inherent_shift, input_block, 1, true, pool
-            ));
+        if (!batched_mul) {
+            output.reserve(ceil_div(total_count, pack_slots));
+            for (size_t i = 0; i < to_pack.size(); i++) {
+                output.push_back(evaluator.pack_rlwe_ciphertexts_new(
+                    to_pack[i], auto_key, inherent_shift, input_block, 1, pool
+                ));
+            }
+        } else {
+            output = evaluator.pack_rlwe_ciphertexts_new_batched(
+                to_pack, auto_key, inherent_shift, input_block, 1, pool
+            );
         }
 
         Cipher2d ret; ret.data().push_back(std::move(output));
