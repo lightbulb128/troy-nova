@@ -331,7 +331,7 @@ void register_evaluator(pybind11::module& m) {
         .def("pack_lwe_ciphertexts_new_batched", [](const Evaluator& self, const py::list& lwe_groups, const GaloisKeys& automorphism_keys, MemoryPoolHandleArgument pool) {
             std::vector<std::vector<const LWECiphertext*>> cvv(lwe_groups.size());
             for (size_t i = 0; i < lwe_groups.size(); i++) {
-                const py::list& pv = lwe_groups[i].cast<const py::list&>();
+                py::list pv = lwe_groups[i].cast<py::list>();
                 cvv[i] = cast_list<const LWECiphertext*>(pv);
             }
             return self.pack_lwe_ciphertexts_new_batched(cvv, automorphism_keys, nullopt_default_pool(pool));
@@ -344,7 +344,7 @@ void register_evaluator(pybind11::module& m) {
         ) {
             std::vector<std::vector<const Ciphertext*>> cvv(rlwe_groups.size());
             for (size_t i = 0; i < rlwe_groups.size(); i++) {
-                const py::list& pv = rlwe_groups[i].cast<const py::list&>();
+                py::list pv = rlwe_groups[i].cast<py::list>();
                 cvv[i] = cast_list<const Ciphertext*>(pv);
             }
             return self.pack_rlwe_ciphertexts_new_batched(
