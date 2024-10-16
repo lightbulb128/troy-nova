@@ -1,5 +1,5 @@
 # exit when error
-set -e
+set -ex
 
 cd ../build
 cmake .. -DTROY_PYBIND=ON -DCMAKE_BUILD_TYPE=Release

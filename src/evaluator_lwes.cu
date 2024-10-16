@@ -1,5 +1,10 @@
+#include "batch_utils.h"
+#include "ciphertext.h"
+#include "context_data.h"
 #include "evaluator.h"
 #include "evaluator_utils.h"
+#include "lwe_ciphertext.h"
+#include "utils/constants.h"
 
 namespace troy {
     
@@ -98,135 +103,55 @@ namespace troy {
             poly_degree >>= 1;
         }
     }
+
+    void Evaluator::field_trace_inplace_batched(const std::vector<Ciphertext*>& encrypted, const GaloisKeys& automorphism_keys, size_t logn, MemoryPoolHandle pool) const {
+        if (!this->on_device() || encrypted.size() < utils::BATCH_OP_THRESHOLD) {
+            for (size_t i = 0; i < encrypted.size(); i++) {
+                this->field_trace_inplace(*encrypted[i], automorphism_keys, logn, pool);
+            }
+            return;
+        }
+        size_t poly_degree = encrypted[0]->poly_modulus_degree();
+        for (size_t i = 0; i < encrypted.size(); i++) {
+            if (encrypted[i]->poly_modulus_degree() != poly_degree) {
+                throw std::invalid_argument("[Evaluator::field_trace_inplace_batched] Mismatched poly_modulus_degree.");
+            }
+        }
+        std::vector<Ciphertext> temp(encrypted.size());
+        auto temp_ptrs = batch_utils::collect_pointer(temp);
+        auto temp_const_ptrs = batch_utils::collect_const_pointer(temp);
+        auto encrypted_const_ptrs = batch_utils::pcollect_const_pointer(encrypted);
+        while (poly_degree > (static_cast<size_t>(1) << logn)) {
+            size_t galois_element = poly_degree + 1;
+            this->apply_galois_batched(encrypted_const_ptrs, galois_element, automorphism_keys, temp_ptrs, pool);
+            this->add_inplace_batched(encrypted, temp_const_ptrs, pool);
+            poly_degree >>= 1;
+        }
+    }
     
     void Evaluator::divide_by_poly_modulus_degree_inplace(Ciphertext& encrypted, uint64_t mul) const {
         ContextDataPointer context_data = this->get_context_data("[Evaluator::divide_by_poly_modulus_degree_inplace]", encrypted.parms_id());
         size_t size = encrypted.polynomial_count();
         ConstSlice<NTTTables> ntt_tables = context_data->small_ntt_tables();
-        ConstSlice<Modulus> coeff_modulus = context_data->parms().coeff_modulus();
         size_t n = context_data->parms().poly_modulus_degree();
         size_t logn = static_cast<size_t>(utils::get_power_of_two(n));
         utils::ntt_multiply_inv_degree(
-            encrypted.polys(0, size), size, logn, ntt_tables
+            encrypted.polys(0, size), size, logn, ntt_tables, mul
         );
-        if (mul != 1) {
-            utils::multiply_scalar_ps(encrypted.const_polys(0, size), mul, size, n, coeff_modulus, encrypted.polys(0, size));
-        }
+    }
+
+    void Evaluator::divide_by_poly_modulus_degree_inplace_batched(const std::vector<Ciphertext*>& encrypted, uint64_t mul, MemoryPoolHandle pool) const {
+        auto parms_id = get_vec_parms_id(encrypted);
+        auto size = get_vec_polynomial_count(encrypted);
+        auto context_data = this->get_context_data("[Evaluator::divide_by_poly_modulus_degree_inplace_batched]", parms_id);
+        ConstSlice<NTTTables> ntt_tables = context_data->small_ntt_tables();
+        size_t n = context_data->parms().poly_modulus_degree();
+        size_t logn = static_cast<size_t>(utils::get_power_of_two(n));
+        utils::ntt_multiply_inv_degree_batched(
+            batch_utils::pcollect_reference(encrypted), size, logn, ntt_tables, mul, pool
+        );
     }
     
-    Ciphertext Evaluator::pack_lwe_ciphertexts_new(const std::vector<LWECiphertext>& lwes, const GaloisKeys& automorphism_keys, MemoryPoolHandle pool, bool apply_field_trace) const {
-        size_t lwes_count = lwes.size();
-        if (lwes_count == 0) {
-            throw std::invalid_argument("[Evaluator::pack_lwe_ciphertexts_new] LWE ciphertexts must not be empty.");
-        }
-        ParmsID lwe_parms_id = lwes[0].parms_id();
-        // check all have same parms id
-        for (size_t i = 1; i < lwes_count; i++) {
-            if (lwes[i].parms_id() != lwe_parms_id) {
-                throw std::invalid_argument("[Evaluator::pack_lwe_ciphertexts_new] LWE ciphertexts must have same parms id.");
-            }
-        }
-
-        ContextDataPointer context_data = this->get_context_data("[Evaluator::pack_lwe_ciphertexts_new]", lwe_parms_id);
-        SchemeType scheme = context_data->parms().scheme();
-        bool ntt_form = scheme == SchemeType::CKKS || scheme == SchemeType::BGV;
-        if (scheme == SchemeType::CKKS) {
-            // all should have same scale
-            double scale = lwes[0].scale();
-            for (size_t i = 1; i < lwes_count; i++) {
-                if (!utils::are_close_double(lwes[i].scale(), scale)) {
-                    throw std::invalid_argument("[Evaluator::pack_lwe_ciphertexts_new] LWE ciphertexts must have same scale.");
-                }
-            }
-        }
-        if (scheme == SchemeType::BGV) {
-            // all should have same correction factor
-            uint64_t cf = lwes[0].correction_factor();
-            for (size_t i = 1; i < lwes_count; i++) {
-                if (lwes[i].correction_factor() != cf) {
-                    throw std::invalid_argument("[Evaluator::pack_lwe_ciphertexts_new] LWE ciphertexts must have same correction factor.");
-                }
-            }
-        }
-        size_t poly_modulus_degree = context_data->parms().poly_modulus_degree();
-        ConstSlice<Modulus> coeff_modulus = context_data->parms().coeff_modulus();
-        if (lwes_count > poly_modulus_degree) {
-            throw std::invalid_argument("[Evaluator::pack_lwe_ciphertexts_new] LWE ciphertexts count must be less than poly_modulus_degree.");
-        }
-        size_t l = 0;
-        bool device = this->on_device();
-        while ((static_cast<size_t>(1) << l) < lwes_count) l += 1;
-        std::vector<Ciphertext> rlwes(1 << l);
-        for (size_t i = 0; i < (static_cast<size_t>(1)<<l); i++) {
-            size_t index = static_cast<size_t>(utils::reverse_bits_uint64(static_cast<uint64_t>(i), l));
-            if (index < lwes_count) {
-                rlwes[i] = this->assemble_lwe_new(lwes[index], pool);
-                this->divide_by_poly_modulus_degree_inplace(rlwes[i]);
-            } else {
-                rlwes[i] = Ciphertext(); 
-                if (device) rlwes[i].to_device_inplace(pool);
-            }
-        }
-        Ciphertext temp = Ciphertext::like(rlwes[0], false, pool);
-        for (size_t layer = 0; layer < l; layer++) {
-            size_t gap = 1 << layer;
-            size_t offset = 0;
-            size_t shift = poly_modulus_degree >> (layer + 1);
-            while (offset < (static_cast<size_t>(1) << l)) {
-                Ciphertext& even = rlwes[offset];
-                Ciphertext& odd = rlwes[offset + gap];
-
-                bool even_empty = even.polynomial_count() == 0;
-                bool odd_empty = odd.polynomial_count() == 0;
-                if (odd_empty && even_empty) {
-                    even = Ciphertext(); if (device) even.to_device_inplace(pool); continue;
-                }
-
-                if (!odd_empty) {
-                    utils::negacyclic_shift_ps(
-                        odd.const_reference(), shift, odd.polynomial_count(), 
-                        poly_modulus_degree, coeff_modulus, temp.reference()
-                    );
-                }
-                
-                if (!even_empty) {
-                    if (!odd_empty) {
-                        this->sub(even, temp, odd, pool);
-                        this->add_inplace(even, temp, pool);
-                        if (ntt_form) this->transform_to_ntt_inplace(odd);
-                        this->apply_galois_inplace(odd, (1 << (layer + 1)) + 1, automorphism_keys, pool);
-                        if (ntt_form) this->transform_from_ntt_inplace(odd);
-                        this->add_inplace(even, odd, pool);
-                    } else {
-                        if (ntt_form) {
-                            this->transform_to_ntt(even, temp, pool);
-                            this->apply_galois_inplace(temp, (1 << (layer + 1)) + 1, automorphism_keys, pool);
-                            this->transform_from_ntt_inplace(temp);
-                        } else {
-                            this->apply_galois(even, (1 << (layer + 1)) + 1, automorphism_keys, temp, pool);
-                        }
-                        this->add_inplace(even, temp, pool);
-                    }
-                } else {
-                    this->negate(temp, even, pool);
-                    if (ntt_form) this->transform_to_ntt_inplace(even);
-                    this->apply_galois_inplace(even, (1 << (layer + 1)) + 1, automorphism_keys, pool);
-                    if (ntt_form) this->transform_from_ntt_inplace(even);
-                    this->add_inplace(even, temp, pool);
-                }
-                offset += (gap << 1);
-            }
-        }
-        // take the first element
-        Ciphertext ret = std::move(rlwes[0]);
-        if (ntt_form) {
-            this->transform_to_ntt_inplace(ret);
-        }
-        if (apply_field_trace) field_trace_inplace(ret, automorphism_keys, l, pool);
-        return ret;
-    }
-
-
 
     void Evaluator::negacyclic_shift(const Ciphertext& encrypted, size_t shift, Ciphertext& destination, MemoryPoolHandle pool) const {
         check_no_seed("[Evaluator::negacyclic_shift]", encrypted);
@@ -270,6 +195,487 @@ namespace troy {
             shift, encrypted_poly_count, coeff_count, coeff_modulus, 
             destination_polys, pool
         );
+    }
+
+
+    Ciphertext Evaluator::pack_lwe_ciphertexts_new(const std::vector<const LWECiphertext*>& lwes, const GaloisKeys& automorphism_keys, MemoryPoolHandle pool, bool apply_field_trace) const {
+        size_t lwes_count = lwes.size();
+        if (lwes_count == 0) {
+            throw std::invalid_argument("[Evaluator::pack_lwe_ciphertexts_new] LWE ciphertexts must not be empty.");
+        }
+        ParmsID lwe_parms_id = lwes[0]->parms_id();
+        // check all have same parms id
+        for (size_t i = 1; i < lwes_count; i++) {
+            if (lwes[i]->parms_id() != lwe_parms_id) {
+                throw std::invalid_argument("[Evaluator::pack_lwe_ciphertexts_new] LWE ciphertexts must have same parms id.");
+            }
+        }
+
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::pack_lwe_ciphertexts_new]", lwe_parms_id);
+        size_t poly_modulus_degree = context_data->parms().poly_modulus_degree();
+        if (lwes_count > poly_modulus_degree) {
+            throw std::invalid_argument("[Evaluator::pack_lwe_ciphertexts_new] LWE ciphertexts count must be less than poly_modulus_degree.");
+        }
+
+        size_t l = 0;
+        while ((static_cast<size_t>(1) << l) < lwes_count) l += 1;
+
+        std::vector<Ciphertext> rlwes = LWECiphertext::assemble_lwe_batched_new(lwes, pool);
+
+        return this->pack_rlwe_ciphertexts_new(
+            batch_utils::collect_const_pointer(rlwes), 
+            automorphism_keys, 
+            0, poly_modulus_degree, poly_modulus_degree / (static_cast<size_t>(1) << l), pool, apply_field_trace);
+
+    }
+
+    void Evaluator::pack_lwe_ciphertexts_batched(const std::vector<std::vector<const LWECiphertext*>>& lwes_groups, 
+            const GaloisKeys& automorphism_keys, const std::vector<Ciphertext*>& output, 
+            MemoryPoolHandle pool, bool apply_field_trace
+    ) const {
+        if (lwes_groups.size() != output.size()) {
+            throw std::invalid_argument("[Evaluator::pack_lwe_ciphertexts_batched] Input groups and outputs should have same size.");
+        }
+        if (lwes_groups.size() == 0) return;
+        
+        size_t max_lwes_count = 0;
+        size_t total_lwes_count = 0;
+        ParmsID parms_id;
+        bool parms_id_set = false;
+        for (const std::vector<const LWECiphertext*>& lwes: lwes_groups) {
+            size_t lwes_count = lwes.size();
+            max_lwes_count = std::max(max_lwes_count, lwes_count);
+            total_lwes_count += lwes_count;
+            if (lwes_count == 0) {
+                throw std::invalid_argument("[Evaluator::pack_lwe_ciphertexts_new] LWE ciphertexts must not be empty.");
+            }
+            ParmsID lwe_parms_id = lwes[0]->parms_id();
+            if (!parms_id_set) {
+                parms_id = lwe_parms_id;
+                parms_id_set = true;
+            }
+            // check all have same parms id
+            for (size_t i = 0; i < lwes_count; i++) {
+                if (parms_id_set && lwes[i]->parms_id() != parms_id) {
+                    throw std::invalid_argument("[Evaluator::pack_lwe_ciphertexts_new] LWE ciphertexts must have same parms id.");
+                }
+            }
+
+            ContextDataPointer context_data = this->get_context_data("[Evaluator::pack_lwe_ciphertexts_new]", lwe_parms_id);
+            size_t poly_modulus_degree = context_data->parms().poly_modulus_degree();
+            if (lwes_count > poly_modulus_degree) {
+                throw std::invalid_argument("[Evaluator::pack_lwe_ciphertexts_new] LWE ciphertexts count must be less than poly_modulus_degree.");
+            }
+        }
+
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::pack_lwe_ciphertexts_new]", parms_id);
+        size_t poly_modulus_degree = context_data->parms().poly_modulus_degree();
+
+        size_t l = 0;
+        while ((static_cast<size_t>(1) << l) < max_lwes_count) l += 1;
+
+        std::vector<std::vector<Ciphertext>> rlwes(lwes_groups.size());
+        std::vector<const LWECiphertext*> lwes_flattened; lwes_flattened.reserve(total_lwes_count);
+        std::vector<Ciphertext*> rlwes_flattened; rlwes_flattened.reserve(total_lwes_count);
+        std::vector<std::vector<const Ciphertext*>> rlwes_const_ptrs(lwes_groups.size());
+        for (size_t i = 0; i < lwes_groups.size(); i++) {
+            rlwes[i] = std::vector<Ciphertext>(lwes_groups[i].size());
+            for (size_t j = 0; j < lwes_groups[i].size(); j++) {
+                lwes_flattened.push_back(lwes_groups[i][j]);
+                rlwes_flattened.push_back(&rlwes[i][j]);
+            }
+            rlwes_const_ptrs[i] = batch_utils::collect_const_pointer(rlwes[i]);
+        }
+        LWECiphertext::assemble_lwe_batched(lwes_flattened, rlwes_flattened, pool);
+
+        this->pack_rlwe_ciphertexts_batched(
+            rlwes_const_ptrs, 
+            automorphism_keys, 
+            0, poly_modulus_degree, poly_modulus_degree / (static_cast<size_t>(1) << l), 
+            output, pool, apply_field_trace);
+
+    }
+
+
+    std::pair<size_t, bool> is_power_of_two(uint64_t r) {
+        auto p = utils::get_power_of_two(r);
+        return std::make_pair(p, r == (static_cast<uint64_t>(1) << p));
+    }
+
+    Ciphertext Evaluator::pack_rlwe_ciphertexts_new(
+        const std::vector<const Ciphertext*>& ciphers, const GaloisKeys& automorphism_keys, size_t shift, size_t input_interval, size_t output_interval,
+        MemoryPoolHandle pool,
+        bool apply_field_trace
+    ) const {
+        ParmsID parms_id = get_vec_parms_id(ciphers);
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::pack_rlwe_ciphertexts_new]", parms_id);
+        const EncryptionParameters& parms = context_data->parms();
+        SchemeType scheme = parms.scheme();
+        size_t poly_modulus_degree = parms.poly_modulus_degree();
+        bool output_ntt_form = scheme == SchemeType::CKKS || scheme == SchemeType::BGV;
+        if (scheme == SchemeType::CKKS) {
+            get_vec_scale(ciphers); // check all have same scale
+        }
+        if (scheme == SchemeType::BGV) {
+            get_vec_correction_factor(ciphers); // check all have same correction factor
+        }
+        bool input_ntt_form = get_is_ntt_form_vec(ciphers);
+        
+        if (input_interval > poly_modulus_degree) {
+            throw std::invalid_argument("[Evaluator::pack_rlwe_ciphertexts_new] input_interval must be less than poly_modulus_degree.");
+        }
+        if (output_interval > input_interval) {
+            throw std::invalid_argument("[Evaluator::pack_rlwe_ciphertexts_new] output_interval must be less than input_interval.");
+        }
+        if (!is_power_of_two(input_interval).second) {
+            throw std::invalid_argument("[Evaluator::pack_rlwe_ciphertexts_new] input_interval must be power of two.");
+        }
+        if (!is_power_of_two(output_interval).second) {
+            throw std::invalid_argument("[Evaluator::pack_rlwe_ciphertexts_new] output_interval must be power of two.");
+        }
+        size_t max_cipher_count = input_interval / output_interval; 
+        if (ciphers.size() > max_cipher_count) {
+            throw std::invalid_argument("[Evaluator::pack_rlwe_ciphertexts_new] ciphers count must be less than input_interval / output_interval.");
+        }
+        size_t layers_required = is_power_of_two(max_cipher_count).first;
+        bool device = this->on_device();
+        auto coeff_modulus = parms.coeff_modulus();
+
+        std::vector<Ciphertext> rlwes(max_cipher_count);
+        std::vector<Slice<uint64_t>> rlwes_slice(ciphers.size(), Slice<uint64_t>(nullptr, 0, false, nullptr));
+        std::vector<Ciphertext*> rlwes_ptr; rlwes_ptr.reserve(ciphers.size());
+        for (size_t i = 0; i < max_cipher_count; i++) {
+            size_t index = static_cast<size_t>(utils::reverse_bits_uint64(static_cast<uint64_t>(i), layers_required));
+            if (index < ciphers.size()) {
+                rlwes[i] = Ciphertext::like(*ciphers[index], false, pool);
+                rlwes_slice[index] = rlwes[i].reference();
+                rlwes_ptr.push_back(&rlwes[i]);
+            } else {
+                rlwes[i] = Ciphertext(); 
+                if (device) rlwes[i].to_device_inplace(pool);
+            }
+        }
+        utils::copy_slice_b(batch_utils::pcollect_const_reference(ciphers), rlwes_slice, pool);
+
+        if (input_ntt_form) {
+            this->transform_from_ntt_inplace_batched(rlwes_ptr, pool);
+        }
+        this->divide_by_poly_modulus_degree_inplace_batched(rlwes_ptr, poly_modulus_degree / input_interval, pool);
+        if (shift != 0) {
+            this->negacyclic_shift_inplace_batched(rlwes_ptr, shift, pool);
+        }
+        
+        if (!device) { // For host, we save some computation when the source even/odd is empty
+            Ciphertext temp = Ciphertext::like(rlwes[0], false, pool);
+            for (size_t layer = 0; layer < layers_required; layer++) {
+                size_t gap = 1 << layer;
+                size_t shift = input_interval >> (layer + 1);
+                for (size_t offset = 0; offset < max_cipher_count; offset += gap * 2) {
+                    Ciphertext& even = rlwes[offset];
+                    Ciphertext& odd = rlwes[offset + gap];
+                    bool even_empty = even.polynomial_count() == 0;
+                    bool odd_empty = odd.polynomial_count() == 0;
+                    if (odd_empty && even_empty) {
+                        even = Ciphertext(); if (device) even.to_device_inplace(pool); continue;
+                    }
+                    if (!odd_empty) {
+                        utils::negacyclic_shift_ps(
+                            odd.const_reference(), shift, odd.polynomial_count(), 
+                            poly_modulus_degree, coeff_modulus, temp.reference()
+                        );
+                    }
+                    size_t galois_element = (poly_modulus_degree / input_interval) * (1 << (layer + 1)) + 1;
+                    if (!even_empty) {
+                        if (!odd_empty) {
+                            this->sub(even, temp, odd, pool);
+                            this->add_inplace(even, temp, pool);
+                            if (output_ntt_form) this->transform_to_ntt_inplace(odd);
+                            this->apply_galois_inplace(odd, galois_element, automorphism_keys, pool);
+                            if (output_ntt_form) this->transform_from_ntt_inplace(odd);
+                            this->add_inplace(even, odd, pool);
+                        } else {
+                            if (output_ntt_form) {
+                                this->transform_to_ntt(even, temp, pool);
+                                this->apply_galois_inplace(temp, galois_element, automorphism_keys, pool);
+                                this->transform_from_ntt_inplace(temp);
+                            } else {
+                                this->apply_galois(even, galois_element, automorphism_keys, temp, pool);
+                            }
+                            this->add_inplace(even, temp, pool);
+                        }
+                    } else {
+                        this->negate(temp, even, pool);
+                        if (output_ntt_form) this->transform_to_ntt_inplace(even);
+                        this->apply_galois_inplace(even, galois_element, automorphism_keys, pool);
+                        if (output_ntt_form) this->transform_from_ntt_inplace(even);
+                        this->add_inplace(even, temp, pool);
+                    }
+                }
+            }
+        } else { // For device code, it is more convenient to directly set the empties to zero
+            {
+                std::vector<Slice<uint64_t>> to_set_zeros;
+                for (size_t i = 0; i < max_cipher_count; i++) {
+                    if (rlwes[i].polynomial_count() == 0) {
+                        rlwes[i] = Ciphertext::like(rlwes[0], false, pool);
+                        to_set_zeros.push_back(rlwes[i].reference());
+                    }
+                }
+                utils::set_slice_b(0, to_set_zeros, pool);
+            }
+
+            std::vector<Ciphertext> temps(max_cipher_count / 2);
+            for (size_t i = 0; i < max_cipher_count / 2; i++) {
+                temps[i] = Ciphertext::like(rlwes[0], false, pool);
+            }
+
+            for (size_t layer = 0; layer < layers_required; layer++) {
+
+                size_t gap = 1 << layer;
+                size_t shift = input_interval >> (layer + 1);
+                size_t galois_element = (poly_modulus_degree / input_interval) * (1 << (layer + 1)) + 1;
+                size_t pair_count = max_cipher_count / (gap * 2);
+
+                std::vector<Ciphertext*> odds(pair_count);
+                std::vector<const Ciphertext*> odds_const(pair_count);
+                std::vector<Ciphertext*> evens(pair_count);
+                std::vector<const Ciphertext*> evens_const(pair_count);
+                std::vector<Ciphertext*> temps_ptr(pair_count);
+                std::vector<const Ciphertext*> temps_const_ptr(pair_count);
+                size_t odd_polynomial_count = 0;
+                for (size_t i = 0; i < pair_count; i++) {
+                    size_t offset = i * gap * 2;
+                    Ciphertext& even = rlwes[offset];
+                    Ciphertext& odd = rlwes[offset + gap];
+                    if (i == 0) {
+                        odd_polynomial_count = odd.polynomial_count();
+                    } else {
+                        if (odd.polynomial_count() != odd_polynomial_count) {
+                            throw std::invalid_argument("[Evaluator::pack_rlwe_ciphertexts_new] Mismatched polynomial count.");
+                        }
+                    }
+                    odds[i] = &odd;
+                    odds_const[i] = &odd;
+                    evens[i] = &even;
+                    evens_const[i] = &even;
+                    temps_ptr[i] = &temps[i];
+                    temps_const_ptr[i] = &temps[i];
+                }
+
+                utils::negacyclic_shift_bps(
+                    batch_utils::pcollect_const_reference(odds_const),
+                    shift, odd_polynomial_count, poly_modulus_degree, coeff_modulus,
+                    batch_utils::pcollect_reference(temps_ptr), pool
+                );
+                this->sub_batched(evens_const, temps_const_ptr, odds, pool);
+                this->add_inplace_batched(evens, temps_const_ptr, pool);
+                if (output_ntt_form) this->transform_to_ntt_inplace_batched(odds, pool);
+                this->apply_galois_inplace_batched(odds, galois_element, automorphism_keys, pool);
+                if (output_ntt_form) this->transform_from_ntt_inplace_batched(odds, pool);
+                this->add_inplace_batched(evens, odds_const, pool);
+
+            }
+        }
+
+        // take the first element
+        Ciphertext ret = std::move(rlwes[0]);
+        if (output_ntt_form) {
+            this->transform_to_ntt_inplace(ret);
+        }
+        if (output_interval != 1 && apply_field_trace) {
+            size_t logn = is_power_of_two(poly_modulus_degree / output_interval).first;
+            field_trace_inplace(ret, automorphism_keys, logn, pool);
+        }
+        return ret;
+
+    }
+
+    void Evaluator::pack_rlwe_ciphertexts_batched(
+        const std::vector<std::vector<const Ciphertext*>>& cipher_groups, const GaloisKeys& automorphism_keys, size_t shift, size_t input_interval, size_t output_interval,
+        const std::vector<Ciphertext*> outputs, MemoryPoolHandle pool, bool apply_field_trace
+    ) const {
+
+        if (cipher_groups.size() != outputs.size()) {
+            throw std::invalid_argument("[Evaluator::pack_rlwe_ciphertexts_batched] Input groups and outputs should have same size.");
+        }
+
+        size_t groups_count = cipher_groups.size();
+        if (!this->on_device() || groups_count < utils::BATCH_OP_THRESHOLD) {
+            // simply run singles
+            for (size_t i = 0; i < groups_count; i++) {
+                *outputs[i] = this->pack_rlwe_ciphertexts_new(
+                    cipher_groups[i], automorphism_keys, shift, input_interval, output_interval, pool, apply_field_trace
+                );
+            }
+            return;
+        }
+
+        // sanity check
+        if (cipher_groups[0].size() == 0) {
+            throw std::invalid_argument("[Evaluator::pack_rlwe_ciphertexts_batched] Input group 0 is empty.");
+        }
+        ParmsID parms_id = cipher_groups[0][0]->parms_id();
+        bool input_ntt_form = cipher_groups[0][0]->is_ntt_form();
+        ContextDataPointer context_data = this->get_context_data("[Evaluator::pack_rlwe_ciphertexts_batched]", parms_id);
+        const EncryptionParameters& parms = context_data->parms();
+        SchemeType scheme = parms.scheme();
+        bool output_ntt_form = scheme == SchemeType::CKKS || scheme == SchemeType::BGV;
+        size_t poly_modulus_degree = parms.poly_modulus_degree();
+        if (input_interval > poly_modulus_degree) {
+            throw std::invalid_argument("[Evaluator::pack_rlwe_ciphertexts_batched] input_interval must be less than poly_modulus_degree.");
+        }
+        if (output_interval > input_interval) {
+            throw std::invalid_argument("[Evaluator::pack_rlwe_ciphertexts_batched] output_interval must be less than input_interval.");
+        }
+        if (!is_power_of_two(input_interval).second) {
+            throw std::invalid_argument("[Evaluator::pack_rlwe_ciphertexts_batched] input_interval must be power of two.");
+        }
+        if (!is_power_of_two(output_interval).second) {
+            throw std::invalid_argument("[Evaluator::pack_rlwe_ciphertexts_batched] output_interval must be power of two.");
+        }
+        size_t max_cipher_count = input_interval / output_interval; 
+        size_t total_input_cipher_count = 0;
+        size_t polynomial_count = cipher_groups[0][0]->polynomial_count();
+        for (size_t i = 0; i < groups_count; i++) {
+            const std::vector<const Ciphertext*>& group = cipher_groups[i];
+            if (group.size() == 0) {
+                throw std::invalid_argument("[Evaluator::pack_rlwe_ciphertexts_batched] Input group " + std::to_string(i) + " is empty.");
+            }
+            if (group.size() > max_cipher_count) {
+                throw std::invalid_argument("[Evaluator::pack_rlwe_ciphertexts_batched] Input group " + std::to_string(i) + " has more than input_interval / output_interval.");
+            }
+            total_input_cipher_count += group.size();
+            // every input should have the same parms_id and ntt_form
+            for (size_t j = 0; j < group.size(); j++) {
+                if (group[j]->parms_id() != parms_id) {
+                    throw std::invalid_argument("[Evaluator::pack_rlwe_ciphertexts_batched] Input[" + std::to_string(i) + "][" + std::to_string(j) + "] has different parms_id.");
+                }
+                if (group[j]->is_ntt_form() != input_ntt_form) {
+                    throw std::invalid_argument("[Evaluator::pack_rlwe_ciphertexts_batched] Input[" + std::to_string(i) + "][" + std::to_string(j) + "] has different ntt_form.");
+                }
+                if (group[j]->polynomial_count() != polynomial_count) {
+                    throw std::invalid_argument("[Evaluator::pack_rlwe_ciphertexts_batched] Input[" + std::to_string(i) + "][" + std::to_string(j) + "] has different polynomial count.");
+                }
+                // for ckks, inside a single group the scale should be the same
+                if (scheme == SchemeType::CKKS) {
+                    if (group[j]->scale() != group[0]->scale()) {
+                        throw std::invalid_argument("[Evaluator::pack_rlwe_ciphertexts_batched] Input[" + std::to_string(i) + "][" + std::to_string(j) + "] has different scale.");
+                    }
+                }
+                // for bgv, inside a single group the correction factor should be the same
+                if (scheme == SchemeType::BGV) {
+                    if (group[j]->correction_factor() != group[0]->correction_factor()) {
+                        throw std::invalid_argument("[Evaluator::pack_rlwe_ciphertexts_batched] Input[" + std::to_string(i) + "][" + std::to_string(j) + "] has different correction factor.");
+                    }
+                }
+            }
+        }
+
+        size_t layers_required = is_power_of_two(max_cipher_count).first;
+        auto coeff_modulus = parms.coeff_modulus();
+
+        std::vector<std::vector<Ciphertext>> rlwes(groups_count, std::vector<Ciphertext>(max_cipher_count));
+        std::vector<Slice<uint64_t>> rlwes_slice(total_input_cipher_count, Slice<uint64_t>(nullptr, 0, false, nullptr));
+        std::vector<Ciphertext*> rlwes_ptr; rlwes_ptr.reserve(total_input_cipher_count);
+
+        { // create copies or empty ciphertext buffers
+            size_t group_offset = 0;
+            std::vector<ConstSlice<uint64_t>> copy_froms(total_input_cipher_count, ConstSlice<uint64_t>(nullptr, 0, false, nullptr));
+            std::vector<Slice<uint64_t>> to_set_zeros; to_set_zeros.reserve(max_cipher_count * groups_count - total_input_cipher_count);
+            for (size_t j = 0; j < groups_count; j++) {
+                for (size_t i = 0; i < max_cipher_count; i++) {
+                    size_t index = static_cast<size_t>(utils::reverse_bits_uint64(static_cast<uint64_t>(i), layers_required));
+                    if (index < cipher_groups[j].size()) {
+                        rlwes[j][i] = Ciphertext::like(*cipher_groups[j][index], false, pool);
+                        rlwes_slice[group_offset + index] = rlwes[j][i].reference();
+                        rlwes_ptr.push_back(&rlwes[j][i]);
+                    } else {
+                        // rlwes[j][0] must be present because we have at least 1 element in the group
+                        rlwes[j][i] = Ciphertext::like(rlwes[j][0], false, pool);
+                        rlwes[j][i].is_ntt_form() = false;
+                        to_set_zeros.push_back(rlwes[j][i].reference());
+                    }
+                }
+                for (size_t i = 0; i < cipher_groups[j].size(); i++) {
+                    copy_froms[group_offset + i] = cipher_groups[j][i]->reference();
+                }
+                group_offset += cipher_groups[j].size();
+            }
+            utils::copy_slice_b(copy_froms, rlwes_slice, pool);
+            utils::set_slice_b(0, to_set_zeros, pool);
+        }
+
+        if (input_ntt_form) {
+            this->transform_from_ntt_inplace_batched(rlwes_ptr, pool);
+        }
+        this->divide_by_poly_modulus_degree_inplace_batched(rlwes_ptr, poly_modulus_degree / input_interval, pool);
+        if (shift != 0) {
+            this->negacyclic_shift_inplace_batched(rlwes_ptr, shift, pool);
+        }
+
+        std::vector<std::vector<Ciphertext>> temps(groups_count, std::vector<Ciphertext>(max_cipher_count / 2));
+        for (size_t j = 0; j < groups_count; j++) {
+            for (size_t i = 0; i < max_cipher_count / 2; i++) {
+                temps[j][i] = Ciphertext::like(rlwes[j][0], false, pool);
+            }
+        }
+
+        for (size_t layer = 0; layer < layers_required; layer++) {
+
+            size_t gap = 1 << layer;
+            size_t shift = input_interval >> (layer + 1);
+            size_t galois_element = (poly_modulus_degree / input_interval) * (1 << (layer + 1)) + 1;
+            size_t pair_count = max_cipher_count / (gap * 2);
+
+            std::vector<Ciphertext*> odds(groups_count * pair_count);
+            std::vector<const Ciphertext*> odds_const(groups_count * pair_count);
+            std::vector<Ciphertext*> evens(groups_count * pair_count);
+            std::vector<const Ciphertext*> evens_const(groups_count * pair_count);
+            std::vector<Ciphertext*> temps_ptr(groups_count * pair_count);
+            std::vector<const Ciphertext*> temps_const_ptr(groups_count * pair_count);
+
+            size_t iter = 0;
+            for (size_t j = 0; j < groups_count; j++) {
+                for (size_t i = 0; i < pair_count; i++) {
+                    size_t offset = i * gap * 2;
+                    Ciphertext& even = rlwes[j][offset];
+                    Ciphertext& odd = rlwes[j][offset + gap];
+                    odds[iter]            = &odd;
+                    odds_const[iter]      = &odd;
+                    evens[iter]           = &even;
+                    evens_const[iter]     = &even;
+                    temps_ptr[iter]       = &temps[j][i];
+                    temps_const_ptr[iter] = &temps[j][i];
+                    iter++;
+                }
+            }
+
+            utils::negacyclic_shift_bps(
+                batch_utils::pcollect_const_reference(odds_const),
+                shift, polynomial_count, poly_modulus_degree, coeff_modulus,
+                batch_utils::pcollect_reference(temps_ptr), pool
+            );
+            this->sub_batched(evens_const, temps_const_ptr, odds, pool);
+            this->add_inplace_batched(evens, temps_const_ptr, pool);
+            if (output_ntt_form) this->transform_to_ntt_inplace_batched(odds, pool);
+            this->apply_galois_inplace_batched(odds, galois_element, automorphism_keys, pool);
+            if (output_ntt_form) this->transform_from_ntt_inplace_batched(odds, pool);
+            this->add_inplace_batched(evens, odds_const, pool);
+
+        }
+
+        // take the first element
+        for (size_t j = 0; j < groups_count; j++) {
+            *outputs[j] = std::move(rlwes[j][0]);
+        }
+        if (output_ntt_form) {
+            this->transform_to_ntt_inplace_batched(outputs, pool);
+        }
+        if (output_interval != 1 && apply_field_trace) {
+            size_t logn = is_power_of_two(poly_modulus_degree / output_interval).first;
+            field_trace_inplace_batched(outputs, automorphism_keys, logn, pool);
+        }
+
     }
 
 

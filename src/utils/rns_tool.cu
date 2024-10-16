@@ -1135,7 +1135,7 @@ namespace troy {namespace utils {
         }
     }
 
-    __global__ static void kernel_host_decrypt_scale_and_round_step1(
+    __global__ static void kernel_decrypt_scale_and_round_step1(
         ConstPointer<Modulus> gamma,
         ConstPointer<Modulus> t,
         MultiplyUint64Operand inv_gamma_mod_t,
@@ -1170,7 +1170,7 @@ namespace troy {namespace utils {
         if (device) {
             size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
             utils::set_device(destination.device_index());
-            kernel_host_decrypt_scale_and_round_step1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+            kernel_decrypt_scale_and_round_step1<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
                 self.gamma(),
                 self.t(),
                 self.inv_gamma_mod_t(),
@@ -1183,6 +1183,153 @@ namespace troy {namespace utils {
             host_decrypt_scale_and_round_step1(self, destination, coeff_count, temp_t_gamma);
         }
     }
+
+    // temp is (base_q_size + base_t_gamma_size) * coeff_count
+    // fast_convert_temp is base_q_size * coeff_count
+    __device__ static void device_decrypt_scale_and_round_fused(
+        ConstSlice<uint64_t> phase, size_t coeff_count, 
+        ConstSlice<MultiplyUint64Operand> prod_t_gamma_mod_q, 
+        ConstSlice<MultiplyUint64Operand> neg_inv_q_mod_t_gamma,
+        ConstSlice<Modulus> base_q, ConstSlice<Modulus> base_t_gamma,
+
+        ConstSlice<MultiplyUint64Operand> base_q_inv_punctured_product_mod_base,
+        ConstSlice<uint64_t> fast_convert_base_change_matrix,
+
+        ConstPointer<Modulus> gamma,
+        ConstPointer<Modulus> t,
+        MultiplyUint64Operand inv_gamma_mod_t,
+
+        Slice<uint64_t> destination,
+
+        Slice<uint64_t> temp,
+        Slice<uint64_t> fast_convert_temp
+    ) {
+        size_t j = blockIdx.x * blockDim.x + threadIdx.x;
+        if (j >= coeff_count) return;
+
+        // multiply_uint64operand_p |gamma * t|_qi * ct(s)
+        size_t base_q_size = base_q.size();
+        for (size_t i = 0; i < base_q_size; i++) {
+            temp[i * coeff_count + j] = multiply_uint64operand_mod(
+                phase[i * coeff_count + j], prod_t_gamma_mod_q[i], base_q[i]
+            );
+        }
+
+        // fast_convert_array
+        size_t base_t_gamma_size = base_t_gamma.size();
+        size_t offset = base_q_size * coeff_count;
+        for (size_t i = 0; i < base_q_size; i++) {
+            const MultiplyUint64Operand& op = base_q_inv_punctured_product_mod_base[i];
+            const Modulus& base = base_q[i];
+            if (op.operand == 1) {
+                fast_convert_temp[j * base_q_size + i] = utils::barrett_reduce_uint64(temp[i * coeff_count + j], base);
+            } else {
+                fast_convert_temp[j * base_q_size + i] = utils::multiply_uint64operand_mod(temp[i * coeff_count + j], op, base);
+            }
+        }
+        for (size_t i = 0; i < base_t_gamma_size; i++) {
+            temp[offset + i * coeff_count + j] = utils::dot_product_mod(
+                fast_convert_temp.const_slice(j * base_q_size, (j + 1) * base_q_size),
+                fast_convert_base_change_matrix.const_slice(i * base_q_size, (i + 1) * base_q_size),
+                base_t_gamma[i]
+            );
+        }
+        
+        // multiply_uint64operand_p -prod(q)^(-1) mod {t, gamma}
+        for (size_t i = 0; i < base_t_gamma_size; i++) {
+            temp[offset + i * coeff_count + j] = multiply_uint64operand_mod(
+                temp[offset + i * coeff_count + j], neg_inv_q_mod_t_gamma[i], base_t_gamma[i]
+            );
+        }
+        
+        // Need to correct values in temp_t_gamma (gamma component only) which are
+        // larger than floor(gamma/2)
+        {
+            uint64_t gamma_value = gamma->value();
+            uint64_t gamma_div_2 = gamma_value >> 1;
+            uint64_t temp_d;
+            uint64_t& dest = destination[j];
+            if (temp[offset + coeff_count + j] > gamma_div_2) {
+                temp_d = add_uint64_mod(
+                    temp[offset + j], t->reduce(gamma_value - temp[offset + coeff_count + j]), *t
+                );
+            } else {
+                temp_d = sub_uint64_mod(
+                    temp[offset + j], t->reduce(temp[offset + coeff_count + j]), *t
+                );
+            }
+            if (temp_d != 0) {
+                dest = multiply_uint64operand_mod(temp_d, inv_gamma_mod_t, *t);
+            } else {
+                dest = 0;
+            }
+        }
+
+    }
+
+    __global__ static void kernel_decrypt_scale_and_round_fused(
+        ConstSlice<uint64_t> phase, size_t coeff_count, 
+        ConstSlice<MultiplyUint64Operand> prod_t_gamma_mod_q, 
+        ConstSlice<MultiplyUint64Operand> neg_inv_q_mod_t_gamma,
+        ConstSlice<Modulus> base_q, ConstSlice<Modulus> base_t_gamma,
+
+        ConstSlice<MultiplyUint64Operand> base_q_inv_punctured_product_mod_base,
+        ConstSlice<uint64_t> fast_convert_base_change_matrix,
+
+        ConstPointer<Modulus> gamma,
+        ConstPointer<Modulus> t,
+        MultiplyUint64Operand inv_gamma_mod_t,
+
+        Slice<uint64_t> destination,
+
+        Slice<uint64_t> temp,
+        Slice<uint64_t> fast_convert_temp
+    ) {
+        device_decrypt_scale_and_round_fused(
+            phase, coeff_count, 
+            prod_t_gamma_mod_q, 
+            neg_inv_q_mod_t_gamma,
+            base_q, base_t_gamma,
+            base_q_inv_punctured_product_mod_base,
+            fast_convert_base_change_matrix,
+            gamma, t, inv_gamma_mod_t,
+            destination,
+            temp, fast_convert_temp
+        );
+    }
+
+    __global__ void kernel_decrypt_scale_and_round_fused_batched(
+        ConstSliceArrayRef<uint64_t> phase, size_t coeff_count, 
+        ConstSlice<MultiplyUint64Operand> prod_t_gamma_mod_q, 
+        ConstSlice<MultiplyUint64Operand> neg_inv_q_mod_t_gamma,
+        ConstSlice<Modulus> base_q, ConstSlice<Modulus> base_t_gamma,
+
+        ConstSlice<MultiplyUint64Operand> base_q_inv_punctured_product_mod_base,
+        ConstSlice<uint64_t> fast_convert_base_change_matrix,
+
+        ConstPointer<Modulus> gamma,
+        ConstPointer<Modulus> t,
+        MultiplyUint64Operand inv_gamma_mod_t,
+
+        SliceArrayRef<uint64_t> destination,
+
+        SliceArrayRef<uint64_t> temp,
+        SliceArrayRef<uint64_t> fast_convert_temp
+    ) {
+        size_t i = blockIdx.y;
+        device_decrypt_scale_and_round_fused(
+            phase[i], coeff_count, 
+            prod_t_gamma_mod_q, 
+            neg_inv_q_mod_t_gamma,
+            base_q, base_t_gamma,
+            base_q_inv_punctured_product_mod_base,
+            fast_convert_base_change_matrix,
+            gamma, t, inv_gamma_mod_t,
+            destination[i],
+            temp[i],
+            fast_convert_temp[i]
+        );
+    }
     
     void RNSTool::decrypt_scale_and_round(ConstSlice<uint64_t> phase, size_t phase_coeff_count, Slice<uint64_t> destination, MemoryPoolHandle pool) const {
         bool device = this->on_device();
@@ -1192,32 +1339,94 @@ namespace troy {namespace utils {
         size_t base_q_size = this->base_q().size();
         size_t base_t_gamma_size = this->base_t_gamma().size();
 
-        // Compute |gamma * t|_qi * ct(s)
-        Array<uint64_t> temp(phase_coeff_count * base_q_size, device, pool);
-        utils::multiply_uint64operand_p(
-            phase.const_slice(0, base_q_size * phase_coeff_count),
-            this->prod_t_gamma_mod_q(),
-            phase_coeff_count,
-            this->base_q().base(),
-            temp.reference()
-        );
+        if (!device) {
 
-        // Make another temp destination to get the poly in mod {t, gamma}
-        Array<uint64_t> temp_t_gamma(phase_coeff_count * base_t_gamma_size, device, pool);
-        this->base_q_to_t_gamma_conv()
-            .fast_convert_array(temp.const_reference(), temp_t_gamma.reference(), pool);
-        
-        // Multiply by -prod(q)^(-1) mod {t, gamma}
-        utils::multiply_uint64operand_inplace_p(
-            temp_t_gamma.reference(),
-            this->neg_inv_q_mod_t_gamma(),
-            phase_coeff_count,
-            this->base_t_gamma().base()
-        );
+            // Compute |gamma * t|_qi * ct(s)
+            Array<uint64_t> temp = Array<uint64_t>::create_uninitialized(phase_coeff_count * base_q_size, device, pool);
+            utils::multiply_uint64operand_p(
+                phase.const_slice(0, base_q_size * phase_coeff_count),
+                this->prod_t_gamma_mod_q(),
+                phase_coeff_count,
+                this->base_q().base(),
+                temp.reference()
+            );
 
-        // Need to correct values in temp_t_gamma (gamma component only) which are
-        // larger than floor(gamma/2)
-        decrypt_scale_and_round_step1(*this, destination, phase_coeff_count, temp_t_gamma.const_reference());
+            // Make another temp destination to get the poly in mod {t, gamma}
+            Array<uint64_t> temp_t_gamma = Array<uint64_t>::create_uninitialized(phase_coeff_count * base_t_gamma_size, device, pool);
+            this->base_q_to_t_gamma_conv()
+                .fast_convert_array(temp.const_reference(), temp_t_gamma.reference(), pool);
+            
+            // Multiply by -prod(q)^(-1) mod {t, gamma}
+            utils::multiply_uint64operand_inplace_p(
+                temp_t_gamma.reference(),
+                this->neg_inv_q_mod_t_gamma(),
+                phase_coeff_count,
+                this->base_t_gamma().base()
+            );
+
+            // Need to correct values in temp_t_gamma (gamma component only) which are
+            // larger than floor(gamma/2)
+            decrypt_scale_and_round_step1(*this, destination, phase_coeff_count, temp_t_gamma.const_reference());
+
+        } else {
+
+            Buffer<uint64_t> temp(base_q_size + base_t_gamma_size, phase_coeff_count, device, pool);
+            Buffer<uint64_t> fast_convert_temp(base_q_size, phase_coeff_count, device, pool);
+            size_t block_count = utils::ceil_div(phase_coeff_count, utils::KERNEL_THREAD_COUNT);
+            utils::set_device(this->device_index());
+            kernel_decrypt_scale_and_round_fused<<<block_count, utils::KERNEL_THREAD_COUNT>>>(
+                phase, phase_coeff_count,
+                this->prod_t_gamma_mod_q(),
+                this->neg_inv_q_mod_t_gamma(),
+                this->base_q().base(), this->base_t_gamma().base(),
+                this->base_q_to_t_gamma_conv().input_base().inv_punctured_product_mod_base(),
+                this->base_q_to_t_gamma_conv().base_change_matrix(),
+                this->gamma(), this->t(), this->inv_gamma_mod_t(),
+                destination,
+                temp.reference(), fast_convert_temp.reference()
+            );
+            utils::stream_sync();
+
+        }
+    }
+    
+    void RNSTool::decrypt_scale_and_round_batched(const ConstSliceVec<uint64_t>& phase, size_t phase_coeff_count, const SliceVec<uint64_t>& destination, MemoryPoolHandle pool) const {
+        if (phase.size() != destination.size()) {
+            throw std::invalid_argument("[RNSTool::decrypt_scale_and_round_batched] phase and destination must have the same size.");
+        }
+        if (!this->on_device() || phase.size() < BATCH_OP_THRESHOLD) {
+            for (size_t i = 0; i < phase.size(); i++) {
+                this->decrypt_scale_and_round(phase[i], phase_coeff_count, destination[i], pool);
+            }
+        } else {
+            std::vector<Buffer<uint64_t>> temp; temp.reserve(phase.size());
+            std::vector<Buffer<uint64_t>> fast_convert_temp; fast_convert_temp.reserve(phase.size());
+            for (size_t i = 0; i < phase.size(); i++) {
+                temp.emplace_back(phase_coeff_count * (this->base_q().size() + this->base_t_gamma().size()), this->on_device(), pool);
+                fast_convert_temp.emplace_back(phase_coeff_count * this->base_q().size(), this->on_device(), pool);
+            }
+            size_t block_count = utils::ceil_div(phase_coeff_count, utils::KERNEL_THREAD_COUNT);
+            dim3 block_dims(block_count, phase.size());
+            auto comp_ref = this->base_q().base();
+            auto phase_batched = construct_batch(phase, pool, comp_ref);
+            auto destination_batched = construct_batch(destination, pool, comp_ref);
+            auto temp_batched = construct_batch(rcollect_reference(temp), pool, comp_ref);
+            auto fast_convert_temp_batched = construct_batch(rcollect_reference(fast_convert_temp), pool, comp_ref);
+            utils::set_device(this->device_index());
+            kernel_decrypt_scale_and_round_fused_batched<<<block_dims, utils::KERNEL_THREAD_COUNT>>>(
+                phase_batched, phase_coeff_count,
+                this->prod_t_gamma_mod_q(),
+                this->neg_inv_q_mod_t_gamma(),
+                this->base_q().base(), this->base_t_gamma().base(),
+                this->base_q_to_t_gamma_conv().input_base().inv_punctured_product_mod_base(),
+                this->base_q_to_t_gamma_conv().base_change_matrix(),
+                this->gamma(), this->t(), this->inv_gamma_mod_t(),
+                destination_batched,
+                temp_batched,
+                fast_convert_temp_batched
+            );
+            utils::stream_sync();
+        }
     }
 
     static void host_mod_t_and_divide_q_last_inplace_step1(const RNSTool& self, Slice<uint64_t> input, ConstSlice<uint64_t> neg_c_last_mod_t) {

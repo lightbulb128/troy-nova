@@ -56,9 +56,7 @@ namespace troy { namespace linear {
 
         // When this is enabled, in the `matmul` function
         // we will invoke the batched operation. Note that this will
-        // consume much more memory than the non-batched version.
-        // Specifically, the memory is O(MNR/n), where n is the poly degree.
-        // If this is disabled, the memory requirement should be O(max(MN, NR)/n)
+        // consume more memory (presumably by a ratio of O(1) constant) than the non-batched version.
         bool batched_mul = false;
 
         inline void set_pool(MemoryPoolHandle pool) {

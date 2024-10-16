@@ -27,6 +27,12 @@ namespace troy {namespace utils {
         ruint128_t ci = counter.add(idx * (bytes[idx].size() / sizeof(ruint128_t) + static_cast<size_t>(skip_one)));
         device_fill_uint128s(bytes[idx], seed, ci);
     }
+    
+    __global__ static void kernel_fill_uint128s_many(SliceArrayRef<uint8_t> bytes, ConstSlice<uint64_t> seed) {
+        size_t idx = blockIdx.y;
+        ruint128_t this_seed = ruint128_t(seed[idx], 0);
+        device_fill_uint128s(bytes[idx], this_seed, 0);
+    }
 
     void fill_uint128s(Slice<uint8_t> bytes, ruint128_t seed, ruint128_t& counter) {
 #if DEBUG
@@ -77,6 +83,31 @@ namespace troy {namespace utils {
         }
     }
 
+    void fill_uint128s_many(const SliceVec<uint8_t>& bytes, ConstSlice<uint64_t> seed, MemoryPoolHandle pool) {
+        if (bytes.size() == 0) return;
+        size_t length = bytes[0].size();
+        for (size_t i = 1; i < bytes.size(); i++) {
+            if (bytes[i].size() != length) {
+                throw std::runtime_error("[fill_uint128s_batched] all elements of bytes must have the same size");
+            }
+        }
+        if (bytes.size() < BATCH_OP_THRESHOLD) {
+            for (size_t i = 0; i < bytes.size(); i++) {
+                ruint128_t counter;
+                fill_uint128s(bytes[i], ruint128_t(seed[i], 0), counter);
+            }
+        } else {
+            size_t block_count = utils::ceil_div(length, utils::KERNEL_THREAD_COUNT);
+            auto bytes_batched = construct_batch(bytes, pool, bytes[0]);
+            utils::set_device(bytes[0].device_index());
+            dim3 block_dims(block_count, bytes.size());
+            kernel_fill_uint128s_many<<<block_dims, utils::KERNEL_THREAD_COUNT>>>(
+                bytes_batched, seed
+            );
+            utils::stream_sync();
+        }
+    }
+
     ruint128_t host_generate_uint128(ruint128_t seed, ruint128_t& counter) {
         ruint128_t value = counter;
         aes::host::encrypt(value.as_bytes(), seed.as_bytes());
@@ -109,6 +140,22 @@ namespace troy {namespace utils {
             Slice<uint8_t> t = bytes[idx];
             size_t interval = t.size() / sizeof(ruint128_t) + 1;
             ruint128_t value = counter.add(interval * (idx + 1) - 1);
+            aes::device::encrypt(value.as_bytes(), seed.as_bytes());
+            size_t tail = t.size() % sizeof(ruint128_t);
+            size_t offset = t.size() - tail;
+            for (size_t i = 0; i < tail; i++) {
+                t[i + offset] = value.byte_at(i);
+            }
+        }
+    }
+    
+    __global__ static void kernel_fill_bytes_many_tail(SliceArrayRef<uint8_t> bytes, ConstSlice<uint64_t> seeds) {
+        size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+        if (idx < bytes.size()) {
+            Slice<uint8_t> t = bytes[idx];
+            size_t interval = t.size() / sizeof(ruint128_t) + 1;
+            ruint128_t value = ruint128_t(0).add(interval - 1);
+            ruint128_t seed = ruint128_t(seeds[idx], 0);
             aes::device::encrypt(value.as_bytes(), seed.as_bytes());
             size_t tail = t.size() % sizeof(ruint128_t);
             size_t offset = t.size() - tail;
@@ -154,6 +201,40 @@ namespace troy {namespace utils {
         this->counter = this->counter.add(bytes.size() * (main + static_cast<size_t>(tail > 0)));
     }
 
+    
+    void RandomGenerator::fill_bytes_many(const ConstSlice<uint64_t> seeds, const SliceVec<uint8_t>& bytes, MemoryPoolHandle pool) {
+        if (bytes.size() == 0) return;
+        size_t length = bytes[0].size();
+        for (size_t i = 1; i < bytes.size(); i++) {
+            if (bytes[i].size() != length) {
+                throw std::runtime_error("[RandomGenerator::fill_bytes_batched] all elements of bytes must have the same size");
+            }
+        }
+        if (!bytes[0].on_device() || bytes.size() < BATCH_OP_THRESHOLD) {
+            for (size_t i = 0; i < bytes.size(); i++) {
+                RandomGenerator rng(seeds[i]);
+                rng.fill_bytes(bytes[i]);
+            }
+            return;
+        }
+        size_t main = length / sizeof(ruint128_t);
+        size_t tail = length % sizeof(ruint128_t);
+        if (main > 0) {
+            SliceVec<uint8_t> bytes_main; bytes_main.reserve(bytes.size());
+            for (size_t i = 0; i < bytes.size(); i++) {
+                bytes_main.push_back(Slice<uint8_t>(bytes[i].raw_pointer(), main * sizeof(ruint128_t), bytes[i].on_device(), bytes[i].pool()));
+            }
+            fill_uint128s_many(bytes_main, seeds, pool);
+        }
+        if (tail > 0) {
+            size_t block_count = utils::ceil_div(bytes.size(), utils::KERNEL_THREAD_COUNT);
+            auto bytes_batched = construct_batch(bytes, pool, bytes[0]);
+            utils::set_device(bytes[0].device_index());
+            kernel_fill_bytes_many_tail<<<block_count, utils::KERNEL_THREAD_COUNT>>>(bytes_batched, seeds);
+            utils::stream_sync();
+        }
+    }
+
     void RandomGenerator::fill_uint64s(Slice<uint64_t> uint64s) {
         this->fill_bytes(
             Slice<uint8_t>(
@@ -177,6 +258,20 @@ namespace troy {namespace utils {
             ));
         }
         this->fill_bytes_batched(reinterpreted, pool);
+    }
+
+    void RandomGenerator::fill_uint64s_many(const ConstSlice<uint64_t> seeds, const SliceVec<uint64_t>& uint64s, MemoryPoolHandle pool) {
+        if (uint64s.size() == 0) return;
+        SliceVec<uint8_t> reinterpreted; reinterpreted.reserve(uint64s.size());
+        for (size_t i = 0; i < uint64s.size(); i++) {
+            reinterpreted.push_back(Slice<uint8_t>(
+                reinterpret_cast<uint8_t*>(uint64s[i].raw_pointer()), 
+                uint64s[i].size() * sizeof(uint64_t), 
+                uint64s[i].on_device(),
+                uint64s[i].pool()
+            ));
+        }
+        RandomGenerator::fill_bytes_many(seeds, reinterpreted, pool);
     }
     
     uint64_t RandomGenerator::sample_uint64() {
@@ -392,6 +487,18 @@ namespace troy {namespace utils {
             }
         } else {
             this->fill_uint64s_batched(destination, pool);
+            utils::modulo_inplace_bp(destination, degree, moduli, pool);
+        }
+    }
+    
+    void RandomGenerator::sample_poly_uniform_many(const ConstSlice<uint64_t> seeds, const SliceVec<uint64_t>& destination, size_t degree, ConstSlice<Modulus> moduli, MemoryPoolHandle pool) {
+        if (!moduli.on_device() || destination.size() < BATCH_OP_THRESHOLD) {
+            for (size_t i = 0; i < destination.size(); i++) {
+                RandomGenerator rng(seeds[i]);
+                rng.sample_poly_uniform(destination[i], degree, moduli);
+            }
+        } else {
+            fill_uint64s_many(seeds, destination, pool);
             utils::modulo_inplace_bp(destination, degree, moduli, pool);
         }
     }

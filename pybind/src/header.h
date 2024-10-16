@@ -164,6 +164,15 @@ size_t serialized_size_upperbound_he(const T& object, HeContextPointer context, 
     return object.serialized_size_upperbound(context, mode);
 }
 
+template <typename T>
+std::vector<T> cast_list(const py::list& list) {
+    std::vector<T> vec; vec.reserve(list.size());
+    for (const auto& item : list) {
+        vec.push_back(item.cast<T>());
+    }
+    return vec;
+}
+
 typedef std::optional<MemoryPoolHandle> MemoryPoolHandleArgument;
 
 inline MemoryPoolHandle nullopt_default_pool(MemoryPoolHandleArgument pool) {

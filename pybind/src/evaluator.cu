@@ -182,6 +182,12 @@ void register_evaluator(pybind11::module& m) {
         .def("multiply_plain_new", [](const Evaluator& self, const Ciphertext& encrypted, const Plaintext& plain, MemoryPoolHandleArgument pool) {
             return self.multiply_plain_new(encrypted, plain, nullopt_default_pool(pool));
         }, py::arg("encrypted"), py::arg("plain"), MEMORY_POOL_ARGUMENT)
+        .def("multiply_plain_new_batched", [](const Evaluator& self, const py::list& encrypted, const py::list& plain, MemoryPoolHandleArgument pool) {
+            return self.multiply_plain_new_batched(
+                cast_list<const Ciphertext*>(encrypted), cast_list<const Plaintext*>(plain), 
+                nullopt_default_pool(pool)
+            );
+        }, py::arg("encrypted"), py::arg("plain"), MEMORY_POOL_ARGUMENT)
 
         // transform_plain_to_ntt(plain, parms_id, destination, pool)
         .def("transform_plain_to_ntt", [](const Evaluator& self, const Plaintext& plain, ParmsID parms_id, Plaintext& destination, MemoryPoolHandleArgument pool) {
@@ -282,6 +288,7 @@ void register_evaluator(pybind11::module& m) {
             return self.complex_conjugate_new(encrypted, galois_keys, nullopt_default_pool(pool));
         }, py::arg("encrypted"), py::arg("galois_keys"), MEMORY_POOL_ARGUMENT)
 
+        // packlwes related
         .def("extract_lwe_new", [](const Evaluator& self, const Ciphertext& encrypted, size_t term, MemoryPoolHandleArgument pool) {
             return self.extract_lwe_new(encrypted, term, nullopt_default_pool(pool));
         }, py::arg("encrypted"), py::arg("term"), MEMORY_POOL_ARGUMENT)
@@ -301,6 +308,54 @@ void register_evaluator(pybind11::module& m) {
         .def("pack_lwe_ciphertexts_new", [](const Evaluator& self, const std::vector<LWECiphertext>& lwe_ciphertexts, const GaloisKeys& automorphism_keys, MemoryPoolHandleArgument pool) {
             return self.pack_lwe_ciphertexts_new(lwe_ciphertexts, automorphism_keys, nullopt_default_pool(pool));
         }, py::arg("lwe_ciphertexts"), py::arg("automorphism_keys"), MEMORY_POOL_ARGUMENT)
+        .def("pack_lwe_ciphertexts_new", [](const Evaluator& self, const py::list& lwe_ciphertexts, const GaloisKeys& automorphism_keys, MemoryPoolHandleArgument pool) {
+            return self.pack_lwe_ciphertexts_new(cast_list<const LWECiphertext*>(lwe_ciphertexts), automorphism_keys, nullopt_default_pool(pool));
+        }, py::arg("lwe_ciphertexts"), py::arg("automorphism_keys"), MEMORY_POOL_ARGUMENT)
+        .def("pack_rlwe_ciphertexts_new", [](
+            const Evaluator& self, const py::list& rlwe_ciphertexts, 
+            const GaloisKeys& automorphism_keys, 
+            size_t shift, size_t input_interval, size_t output_interval, 
+            MemoryPoolHandleArgument pool
+        ) {
+            return self.pack_rlwe_ciphertexts_new(
+                cast_list<const Ciphertext*>(rlwe_ciphertexts), 
+                automorphism_keys, shift, input_interval, output_interval, 
+                nullopt_default_pool(pool)
+            );
+        }, 
+            py::arg("rlwe_ciphertexts"), py::arg("automorphism_keys"), 
+            py::arg("shift"), py::arg("input_interval"), py::arg("output_interval"), 
+            MEMORY_POOL_ARGUMENT
+        )
+
+        .def("pack_lwe_ciphertexts_new_batched", [](const Evaluator& self, const py::list& lwe_groups, const GaloisKeys& automorphism_keys, MemoryPoolHandleArgument pool) {
+            std::vector<std::vector<const LWECiphertext*>> cvv(lwe_groups.size());
+            for (size_t i = 0; i < lwe_groups.size(); i++) {
+                py::list pv = lwe_groups[i].cast<py::list>();
+                cvv[i] = cast_list<const LWECiphertext*>(pv);
+            }
+            return self.pack_lwe_ciphertexts_new_batched(cvv, automorphism_keys, nullopt_default_pool(pool));
+        }, py::arg("lwe_groups"), py::arg("automorphism_keys"), MEMORY_POOL_ARGUMENT)
+        .def("pack_rlwe_ciphertexts_new_batched", [](
+            const Evaluator& self, const py::list& rlwe_groups, 
+            const GaloisKeys& automorphism_keys, 
+            size_t shift, size_t input_interval, size_t output_interval, 
+            MemoryPoolHandleArgument pool
+        ) {
+            std::vector<std::vector<const Ciphertext*>> cvv(rlwe_groups.size());
+            for (size_t i = 0; i < rlwe_groups.size(); i++) {
+                py::list pv = rlwe_groups[i].cast<py::list>();
+                cvv[i] = cast_list<const Ciphertext*>(pv);
+            }
+            return self.pack_rlwe_ciphertexts_new_batched(
+                cvv, automorphism_keys, shift, input_interval, output_interval, 
+                nullopt_default_pool(pool)
+            );
+        }, 
+            py::arg("rlwe_groups"), py::arg("automorphism_keys"), 
+            py::arg("shift"), py::arg("input_interval"), py::arg("output_interval"), 
+            MEMORY_POOL_ARGUMENT
+        )
 
         // negacyclic_shift(encrypted, size_t shift, destination, pool)
         .def("negacyclic_shift", [](const Evaluator& self, const Ciphertext& encrypted, size_t shift, Ciphertext& destination, MemoryPoolHandleArgument pool) {

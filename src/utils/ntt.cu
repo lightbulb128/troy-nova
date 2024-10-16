@@ -1,3 +1,5 @@
+#include "box_batch.h"
+#include "constants.h"
 #include "ntt.h"
 
 #include <cassert>
@@ -73,21 +75,22 @@ namespace troy {namespace utils {
 
     }
 
-    void host_ntt_multiply_inv_degree(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, NTTTableIndexer tables) {
+    void host_ntt_multiply_inv_degree(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, NTTTableIndexer tables, uint64_t scalar) {
         size_t degree = static_cast<size_t>(1) << log_degree; 
         for (size_t j = 0; j < component_count; j++) {
             for (size_t k = 0; k < pcount; k++) {
                 const Modulus& modulus = tables.get(k, j).modulus();
-                MultiplyUint64Operand scalar = tables.get(k, j).inv_degree_modulo();
+                MultiplyUint64Operand invd = tables.get(k, j).inv_degree_modulo();
                 for (size_t i = 0; i < degree; i++) {
                     size_t x_index = ((k * component_count + j) << log_degree) + i;
-                    operand[x_index] = multiply_uint64operand_mod_lazy(operand[x_index], scalar, modulus);
+                    uint64_t result = multiply_uint64operand_mod_lazy(operand[x_index], invd, modulus);
+                    operand[x_index] = multiply_uint64_mod(result, scalar, modulus);
                 }
             }
         }
     }
 
-    __global__ void kernel_ntt_multiply_inv_degree(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, NTTTableIndexer tables) {
+    __device__ void device_ntt_multiply_inv_degree(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, NTTTableIndexer tables, uint64_t scalar) {
         size_t global_index = blockIdx.x * blockDim.x + threadIdx.x;
         size_t degree = static_cast<size_t>(1) << log_degree;
         size_t total = pcount * component_count * degree;
@@ -97,14 +100,25 @@ namespace troy {namespace utils {
             // size_t i = global_index % degree;
             const NTTTables& table = tables.get(k, j);
             const Modulus& modulus = table.modulus();
-            MultiplyUint64Operand scalar = table.inv_degree_modulo();
-            operand[global_index] = multiply_uint64operand_mod_lazy(operand[global_index], scalar, modulus);
+            MultiplyUint64Operand invd = table.inv_degree_modulo();
+            uint64_t result = multiply_uint64operand_mod_lazy(operand[global_index], invd, modulus);
+            operand[global_index] = multiply_uint64_mod(result, scalar, modulus);
         }
     }
 
-    void ntt_multiply_inv_degree(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, NTTTableIndexer tables) {
+    __global__ void kernel_ntt_multiply_inv_degree(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, NTTTableIndexer tables, uint64_t scalar) {
+        device_ntt_multiply_inv_degree(operand, pcount, component_count, log_degree, tables, scalar);
+    }
+
+    __global__ void kernel_ntt_multiply_inv_degree_batched(SliceArrayRef<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, NTTTableIndexer tables, uint64_t scalar) {
+        for (size_t i = 0; i < operand.size(); i++) {
+            device_ntt_multiply_inv_degree(operand[i], pcount, component_count, log_degree, tables, scalar);
+        }
+    }
+    
+
+    void ntt_multiply_inv_degree(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, NTTTableIndexer tables, uint64_t scalar) {
         bool device = operand.on_device();
-        // same device
         if (!device_compatible(operand, tables)) {
             throw std::invalid_argument("[ntt_multiply_inv_degree] Operand and tables must be on the same device.");
         }
@@ -112,10 +126,25 @@ namespace troy {namespace utils {
             size_t total = (pcount * component_count) << log_degree;
             size_t block_count = ceil_div<size_t>(total, KERNEL_THREAD_COUNT);
             utils::set_device(operand.device_index());
-            kernel_ntt_multiply_inv_degree<<<block_count, KERNEL_THREAD_COUNT>>>(operand, pcount, component_count, log_degree, tables);
+            kernel_ntt_multiply_inv_degree<<<block_count, KERNEL_THREAD_COUNT>>>(operand, pcount, component_count, log_degree, tables, scalar);
             utils::stream_sync();
         } else {
-            host_ntt_multiply_inv_degree(operand, pcount, component_count, log_degree, tables);
+            host_ntt_multiply_inv_degree(operand, pcount, component_count, log_degree, tables, scalar);
+        }
+    }
+    
+    void ntt_multiply_inv_degree_batched(const SliceVec<uint64_t>& operand, size_t pcount, size_t component_count, size_t log_degree, NTTTableIndexer tables, uint64_t scalar, MemoryPoolHandle pool) {
+        if (!tables.on_device() || operand.size() < BATCH_OP_THRESHOLD) {
+            for (size_t i = 0; i < operand.size(); i++) {
+                ntt_multiply_inv_degree(operand[i], pcount, component_count, log_degree, tables, scalar);
+            }
+        } else {
+            size_t total = (pcount * component_count) << log_degree;
+            size_t block_count = ceil_div<size_t>(total, KERNEL_THREAD_COUNT);
+            utils::set_device(tables.device_index());
+            auto operand_batched = construct_batch(operand, pool, operand[0]);
+            kernel_ntt_multiply_inv_degree_batched<<<block_count, KERNEL_THREAD_COUNT>>>(operand_batched, pcount, component_count, log_degree, tables, scalar);
+            utils::stream_sync();
         }
     }
 
@@ -197,7 +226,6 @@ namespace troy {namespace utils {
 
     void ntt_transfer_last_reduce(Slice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, NTTTableIndexer tables) {
         bool device = operand.on_device();
-        // same device=
         if (!device_compatible(operand, tables)) {
             throw std::invalid_argument("[ntt_transfer_last_reduce] Operand and tables must be on the same device.");
         }
