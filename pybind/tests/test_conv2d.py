@@ -37,11 +37,10 @@ class HeUint64Conv2dTest:
         decryptor = ghe.decryptor
         evaluator = ghe.evaluator
         
-        x_encoded = helper.encode_inputs(encoder.encoder, x.data)
+        x_encoded = helper.encrypt_inputs(encryptor, encoder.encoder, x.data)
         w_encoded = helper.encode_weights(encoder.encoder, w.data)
         s_encoded = helper.encode_outputs(encoder.encoder, s.data)
 
-        x_encrypted = x_encoded.encrypt_symmetric(encryptor)
         x_serialized = x_encrypted.save(he)
         x_encrypted = pytroy.Cipher2d.load_new(x_serialized, he)
 
@@ -115,11 +114,10 @@ class HeDoubleConv2dTest:
         decryptor = ghe.decryptor
         evaluator = ghe.evaluator
         
-        x_encoded = helper.encode_inputs_doubles(encoder.encoder, x.data, None, ghe.scale)
+        x_encoded = helper.encrypt_inputs_doubles(encryptor, encoder.encoder, x.data, None, ghe.scale)
         w_encoded = helper.encode_weights_doubles(encoder.encoder, w.data, None, ghe.scale)
         s_encoded = helper.encode_outputs_doubles(encoder.encoder, s.data, None, ghe.scale * ghe.scale)
 
-        x_encrypted = x_encoded.encrypt_symmetric(encryptor)
         x_serialized = x_encrypted.save(he)
         x_encrypted = pytroy.Cipher2d.load_new(x_serialized, he)
 
@@ -228,15 +226,14 @@ class HeRing2kConv2dTest:
         evaluator = self.evaluator
         
         if self.t_bits > 32:
-            x_encoded = helper.encode_inputs_ring2k64(encoder, x.data, None, True)
+            x_encrypted = helper.encrypt_inputs_ring2k64(encryptor, encoder, x.data, None, True)
             w_encoded = helper.encode_weights_ring2k64(encoder, w.data, None, False)
             s_encoded = helper.encode_outputs_ring2k64(encoder, s.data, None)
         else:
-            x_encoded = helper.encode_inputs_ring2k32(encoder, x.data, None, True)
+            x_encrypted = helper.encrypt_inputs_ring2k32(encryptor, encoder, x.data, None, True)
             w_encoded = helper.encode_weights_ring2k32(encoder, w.data, None, False)
             s_encoded = helper.encode_outputs_ring2k32(encoder, s.data, None)
 
-        x_encrypted = x_encoded.encrypt_symmetric(encryptor)
         x_serialized = x_encrypted.save(he)
         x_encrypted = pytroy.Cipher2d.load_new(x_serialized, he)
 

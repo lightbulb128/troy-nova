@@ -347,11 +347,11 @@ namespace bench::conv2d {
             } else if (encoder.is_ckks()) {
                 w_encoded = helper.encode_weights_doubles(encoder.ckks(), w.doubles().data(), std::nullopt, context.scale());
             } else if (encoder.is_ring32()) {
-                w_encoded = helper.encode_weights_ring2k<uint32_t>(encoder.poly32(), w.uint32s().data(), std::nullopt, false);
+                w_encoded = helper.encode_weights_ring2k<uint32_t>(encoder.poly32(), w.uint32s().data(), std::nullopt);
             } else if (encoder.is_ring64()) {
-                w_encoded = helper.encode_weights_ring2k<uint64_t>(encoder.poly64(), w.uint64s().data(), std::nullopt, false);
+                w_encoded = helper.encode_weights_ring2k<uint64_t>(encoder.poly64(), w.uint64s().data(), std::nullopt);
             } else if (encoder.is_ring128()) {
-                w_encoded = helper.encode_weights_ring2k<uint128_t>(encoder.poly128(), w.uint128s().data(), std::nullopt, false);
+                w_encoded = helper.encode_weights_ring2k<uint128_t>(encoder.poly128(), w.uint128s().data(), std::nullopt);
             } else {
                 throw std::runtime_error("Unsupported encoder");
             }
@@ -387,27 +387,22 @@ namespace bench::conv2d {
                 Timer timer; timer.tab(1);
                 TimerOnce block_timer;
 
-                size_t timer_single_handle = timer.register_timer("Ecd x");
+                size_t timer_single_handle = timer.register_timer("Ecd/enc x");
                 timer.tick(timer_single_handle);
-                Plain2d x_encoded;
+                Cipher2d x_encrypted;
                 if (encoder.is_batch()) {
-                    x_encoded = helper.encode_inputs_uint64s(encoder.batch(), x.integers().data());
+                    x_encrypted = helper.encrypt_inputs_uint64s(encryptor, encoder.batch(), x.integers().data());
                 } else if (encoder.is_ckks()) {
-                    x_encoded = helper.encode_inputs_doubles(encoder.ckks(), x.doubles().data(), std::nullopt, context.scale());
+                    x_encrypted = helper.encrypt_inputs_doubles(encryptor, encoder.ckks(), x.doubles().data(), std::nullopt, context.scale());
                 } else if (encoder.is_ring32()) {
-                    x_encoded = helper.encode_inputs_ring2k<uint32_t>(encoder.poly32(), x.uint32s().data(), std::nullopt, true);
+                    x_encrypted = helper.encrypt_inputs_ring2k<uint32_t>(encryptor, encoder.poly32(), x.uint32s().data(), std::nullopt);
                 } else if (encoder.is_ring64()) {
-                    x_encoded = helper.encode_inputs_ring2k<uint64_t>(encoder.poly64(), x.uint64s().data(), std::nullopt, true);
+                    x_encrypted = helper.encrypt_inputs_ring2k<uint64_t>(encryptor, encoder.poly64(), x.uint64s().data(), std::nullopt);
                 } else if (encoder.is_ring128()) {
-                    x_encoded = helper.encode_inputs_ring2k<uint128_t>(encoder.poly128(), x.uint128s().data(), std::nullopt, true);
+                    x_encrypted = helper.encrypt_inputs_ring2k<uint128_t>(encryptor, encoder.poly128(), x.uint128s().data(), std::nullopt);
                 } else {
                     throw std::runtime_error("Unsupported encoder");
                 }
-                timer.tock(timer_single_handle);
-
-                timer_single_handle = timer.register_timer("Enc [x]");
-                timer.tick(timer_single_handle);
-                Cipher2d x_encrypted = x_encoded.encrypt_symmetric(encryptor);
                 timer.tock(timer_single_handle);
 
                 std::string x_serialized;
