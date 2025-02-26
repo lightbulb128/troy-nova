@@ -86,7 +86,7 @@ static void test_bfv_matmul(
     MatmulHelper helper(m, r, n, parms.poly_modulus_degree(), MatmulObjective::EncryptLeft, pack_lwe);
     
     // Encode into plaintexts
-    Plain2d w_encoded = helper.encode_weights_uint64s(encoder, w.data());
+    Plain2d w_encoded = helper.encode_weights_uint64s(encoder, w.data(), false);
     Plain2d s_encoded = helper.encode_outputs_uint64s(encoder, s.data());
 
     // Alice encrypts the input `x`. Since we only set the

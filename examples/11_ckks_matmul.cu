@@ -61,7 +61,7 @@ void test_ckks_matmul(
     MatmulHelper helper(m, r, n, parms.poly_modulus_degree(), MatmulObjective::EncryptLeft, pack_lwe);
     
     // Encode into plaintexts
-    Plain2d w_encoded = helper.encode_weights_doubles(encoder, w.data(), std::nullopt, scale);
+    Plain2d w_encoded = helper.encode_weights_doubles(encoder, w.data(), std::nullopt, scale, false);
 
     // As w*x will have a doubled scale, we directly encode `s` on scale^2.
     Plain2d s_encoded = helper.encode_outputs_doubles(encoder, s.data(), std::nullopt, scale * scale);

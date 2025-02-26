@@ -88,8 +88,8 @@ namespace ns_bfv_conv2d {
         Evaluator evaluator(he);
         Decryptor decryptor(he, keygen.secret_key());
         
-        Plain2d x_encoded = helper.encode_inputs_uint64s(encoder, x.data());
-        Plain2d w_encoded = helper.encode_weights_uint64s(encoder, w.data());
+        Plain2d x_encoded = helper.encode_inputs_uint64s(encoder, x.data(), true);
+        Plain2d w_encoded = helper.encode_weights_uint64s(encoder, w.data(), false);
         Plain2d s_encoded = helper.encode_outputs_uint64s(encoder, s.data());
 
         Cipher2d x_encrypted = x_encoded.encrypt_symmetric(encryptor);
