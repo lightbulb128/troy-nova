@@ -202,21 +202,35 @@ namespace troy { namespace linear {
             out_cipher->data().clear();
             out_cipher->data().reserve(ceil_div(height, h));
         }
+        Plain2d temp_plain; 
+        temp_plain.data().clear();
+        temp_plain.data().reserve(ceil_div(height, h));
         for (size_t li = 0; li < height; li += h) {
             size_t ui = (li + h > height) ? height : (li + h);
             std::vector<Plaintext> encoded_row_plain; encoded_row_plain.reserve(ceil_div(width, w));
-            std::vector<Ciphertext> encoded_row_cipher; encoded_row_cipher.reserve(ceil_div(width, w));
             for (size_t lj = 0; lj < width; lj += w) {
                 size_t uj = (lj + w > width) ? width : (lj + w);
-                if (out_plain) {
-                    encoded_row_plain.push_back(this->encode_weights_small(encoder, weights, li, ui, lj, uj, for_cipher));
-                } else {
-                    Plaintext p = this->encode_weights_small(encoder, weights, li, ui, lj, uj, for_cipher);
-                    encoded_row_cipher.push_back(encryptor->encrypt_symmetric_new(p, true, nullptr, pool));
+                encoded_row_plain.push_back(this->encode_weights_small(encoder, weights, li, ui, lj, uj, for_cipher));
+            }
+            temp_plain.data().push_back(std::move(encoded_row_plain));
+        }
+        if (!temp_plain.data()[0][0].is_ntt_form()) {
+            Plain2d temp; ensure_ntt_form(batched_mul, encoder.context(), pool, temp_plain, temp, !for_cipher);
+            temp_plain = std::move(temp);
+        }
+        if (out_plain) {
+            *out_plain = std::move(temp_plain);
+        } else {
+            std::vector<const Plaintext*> temp_ptrs;
+            std::vector<Ciphertext*> out_ptrs; 
+            for (size_t i = 0; i < temp_plain.size(); i++) {
+                out_cipher->data().push_back(std::vector<Ciphertext>(temp_plain[i].size()));
+                for (size_t j = 0; j < temp_plain[i].size(); j++) {
+                    temp_ptrs.push_back(&temp_plain[i][j]);
+                    out_ptrs.push_back(&(*out_cipher)[i][j]);
                 }
             }
-            if (out_plain) out_plain->data().push_back(std::move(encoded_row_plain));
-            else out_cipher->data().push_back(std::move(encoded_row_cipher));
+            encryptor->encrypt_symmetric_batched(temp_ptrs, true, out_ptrs, nullptr, pool);
         }
     }
 
@@ -268,34 +282,36 @@ namespace troy { namespace linear {
             out_cipher->data().clear();
             out_cipher->data().reserve(batch_size);
         }
+        Plain2d temp_plain; 
+        temp_plain.data().clear();
+        temp_plain.data().reserve(batch_size);
         for (size_t li = 0; li < batch_size; li += batch_block) {
             size_t ui = (li + batch_block > batch_size) ? batch_size : li + batch_block;
             std::vector<Plaintext> encoded_row_plain;
-            std::vector<Ciphertext> encoded_row_cipher;
             encoded_row_plain.reserve(ceil_div(input_dims, vecsize));
-            encoded_row_cipher.reserve(ceil_div(input_dims, vecsize));
             for (size_t lj = 0; lj < input_dims; lj += vecsize) {
                 size_t uj = (lj + vecsize > input_dims) ? input_dims : lj + vecsize;
-                if (out_plain) {
-                    encoded_row_plain.push_back(this->encode_inputs_small(encoder, inputs, li, ui, lj, uj, for_cipher));
-                } else {
-                    Plaintext p = this->encode_inputs_small(encoder, inputs, li, ui, lj, uj, for_cipher);
-                    encoded_row_cipher.push_back(encryptor->encrypt_symmetric_new(p, true, nullptr, pool));
-                }
+                encoded_row_plain.push_back(this->encode_inputs_small(encoder, inputs, li, ui, lj, uj, for_cipher));
             }
-            if (out_plain) out_plain->data().push_back(std::move(encoded_row_plain));
-            else out_cipher->data().push_back(std::move(encoded_row_cipher));
+            temp_plain.data().push_back(std::move(encoded_row_plain));
+        }
+        if (!temp_plain.data()[0][0].is_ntt_form()) {
+            Plain2d temp; ensure_ntt_form(batched_mul, encoder.context(), pool, temp_plain, temp, !for_cipher);
+            temp_plain = std::move(temp);
         }
         if (out_plain) {
-            if (!out_plain->data()[0][0].is_ntt_form()) {
-                Plain2d out; ensure_ntt_form(batched_mul, encoder.context(), pool, *out_plain, out, false);
-                *out_plain = std::move(out);
-            }
+            *out_plain = std::move(temp_plain);
         } else {
-            if (!out_cipher->data()[0][0].is_ntt_form()) {
-                Cipher2d out; ensure_ntt_form(batched_mul, encoder.context(), pool, *out_cipher, out, false); // centralize does not have effect here.
-                *out_cipher = std::move(out);
+            std::vector<const Plaintext*> temp_ptrs;
+            std::vector<Ciphertext*> out_ptrs; 
+            for (size_t i = 0; i < temp_plain.size(); i++) {
+                out_cipher->data().push_back(std::vector<Ciphertext>(temp_plain[i].size()));
+                for (size_t j = 0; j < temp_plain[i].size(); j++) {
+                    temp_ptrs.push_back(&temp_plain[i][j]);
+                    out_ptrs.push_back(&(*out_cipher)[i][j]);
+                }
             }
+            encryptor->encrypt_symmetric_batched(temp_ptrs, true, out_ptrs, nullptr, pool);
         }
     }
 
@@ -336,12 +352,6 @@ namespace troy { namespace linear {
             size_t output_split = ceil_div(output_dims, output_block);
             size_t batch_split = ceil_div(batch_size, batch_block);
             using std::vector;
-            Plain2d w_cloned;
-            bool use_w_cloned = false;
-            if (!w[0][0].is_ntt_form()) {
-                use_w_cloned = true;
-                ensure_ntt_form(batched_mul, evaluator.context(), pool, w, w_cloned, true);
-            }
             vector<const Ciphertext*> a_ptrs; a_ptrs.reserve(input_split * output_split * batch_split);
             vector<const Plaintext*> w_ptrs; w_ptrs.reserve(input_split * output_split * batch_split);
             vector<Ciphertext*> r_ptrs; r_ptrs.reserve(input_split * output_split * batch_split);
@@ -349,7 +359,7 @@ namespace troy { namespace linear {
                 for (size_t j = 0; j < output_split; j++) {
                     for (size_t b = 0; b < batch_split; b++) {
                         a_ptrs.push_back(&a[b][i]);
-                        w_ptrs.push_back(use_w_cloned ? &w_cloned[i][j] : &w[i][j]);
+                        w_ptrs.push_back(&w[i][j]);
                         r_ptrs.push_back(&ret[b][j]);
                     }
                 }
@@ -394,27 +404,47 @@ namespace troy { namespace linear {
     }
 
     Cipher2d MatmulHelper::matmul_reverse(const Evaluator& evaluator, const Plain2d& a, const Cipher2d& w) const {
-        Cipher2d ret; ret.data().reserve(ceil_div(batch_size, batch_block));
+        Cipher2d ret; ret.data().resize(ceil_div(batch_size, batch_block));
         size_t output_vector_count = ceil_div(output_dims, output_block);
+        for (size_t i = 0; i < ret.data().size(); i++) ret[i].resize(output_vector_count);
         if (a.data().size() != ceil_div(batch_size, batch_block)) {
-            throw std::invalid_argument("[MatmulHelper::matmul_reverse] Input batch_size incorrect.");
+            throw std::invalid_argument("[MatmulHelper::matmul] Input batch_size incorrect.");
         }
         if (w.data().size() != ceil_div(input_dims, input_block)) {
-            throw std::invalid_argument("[MatmulHelper::matmul_reverse] Weight input dimension incorrect.");
+            throw std::invalid_argument("[MatmulHelper::matmul] Weight input dimension incorrect.");
         }
-        for (size_t b = 0; b < ceil_div(batch_size, batch_block); b++) {
-            std::vector<Ciphertext> outVecs(output_vector_count);
+
+        if (!batched_mul) {
             for (size_t i = 0; i < w.data().size(); i++) {
                 for (size_t j = 0; j < w[i].size(); j++) {
-                    Ciphertext prod;
-                    evaluator.multiply_plain(w[i][j], a[b][i], prod, pool);
-                    if (i==0) outVecs[j] = std::move(prod);
-                    else {
-                        evaluator.add_inplace(outVecs[j], prod, pool);
+                    for (size_t b = 0; b < ceil_div(batch_size, batch_block); b++) {
+                        Ciphertext prod;
+                        evaluator.multiply_plain(w[i][j], a[b][i], prod, pool);
+                        if (i==0) ret[b][j] = std::move(prod);
+                        else {
+                            evaluator.add_inplace(ret[b][j], prod, pool);
+                        }
                     }
                 }
             }
-            ret.data().push_back(std::move(outVecs));
+        } else {
+            size_t input_split = ceil_div(input_dims, input_block);
+            size_t output_split = ceil_div(output_dims, output_block);
+            size_t batch_split = ceil_div(batch_size, batch_block);
+            using std::vector;
+            vector<const Plaintext*> a_ptrs; a_ptrs.reserve(input_split * output_split * batch_split);
+            vector<const Ciphertext*> w_ptrs; w_ptrs.reserve(input_split * output_split * batch_split);
+            vector<Ciphertext*> r_ptrs; r_ptrs.reserve(input_split * output_split * batch_split);
+            for (size_t i = 0; i < input_split; i++) {
+                for (size_t j = 0; j < output_split; j++) {
+                    for (size_t b = 0; b < batch_split; b++) {
+                        a_ptrs.push_back(&a[b][i]);
+                        w_ptrs.push_back(&w[i][j]);
+                        r_ptrs.push_back(&ret[b][j]);
+                    }
+                }
+            }
+            evaluator.multiply_plain_accumulate(w_ptrs, a_ptrs, r_ptrs, true, pool);
         }
         HeContextPointer context = evaluator.context();
         if (context->first_context_data().value()->parms().scheme() == SchemeType::BFV) {
@@ -456,10 +486,10 @@ namespace troy { namespace linear {
                     size_t uj = std::min(this->output_dims, lj + vecsize);
                     size_t cipherId = di * ceil_div(this->output_dims, this->output_block) + dj;
                     size_t packedId = cipherId / this->input_block;
-                    size_t packedOffset = cipherId % this->input_block;
+                    size_t packed_offset = cipherId % this->input_block;
                     for (size_t i = li; i < ui; i++) {
                         for (size_t j = lj; j < uj; j++) {
-                            ret[packedId][(i - li) * this->input_block * this->output_block + (j - lj) * this->input_block + packedOffset] 
+                            ret[packedId][(i - li) * this->input_block * this->output_block + (j - lj) * this->input_block + packed_offset] 
                                 = outputs[i * this->output_dims + j];
                         }
                     }
@@ -780,45 +810,45 @@ namespace troy { namespace linear {
         return ret;
     }
     template <typename T>
-    Plain2d MatmulHelper::encode_weights_ring2k(const PolynomialEncoderRing2k<T>& encoder, const T* weights, std::optional<ParmsID> parms_id, bool for_cipher) const {
+    Plain2d MatmulHelper::encode_weights_ring2k(const PolynomialEncoderRing2k<T>& encoder, const T* weights, std::optional<ParmsID> parms_id) const {
         PolynomialEncoderRing2kAdapter<T> adapter(encoder, parms_id); Plain2d ret;
-        encode_weights(adapter, nullptr, weights, for_cipher, &ret, nullptr);
+        encode_weights(adapter, nullptr, weights, false, &ret, nullptr);
         return ret;
     }
     template Plain2d MatmulHelper::encode_weights_ring2k<uint32_t>(
-        const PolynomialEncoderRing2k<uint32_t>& encoder, const uint32_t* weights, std::optional<ParmsID> parms_id, bool for_cipher
+        const PolynomialEncoderRing2k<uint32_t>& encoder, const uint32_t* weights, std::optional<ParmsID> parms_id
     ) const;
     template Plain2d MatmulHelper::encode_weights_ring2k<uint64_t>(
-        const PolynomialEncoderRing2k<uint64_t>& encoder, const uint64_t* weights, std::optional<ParmsID> parms_id, bool for_cipher
+        const PolynomialEncoderRing2k<uint64_t>& encoder, const uint64_t* weights, std::optional<ParmsID> parms_id
     ) const;
     template Plain2d MatmulHelper::encode_weights_ring2k<uint128_t>(
-        const PolynomialEncoderRing2k<uint128_t>& encoder, const uint128_t* weights, std::optional<ParmsID> parms_id, bool for_cipher
+        const PolynomialEncoderRing2k<uint128_t>& encoder, const uint128_t* weights, std::optional<ParmsID> parms_id
     ) const;
 
     Plain2d MatmulHelper::encode_inputs_uint64s(const BatchEncoder& encoder, const uint64_t* inputs) const {
         BatchEncoderAdapter adapter(encoder); Plain2d ret;
-        encode_inputs(adapter, nullptr, inputs, true, &ret, nullptr);
+        encode_inputs(adapter, nullptr, inputs, false, &ret, nullptr);
         return ret;
     }
     Plain2d MatmulHelper::encode_inputs_doubles(const CKKSEncoder& encoder, const double* inputs, std::optional<ParmsID> parms_id, double scale) const {
         CKKSEncoderAdapter adapter(encoder, parms_id, scale); Plain2d ret;
-        encode_inputs(adapter, nullptr, inputs, true, &ret, nullptr);
+        encode_inputs(adapter, nullptr, inputs, false, &ret, nullptr);
         return ret;
     }
     template <typename T>
-    Plain2d MatmulHelper::encode_inputs_ring2k(const PolynomialEncoderRing2k<T>& encoder, const T* inputs, std::optional<ParmsID> parms_id, bool for_cipher) const {
+    Plain2d MatmulHelper::encode_inputs_ring2k(const PolynomialEncoderRing2k<T>& encoder, const T* inputs, std::optional<ParmsID> parms_id) const {
         PolynomialEncoderRing2kAdapter<T> adapter(encoder, parms_id); Plain2d ret;
-        encode_inputs(adapter, nullptr, inputs, for_cipher, &ret, nullptr);
+        encode_inputs(adapter, nullptr, inputs, false, &ret, nullptr);
         return ret;
     }
     template Plain2d MatmulHelper::encode_inputs_ring2k<uint32_t>(
-        const PolynomialEncoderRing2k<uint32_t>& encoder, const uint32_t* inputs, std::optional<ParmsID> parms_id, bool for_cipher
+        const PolynomialEncoderRing2k<uint32_t>& encoder, const uint32_t* inputs, std::optional<ParmsID> parms_id
     ) const;
     template Plain2d MatmulHelper::encode_inputs_ring2k<uint64_t>(
-        const PolynomialEncoderRing2k<uint64_t>& encoder, const uint64_t* inputs, std::optional<ParmsID> parms_id, bool for_cipher
+        const PolynomialEncoderRing2k<uint64_t>& encoder, const uint64_t* inputs, std::optional<ParmsID> parms_id
     ) const;
     template Plain2d MatmulHelper::encode_inputs_ring2k<uint128_t>(
-        const PolynomialEncoderRing2k<uint128_t>& encoder, const uint128_t* inputs, std::optional<ParmsID> parms_id, bool for_cipher
+        const PolynomialEncoderRing2k<uint128_t>& encoder, const uint128_t* inputs, std::optional<ParmsID> parms_id
     ) const;
 
     Cipher2d MatmulHelper::encrypt_inputs_uint64s(const Encryptor& encryptor, const BatchEncoder& encoder, const uint64_t* inputs) const {
@@ -846,7 +876,6 @@ namespace troy { namespace linear {
     template Cipher2d MatmulHelper::encrypt_inputs_ring2k<uint128_t>(
         const Encryptor& encryptor, const PolynomialEncoderRing2k<uint128_t>& encoder, const uint128_t* inputs, std::optional<ParmsID> parms_id
     ) const;
-
 
     Cipher2d MatmulHelper::encrypt_weights_uint64s(const Encryptor& encryptor, const BatchEncoder& encoder, const uint64_t* weights) const {
         BatchEncoderAdapter adapter(encoder); Cipher2d ret;

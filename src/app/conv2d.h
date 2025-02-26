@@ -45,6 +45,12 @@ namespace troy { namespace linear {
         MatmulObjective objective; 
         MemoryPoolHandle pool;
         bool pack_lwe;
+
+        // When this is enabled, in the `matmul` function
+        // we will invoke the batched operation. Note that this will
+        // consume more memory (presumably by a ratio of O(1) constant) than the non-batched version.
+        bool batched_mul = false;
+
         
         inline void set_pool(MemoryPoolHandle pool) {
             this->pool = pool;
@@ -64,7 +70,7 @@ namespace troy { namespace linear {
             image_height(image_height), image_width(image_width),
             kernel_height(kernel_height), kernel_width(kernel_width),
             slot_count(poly_degree), objective(objective),
-            pool(pool)
+            pool(pool), batched_mul(true)
         {
             determine_block();
         }
@@ -73,7 +79,7 @@ namespace troy { namespace linear {
         Plain2d encode_weights_uint64s(const BatchEncoder& encoder, const uint64_t* weights) const;
         Plain2d encode_weights_doubles(const CKKSEncoder& encoder, const double* weights, std::optional<ParmsID> parms_id, double scale) const;
         template <typename T>
-        Plain2d encode_weights_ring2k(const PolynomialEncoderRing2k<T>& encoder, const T* weights, std::optional<ParmsID> parms_id, bool for_cipher) const;
+        Plain2d encode_weights_ring2k(const PolynomialEncoderRing2k<T>& encoder, const T* weights, std::optional<ParmsID> parms_id) const;
 
         Cipher2d encrypt_weights_uint64s(const Encryptor& encryptor, const BatchEncoder& encoder, const uint64_t* weights) const;
         Cipher2d encrypt_weights_doubles(const Encryptor& encryptor, const CKKSEncoder& encoder, const double* weights, std::optional<ParmsID> parms_id, double scale) const;
@@ -83,7 +89,7 @@ namespace troy { namespace linear {
         Plain2d encode_inputs_uint64s(const BatchEncoder& encoder, const uint64_t* inputs) const;
         Plain2d encode_inputs_doubles(const CKKSEncoder& encoder, const double* inputs, std::optional<ParmsID> parms_id, double scale) const;
         template <typename T>
-        Plain2d encode_inputs_ring2k(const PolynomialEncoderRing2k<T>& encoder, const T* inputs, std::optional<ParmsID> parms_id, bool for_cipher) const;
+        Plain2d encode_inputs_ring2k(const PolynomialEncoderRing2k<T>& encoder, const T* inputs, std::optional<ParmsID> parms_id) const;
 
         Cipher2d encrypt_inputs_uint64s(const Encryptor& encryptor, const BatchEncoder& encoder, const uint64_t* inputs) const;
         Cipher2d encrypt_inputs_doubles(const Encryptor& encryptor, const CKKSEncoder& encoder,  const double* inputs, std::optional<ParmsID> parms_id, double scale) const;

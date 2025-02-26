@@ -61,7 +61,6 @@ void test_ckks_matmul(
     MatmulHelper helper(m, r, n, parms.poly_modulus_degree(), MatmulObjective::EncryptLeft, pack_lwe);
     
     // Encode into plaintexts
-    Plain2d x_encoded = helper.encode_inputs_doubles(encoder, x.data(), std::nullopt, scale);
     Plain2d w_encoded = helper.encode_weights_doubles(encoder, w.data(), std::nullopt, scale);
 
     // As w*x will have a doubled scale, we directly encode `s` on scale^2.
@@ -69,7 +68,7 @@ void test_ckks_matmul(
 
     // Alice encrypts the input `x`. Since we only set the
     // secret key for the encryptor, we can only use symmetric encryption.
-    Cipher2d x_encrypted = x_encoded.encrypt_symmetric(encryptor);
+    Cipher2d x_encrypted = helper.encrypt_inputs_doubles(encryptor, encoder, x.data(), std::nullopt, scale);
 
     // Alice serializes the ciphertexts.
     stringstream x_serialized;
