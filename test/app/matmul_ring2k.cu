@@ -80,7 +80,7 @@ namespace matmul_ring2k {
         }
         
         Cipher2d x_encrypted = helper.encrypt_inputs_ring2k(encryptor, encoder, x.data(), std::nullopt);
-        Plain2d w_encoded = helper.encode_weights_ring2k(encoder, w.data(), std::nullopt);
+        Plain2d w_encoded = helper.encode_weights_ring2k(encoder, w.data(), std::nullopt, false);
         Plain2d s_encoded = helper.encode_outputs_ring2k(encoder, s.data(), std::nullopt);
 
         stringstream x_serialized;
@@ -156,7 +156,7 @@ namespace matmul_ring2k {
             automorphism_key = keygen.create_automorphism_keys(false);
         }
         
-        Plain2d x_encoded = helper.encode_inputs_ring2k(encoder, x.data(), std::nullopt);
+        Plain2d x_encoded = helper.encode_inputs_ring2k(encoder, x.data(), std::nullopt, false);
         Cipher2d w_encrypted = helper.encrypt_weights_ring2k(encryptor, encoder, w.data(), std::nullopt);
         Plain2d s_encoded = helper.encode_outputs_ring2k(encoder, s.data(), std::nullopt);
 

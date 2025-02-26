@@ -343,15 +343,15 @@ namespace bench::conv2d {
             TimerOnce timer;
             Plain2d w_encoded;
             if (encoder.is_batch()) {
-                w_encoded = helper.encode_weights_uint64s(encoder.batch(), w.integers().data());
+                w_encoded = helper.encode_weights_uint64s(encoder.batch(), w.integers().data(), false);
             } else if (encoder.is_ckks()) {
-                w_encoded = helper.encode_weights_doubles(encoder.ckks(), w.doubles().data(), std::nullopt, context.scale());
+                w_encoded = helper.encode_weights_doubles(encoder.ckks(), w.doubles().data(), std::nullopt, context.scale(), false);
             } else if (encoder.is_ring32()) {
-                w_encoded = helper.encode_weights_ring2k<uint32_t>(encoder.poly32(), w.uint32s().data(), std::nullopt);
+                w_encoded = helper.encode_weights_ring2k<uint32_t>(encoder.poly32(), w.uint32s().data(), std::nullopt, false);
             } else if (encoder.is_ring64()) {
-                w_encoded = helper.encode_weights_ring2k<uint64_t>(encoder.poly64(), w.uint64s().data(), std::nullopt);
+                w_encoded = helper.encode_weights_ring2k<uint64_t>(encoder.poly64(), w.uint64s().data(), std::nullopt, false);
             } else if (encoder.is_ring128()) {
-                w_encoded = helper.encode_weights_ring2k<uint128_t>(encoder.poly128(), w.uint128s().data(), std::nullopt);
+                w_encoded = helper.encode_weights_ring2k<uint128_t>(encoder.poly128(), w.uint128s().data(), std::nullopt, false);
             } else {
                 throw std::runtime_error("Unsupported encoder");
             }

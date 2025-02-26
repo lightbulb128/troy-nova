@@ -38,7 +38,7 @@ class HeUint64Conv2dTest:
         evaluator = ghe.evaluator
         
         x_encrypted = helper.encrypt_inputs(encryptor, encoder.encoder, x.data)
-        w_encoded = helper.encode_weights(encoder.encoder, w.data)
+        w_encoded = helper.encode_weights(encoder.encoder, w.data, False)
         s_encoded = helper.encode_outputs(encoder.encoder, s.data)
 
         x_serialized = x_encrypted.save(he)
@@ -115,7 +115,7 @@ class HeDoubleConv2dTest:
         evaluator = ghe.evaluator
         
         x_encrypted = helper.encrypt_inputs_doubles(encryptor, encoder.encoder, x.data, None, ghe.scale)
-        w_encoded = helper.encode_weights_doubles(encoder.encoder, w.data, None, ghe.scale)
+        w_encoded = helper.encode_weights_doubles(encoder.encoder, w.data, None, ghe.scale, False)
         s_encoded = helper.encode_outputs_doubles(encoder.encoder, s.data, None, ghe.scale * ghe.scale)
 
         x_serialized = x_encrypted.save(he)
@@ -227,11 +227,11 @@ class HeRing2kConv2dTest:
         
         if self.t_bits > 32:
             x_encrypted = helper.encrypt_inputs_ring2k64(encryptor, encoder, x.data, None)
-            w_encoded = helper.encode_weights_ring2k64(encoder, w.data, None)
+            w_encoded = helper.encode_weights_ring2k64(encoder, w.data, None, False)
             s_encoded = helper.encode_outputs_ring2k64(encoder, s.data, None)
         else:
             x_encrypted = helper.encrypt_inputs_ring2k32(encryptor, encoder, x.data, None)
-            w_encoded = helper.encode_weights_ring2k32(encoder, w.data, None)
+            w_encoded = helper.encode_weights_ring2k32(encoder, w.data, None, False)
             s_encoded = helper.encode_outputs_ring2k32(encoder, s.data, None)
 
         x_serialized = x_encrypted.save(he)

@@ -41,7 +41,7 @@ namespace conv2d_ckks {
         const Decryptor& decryptor = context.decryptor();
         
         Cipher2d x_encrypted = helper.encrypt_inputs_doubles(encryptor, encoder, x.doubles().data(), std::nullopt, scale);
-        Plain2d w_encoded = helper.encode_weights_doubles(encoder, w.doubles().data(), std::nullopt, scale);
+        Plain2d w_encoded = helper.encode_weights_doubles(encoder, w.doubles().data(), std::nullopt, scale, false);
         Plain2d s_encoded = helper.encode_outputs_doubles(encoder, s.doubles().data(), std::nullopt, scale * scale);
 
         stringstream x_serialized;
@@ -116,7 +116,7 @@ namespace conv2d_ckks {
         const Evaluator& evaluator = context.evaluator();
         const Decryptor& decryptor = context.decryptor();
         
-        Plain2d x_encoded = helper.encode_inputs_doubles(encoder, x.doubles().data(), std::nullopt, scale);
+        Plain2d x_encoded = helper.encode_inputs_doubles(encoder, x.doubles().data(), std::nullopt, scale, false);
         Cipher2d w_encrypted = helper.encrypt_weights_doubles(encryptor, encoder, w.doubles().data(), std::nullopt, scale);
         Plain2d s_encoded = helper.encode_outputs_doubles(encoder, s.doubles().data(), std::nullopt, scale * scale);
 

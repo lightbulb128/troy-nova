@@ -9,7 +9,7 @@ template<typename T>
 static void register_methods_conv2d_polynomial_encoder_ring2k(pybind11::class_<Conv2dHelper>& c, const char* bitwidth_name) {
     using Encoder = PolynomialEncoderRing2k<T>;
     auto encode_weights_ring2k = [](
-        const Conv2dHelper& self, const Encoder& encoder, const py::array_t<T>& weights, std::optional<ParmsID> parms_id
+        const Conv2dHelper& self, const Encoder& encoder, const py::array_t<T>& weights, std::optional<ParmsID> parms_id, bool for_cipher
     ) {
         if (weights.ndim() != 1) 
             throw std::invalid_argument("[Conv2dHelper::encode_weights] Binder - Weights must be flattened.");
@@ -17,10 +17,10 @@ static void register_methods_conv2d_polynomial_encoder_ring2k(pybind11::class_<C
             throw std::invalid_argument("[Conv2dHelper::encode_weights] Binder - Weights must be contiguous.");
         if (static_cast<size_t>(weights.size()) != self.output_channels * self.input_channels * self.kernel_height * self.kernel_width) 
             throw std::invalid_argument("[Conv2dHelper::encode_weights] Binder - Weights must be of size input_dims * output_dims.");
-        return self.encode_weights_ring2k<T>(encoder, get_pointer_from_buffer(weights), parms_id);
+        return self.encode_weights_ring2k<T>(encoder, get_pointer_from_buffer(weights), parms_id, for_cipher);
     };
     auto encode_inputs_ring2k = [](
-        const Conv2dHelper& self, const Encoder& encoder, const py::array_t<T>& inputs, std::optional<ParmsID> parms_id
+        const Conv2dHelper& self, const Encoder& encoder, const py::array_t<T>& inputs, std::optional<ParmsID> parms_id, bool for_cipher
     ) {
         if (inputs.ndim() != 1) 
             throw std::invalid_argument("[Conv2dHelper::encode_inputs] Binder - Inputs must be flattened.");
@@ -28,7 +28,7 @@ static void register_methods_conv2d_polynomial_encoder_ring2k(pybind11::class_<C
             throw std::invalid_argument("[Conv2dHelper::encode_inputs] Binder - Inputs must be contiguous.");
         if (static_cast<size_t>(inputs.size()) != self.batch_size * self.input_channels * self.image_height * self.image_width)
             throw std::invalid_argument("[Conv2dHelper::encode_inputs] Binder - Inputs must be of size batch_size * input_dims.");
-        return self.encode_inputs_ring2k<T>(encoder, get_pointer_from_buffer(inputs), parms_id);
+        return self.encode_inputs_ring2k<T>(encoder, get_pointer_from_buffer(inputs), parms_id, for_cipher);
     };
     
     auto encrypt_weights_ring2k = [](
@@ -86,23 +86,23 @@ static void register_methods_conv2d_polynomial_encoder_ring2k(pybind11::class_<C
 
 void register_conv2d_helper(pybind11::module& m) {
     
-    auto encode_weights_uint64s = [](const Conv2dHelper& self, const BatchEncoder& encoder, const py::array_t<uint64_t>& weights) {
+    auto encode_weights_uint64s = [](const Conv2dHelper& self, const BatchEncoder& encoder, const py::array_t<uint64_t>& weights, bool for_cipher) {
         if (weights.ndim() != 1) 
             throw std::invalid_argument("[Conv2dHelper::encode_weights] Binder - Weights must be flattened.");
         if (weights.strides(0) != sizeof(uint64_t))
             throw std::invalid_argument("[Conv2dHelper::encode_weights] Binder - Weights must be contiguous.");
         if (static_cast<size_t>(weights.size()) != self.output_channels * self.input_channels * self.kernel_height * self.kernel_width) 
             throw std::invalid_argument("[Conv2dHelper::encode_weights] Binder - Weights must be of size input_dims * output_dims.");
-        return self.encode_weights_uint64s(encoder, get_pointer_from_buffer(weights));
+        return self.encode_weights_uint64s(encoder, get_pointer_from_buffer(weights), for_cipher);
     };
-    auto encode_inputs_uint64s = [](const Conv2dHelper& self, const BatchEncoder& encoder, const py::array_t<uint64_t>& inputs) {
+    auto encode_inputs_uint64s = [](const Conv2dHelper& self, const BatchEncoder& encoder, const py::array_t<uint64_t>& inputs, bool for_cipher) {
         if (inputs.ndim() != 1) 
             throw std::invalid_argument("[Conv2dHelper::encode_inputs] Binder - Inputs must be flattened.");
         if (inputs.strides(0) != sizeof(uint64_t))
             throw std::invalid_argument("[Conv2dHelper::encode_inputs] Binder - Inputs must be contiguous.");
         if (static_cast<size_t>(inputs.size()) != self.batch_size * self.input_channels * self.image_height * self.image_width)
             throw std::invalid_argument("[Conv2dHelper::encode_inputs] Binder - Inputs must be of size batch_size * input_dims.");
-        return self.encode_inputs_uint64s(encoder, get_pointer_from_buffer(inputs));
+        return self.encode_inputs_uint64s(encoder, get_pointer_from_buffer(inputs), for_cipher);
     };
 
     auto encrypt_weights_uint64s = [](const Conv2dHelper& self, const Encryptor& encryptor, const BatchEncoder& encoder, const py::array_t<uint64_t>& weights) {
@@ -140,23 +140,23 @@ void register_conv2d_helper(pybind11::module& m) {
         return get_buffer_from_vector(result);
     };
 
-    auto encode_weights_doubles = [](const Conv2dHelper& self, const CKKSEncoder& encoder, const py::array_t<double>& weights, std::optional<ParmsID> parms_id, double scale) {
+    auto encode_weights_doubles = [](const Conv2dHelper& self, const CKKSEncoder& encoder, const py::array_t<double>& weights, std::optional<ParmsID> parms_id, double scale, bool for_cipher) {
         if (weights.ndim() != 1) 
             throw std::invalid_argument("[Conv2dHelper::encode_weights] Binder - Weights must be flattened.");
         if (weights.strides(0) != sizeof(uint64_t))
             throw std::invalid_argument("[Conv2dHelper::encode_weights] Binder - Weights must be contiguous.");
         if (static_cast<size_t>(weights.size()) != self.output_channels * self.input_channels * self.kernel_height * self.kernel_width) 
             throw std::invalid_argument("[Conv2dHelper::encode_weights] Binder - Weights must be of size input_dims * output_dims.");
-        return self.encode_weights_doubles(encoder, get_pointer_from_buffer(weights), parms_id, scale);
+        return self.encode_weights_doubles(encoder, get_pointer_from_buffer(weights), parms_id, scale, for_cipher);
     };
-    auto encode_inputs_doubles = [](const Conv2dHelper& self, const CKKSEncoder& encoder, const py::array_t<double>& inputs, std::optional<ParmsID> parms_id, double scale) {
+    auto encode_inputs_doubles = [](const Conv2dHelper& self, const CKKSEncoder& encoder, const py::array_t<double>& inputs, std::optional<ParmsID> parms_id, double scale, bool for_cipher) {
         if (inputs.ndim() != 1) 
             throw std::invalid_argument("[Conv2dHelper::encode_inputs] Binder - Inputs must be flattened.");
         if (inputs.strides(0) != sizeof(uint64_t))
             throw std::invalid_argument("[Conv2dHelper::encode_inputs] Binder - Inputs must be contiguous.");
         if (static_cast<size_t>(inputs.size()) != self.batch_size * self.input_channels * self.image_height * self.image_width)
             throw std::invalid_argument("[Conv2dHelper::encode_inputs] Binder - Inputs must be of size batch_size * input_dims.");
-        return self.encode_inputs_doubles(encoder, get_pointer_from_buffer(inputs), parms_id, scale);
+        return self.encode_inputs_doubles(encoder, get_pointer_from_buffer(inputs), parms_id, scale, for_cipher);
     };
     
     auto encrypt_weights_doubles = [](const Conv2dHelper& self, const Encryptor& encryptor, const CKKSEncoder& encoder, const py::array_t<double>& weights, std::optional<ParmsID> parms_id, double scale) {

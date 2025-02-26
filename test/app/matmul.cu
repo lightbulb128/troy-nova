@@ -55,7 +55,7 @@ namespace matmul {
         
         
         Cipher2d x_encrypted = helper.encrypt_inputs_uint64s(encryptor, encoder, x.integers().data());
-        Plain2d w_encoded = helper.encode_weights_uint64s(encoder, w.integers().data());
+        Plain2d w_encoded = helper.encode_weights_uint64s(encoder, w.integers().data(), false);
         Plain2d s_encoded = helper.encode_outputs_uint64s(encoder, s.integers().data());
 
         stringstream x_serialized;
@@ -124,7 +124,7 @@ namespace matmul {
             automorphism_key = context.key_generator().create_automorphism_keys(false);
         }
         
-        Plain2d x_encoded = helper.encode_inputs_uint64s(encoder, x.integers().data());
+        Plain2d x_encoded = helper.encode_inputs_uint64s(encoder, x.integers().data(), false);
         Cipher2d w_encrypted = helper.encrypt_weights_uint64s(encryptor, encoder, w.integers().data());
         Plain2d s_encoded = helper.encode_outputs_uint64s(encoder, s.integers().data());
 
