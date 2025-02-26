@@ -9,6 +9,11 @@ namespace troy { namespace linear {
 
     using utils::ceil_div;
 
+
+    template <typename T>
+    void ensure_ntt_form(bool batched_op, HeContextPointer context, MemoryPoolHandle pool, const T& target, T& output, bool centralize);
+    void ensure_no_ntt_form(bool batched_op, HeContextPointer context, MemoryPoolHandle pool, Cipher2d& target);
+
     enum class MatmulObjective : uint8_t {
         EncryptLeft = 0,
         EncryptRight = 1,

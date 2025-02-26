@@ -45,6 +45,12 @@ namespace troy { namespace linear {
         MatmulObjective objective; 
         MemoryPoolHandle pool;
         bool pack_lwe;
+
+        // When this is enabled, in the `matmul` function
+        // we will invoke the batched operation. Note that this will
+        // consume more memory (presumably by a ratio of O(1) constant) than the non-batched version.
+        bool batched_mul = false;
+
         
         inline void set_pool(MemoryPoolHandle pool) {
             this->pool = pool;
@@ -64,7 +70,7 @@ namespace troy { namespace linear {
             image_height(image_height), image_width(image_width),
             kernel_height(kernel_height), kernel_width(kernel_width),
             slot_count(poly_degree), objective(objective),
-            pool(pool)
+            pool(pool), batched_mul(true)
         {
             determine_block();
         }

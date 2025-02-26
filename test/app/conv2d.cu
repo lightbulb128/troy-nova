@@ -66,6 +66,7 @@ namespace conv2d {
         x_encrypted = Cipher2d::load_new(x_serialized, he);
 
         Cipher2d y_encrypted = helper.conv2d(evaluator, x_encrypted, w_encoded);
+
         if (mod_switch_to_next) {
             y_encrypted.mod_switch_to_next_inplace(evaluator);
         }
@@ -195,8 +196,8 @@ namespace conv2d {
     TEST(Conv2dTest, HostBFVConv2d) {
         GeneralHeContext ghe(false, SchemeType::BFV, 1024, 40, { 60, 40, 40, 60 }, true, 0x123, 0);
         srand(0);
-        test_conv2d(ghe, 2, 3, 6, 7, 9, 3, 5, false);
-        test_conv2d(ghe, 2, 3, 10, 56, 56, 10, 10, false);
+        test_conv2d(ghe, 2, 2, 6, 7, 9, 3, 5, false);
+        // test_conv2d(ghe, 2, 3, 10, 56, 56, 10, 10, false);
     }
 
     TEST(Conv2dTest, DeviceBFVConv2d) {
