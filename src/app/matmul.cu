@@ -91,6 +91,28 @@ namespace troy { namespace linear {
         }
     }
 
+    void ensure_scale_up(bool batched_op, HeContextPointer context, MemoryPoolHandle pool, Plain2d& target) {
+        if (target.size() == 0 || target[0].size() == 0) return;
+        bool is_ntt_form = target[0][0].is_ntt_form();
+        if (!is_ntt_form) return;
+        troy::Evaluator evaluator(context);
+        if (batched_op) {
+            std::vector<decltype(&target[0][0])> ptrs;
+            for (size_t i = 0; i < target.size(); i++) {
+                for (size_t j = 0; j < target[i].size(); j++) {
+                    ptrs.push_back(&target[i][j]);
+                }
+            }
+            evaluator.bfv_scale_up_inplace_batched(ptrs, context->first_parms_id(), pool);
+        } else {
+            for (size_t i = 0; i < target.size(); i++) {
+                for (size_t j = 0; j < target[i].size(); j++) {
+                    evaluator.bfv_scale_up_inplace(target[i][j], context->first_parms_id());
+                }
+            }
+        }
+    }
+
     #define D_IMPL_ALL                                               \
         D_IMPL(BatchEncoderAdapter, uint64_t)                        \
         D_IMPL(CKKSEncoderAdapter, double)                           \
@@ -214,7 +236,7 @@ namespace troy { namespace linear {
             }
             temp_plain.data().push_back(std::move(encoded_row_plain));
         }
-        if (!temp_plain.data()[0][0].is_ntt_form()) {
+        if (!temp_plain.data()[0][0].is_ntt_form() && for_cipher) {
             Plain2d temp; ensure_ntt_form(batched_mul, encoder.context(), pool, temp_plain, temp, !for_cipher);
             temp_plain = std::move(temp);
         }

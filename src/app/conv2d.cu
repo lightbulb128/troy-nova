@@ -131,7 +131,7 @@ namespace troy { namespace linear {
             }
             temp_plain.data().push_back(std::move(current_channel_plain));
         }
-        if (!temp_plain.data()[0][0].is_ntt_form()) {
+        if (!temp_plain.data()[0][0].is_ntt_form() && for_cipher) {
             Plain2d temp; ensure_ntt_form(batched_mul, encoder.context(), pool, temp_plain, temp, !for_cipher);
             temp_plain = std::move(temp);
         }
