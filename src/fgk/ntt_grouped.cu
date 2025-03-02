@@ -242,17 +242,19 @@ namespace troy::utils::fgk::ntt_grouped {
         device_ntt_transfer_to_rev_layers(layer_lower, layer_upper, operand, pcount, component_count, log_degree, use_inv_root_powers, result, tables);
     }
 
-    // Note: In other batched kernels, we simply use a for loop to handle each item in the batch.
-    // But NTT kernels are very heavy, so we instead use multiple blocks to handle the items in the batch.
-    // Specifically, we use blockIdx.y to index the batch size dim.
+    // // Note: In other batched kernels, we simply use a for loop to handle each item in the batch.
+    // // But NTT kernels are very heavy, so we instead use multiple blocks to handle the items in the batch.
+    // // Specifically, we use blockIdx.y to index the batch size dim.
+    // update (2025/3/2): this approach as stated by the comment above seems buggy. So I changed back to a loop ...
     __global__ void kernel_ntt_transfer_to_rev_layers_batched(
         size_t layer_lower, size_t layer_upper, 
         ConstSliceArrayRef<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, 
         bool use_inv_root_powers, SliceArrayRef<uint64_t> result,
         NTTTableIndexer tables
     ) {
-        size_t batch_index = blockIdx.y;
-        device_ntt_transfer_to_rev_layers(layer_lower, layer_upper, operand[batch_index], pcount, component_count, log_degree, use_inv_root_powers, result[batch_index], tables);
+        for (size_t batch_index = 0; batch_index < operand.size(); batch_index++) {
+            device_ntt_transfer_to_rev_layers(layer_lower, layer_upper, operand[batch_index], pcount, component_count, log_degree, use_inv_root_powers, result[batch_index], tables);
+        }
     }
 
     void ntt(ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, Slice<uint64_t> result, NTTTableIndexer tables) {
@@ -318,7 +320,7 @@ namespace troy::utils::fgk::ntt_grouped {
                 size_t block_count = ceil_div<size_t>(total, thread_count);
                 assert(block_count == total / thread_count);
                 utils::set_device(comp_ref.device_index());
-                dim3 grid_dim(block_count, operand.size());
+                dim3 grid_dim(block_count, 1);
                 kernel_ntt_transfer_to_rev_layers_batched<<<grid_dim, thread_count>>>(
                     0, log_degree, operand_batch, pcount, component_count, log_degree, use_inv_root_powers, result_batch, tables
                 );
@@ -330,7 +332,7 @@ namespace troy::utils::fgk::ntt_grouped {
                     size_t block_count = ceil_div<size_t>(total, NTT_KERNEL_THREAD_COUNT);
                     assert(block_count == total / NTT_KERNEL_THREAD_COUNT);
                     utils::set_device(comp_ref.device_index());
-                    dim3 grid_dim(block_count, operand.size());
+                    dim3 grid_dim(block_count, 1);
                     kernel_ntt_transfer_to_rev_layers_batched<<<grid_dim, NTT_KERNEL_THREAD_COUNT>>>(
                         layer_lower, layer_upper, operand_batch, pcount, component_count, log_degree, use_inv_root_powers, result_batch, tables
                     );
@@ -590,8 +592,9 @@ namespace troy::utils::fgk::ntt_grouped {
         bool use_inv_root_powers, SliceArrayRef<uint64_t> result,
         NTTTableIndexer tables
     ) {
-        size_t batch_index = blockIdx.y;
-        device_ntt_transfer_from_rev_layers(layer_lower, layer_upper, operand[batch_index], pcount, component_count, log_degree, use_inv_root_powers, result[batch_index], tables);
+        for (size_t batch_index = 0; batch_index < operand.size(); batch_index++) {
+            device_ntt_transfer_from_rev_layers(layer_lower, layer_upper, operand[batch_index], pcount, component_count, log_degree, use_inv_root_powers, result[batch_index], tables);
+        }
     }
 
     void intt(ConstSlice<uint64_t> operand, size_t pcount, size_t component_count, size_t log_degree, bool use_inv_root_powers, Slice<uint64_t> result, NTTTableIndexer tables) {
@@ -659,7 +662,7 @@ namespace troy::utils::fgk::ntt_grouped {
                 size_t block_count = ceil_div<size_t>(total, thread_count);
                 assert(block_count == total / thread_count);
                 utils::set_device(comp_ref.device_index());
-                dim3 grid_dim(block_count, operand.size());
+                dim3 grid_dim(block_count, 1);
                 kernel_ntt_transfer_from_rev_layers_batched<<<grid_dim, thread_count>>>(
                     0, log_degree, operand_batch, pcount, component_count, log_degree, use_inv_root_powers, result_batch, tables
                 );
@@ -671,7 +674,7 @@ namespace troy::utils::fgk::ntt_grouped {
                     size_t block_count = ceil_div<size_t>(total, NTT_KERNEL_THREAD_COUNT);
                     assert(block_count == total / NTT_KERNEL_THREAD_COUNT);
                     utils::set_device(comp_ref.device_index());
-                    dim3 grid_dim(block_count, operand.size());
+                    dim3 grid_dim(block_count, 1);
                     kernel_ntt_transfer_from_rev_layers_batched<<<grid_dim, NTT_KERNEL_THREAD_COUNT>>>(
                         layer_lower, layer_upper, operand_batch, pcount, component_count, log_degree, use_inv_root_powers, result_batch, tables
                     );

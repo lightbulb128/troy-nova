@@ -95,6 +95,9 @@ namespace troy {
             auto destination_batched = batch_utils::pcollect_poly(destination);
             scaling_variant::centralize_batched(plain, context_data, destination_batched, coeff_count, pool);
             utils::ntt_inplace_bp(destination_batched, coeff_count, ntt_tables, pool);
+            // for (size_t i = 0; i < n; i++) {
+            //     utils::ntt_inplace_p(destination[i]->poly(), coeff_count, ntt_tables);
+            // }
             for (size_t i = 0; i < n; i++) {
                 destination[i]->is_ntt_form() = true;
                 destination[i]->coeff_modulus_size() = coeff_modulus_size;

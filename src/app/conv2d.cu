@@ -210,7 +210,6 @@ namespace troy { namespace linear {
                                             + tci * block_size + (ti - si) * image_width_block + (tj - sj);
                                         // printf("inputIndex: %lu, vecIndex: %lu, b=%lu, tci=%lu,ti-si=%lu, tj-sj=%ld\n", inputIndex, vecIndex, b, tci, ti-si, tj-sj);
                                         vec[vecIndex] = inputs[inputIndex];
-                                        // printf("ok inputIndex: %lu, vecIndex: %lu\n", inputIndex, vecIndex);
                                     }
                                 }
                             }
