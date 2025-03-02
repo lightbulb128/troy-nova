@@ -373,6 +373,12 @@ namespace troy { namespace linear {
             size_t input_split = ceil_div(input_dims, input_block);
             size_t output_split = ceil_div(output_dims, output_block);
             size_t batch_split = ceil_div(batch_size, batch_block);
+            bool use_temp = false;
+            Plain2d temp_w;
+            if (!w.data()[0][0].is_ntt_form()) {
+                ensure_ntt_form(batched_mul, evaluator.context(), pool, w, temp_w, true);
+                use_temp = true;
+            }
             using std::vector;
             vector<const Ciphertext*> a_ptrs; a_ptrs.reserve(input_split * output_split * batch_split);
             vector<const Plaintext*> w_ptrs; w_ptrs.reserve(input_split * output_split * batch_split);
@@ -381,7 +387,7 @@ namespace troy { namespace linear {
                 for (size_t j = 0; j < output_split; j++) {
                     for (size_t b = 0; b < batch_split; b++) {
                         a_ptrs.push_back(&a[b][i]);
-                        w_ptrs.push_back(&w[i][j]);
+                        w_ptrs.push_back(use_temp ? &temp_w[i][j] : &w[i][j]);
                         r_ptrs.push_back(&ret[b][j]);
                     }
                 }

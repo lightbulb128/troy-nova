@@ -1157,6 +1157,7 @@ namespace multithread {
                     for (size_t i = 0; i < terms; i++) {
                         lwes.push_back(context.evaluator().extract_lwe_new(encrypted, i * (n / terms_upper), pool));
                     }
+                    IF_FALSE_PRINT_RETURN(good_pool(lwes[0].pool(), pool), "pack_lwes/extract-pool");
                     for (size_t i = 0; i < n; i++) {
                         if ((i % (n / terms_upper) == 0) and (i / (n / terms_upper) < terms)) continue;
                         if (message.is_integers()) message.integers()[i] = 0;

@@ -375,6 +375,12 @@ namespace troy { namespace linear {
             }
         } else {
             using std::vector;
+            bool use_temp = false;
+            Plain2d temp_w;
+            if (!encoded_weights[0][0].is_ntt_form()) {
+                ensure_ntt_form(batched_mul, evaluator.context(), pool, encoded_weights, temp_w, true);
+                use_temp = true;
+            }
             vector<const Ciphertext*> a_ptrs; a_ptrs.reserve(total_batch_size * group_len * input_group_len);
             vector<const Plaintext*> w_ptrs; w_ptrs.reserve(total_batch_size * group_len * input_group_len);
             vector<Ciphertext*> r_ptrs; r_ptrs.reserve(total_batch_size * group_len * input_group_len);
@@ -385,7 +391,7 @@ namespace troy { namespace linear {
                 for (size_t oc = 0; oc < group_len; oc++) {
                     for (size_t i = 0; i < input_group_len; i++) {
                         a_ptrs.push_back(&a[b][i]);
-                        w_ptrs.push_back(&encoded_weights[oc][i]);
+                        w_ptrs.push_back(use_temp ? &temp_w[oc][i] : &encoded_weights[oc][i]);
                         r_ptrs.push_back(&ret[b][oc]);
                     }
                 }

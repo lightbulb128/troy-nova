@@ -219,7 +219,7 @@ namespace troy {
         auto destination_batched = batch_utils::pcollect_polys(destination, 0, 2);
         bool is_ntt_form = get_is_ntt_form_vec(encrypted);
         if (!is_ntt_form) {
-            galois_tool.apply_bps(encrypted_batched, 2, galois_element, coeff_modulus, destination_batched);
+            galois_tool.apply_bps(encrypted_batched, 2, galois_element, coeff_modulus, destination_batched, pool);
         } else {
             galois_tool.apply_ntt_bps(encrypted_batched, 2, coeff_modulus_size, galois_element, destination_batched, pool);
         }

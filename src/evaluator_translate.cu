@@ -195,9 +195,9 @@ namespace troy {
                 auto arg2 = batch_utils::pcollect_const_reference(encrypted2);
                 auto arg3 = batch_utils::pcollect_reference(destination);
                 if (!subtract) {
-                    utils::add_bps(arg1, arg2, min_size, coeff_count, coeff_modulus, arg3);
+                    utils::add_bps(arg1, arg2, min_size, coeff_count, coeff_modulus, arg3, pool);
                 } else {
-                    utils::sub_bps(arg1, arg2, min_size, coeff_count, coeff_modulus, arg3);
+                    utils::sub_bps(arg1, arg2, min_size, coeff_count, coeff_modulus, arg3, pool);
                 }
             }
 
@@ -208,14 +208,14 @@ namespace troy {
                     auto arg2 = batch_utils::pcollect_const_polys(encrypted2, enc1_size, enc2_size);
                     for (const Ciphertext* c: encrypted2) arg2.push_back(c->polys(enc1_size, enc2_size));
                     if (!subtract) {
-                        utils::copy_slice_b(arg2, arg1);
+                        utils::copy_slice_b(arg2, arg1, pool);
                     } else {
-                        utils::negate_bps(arg2, enc2_size - enc1_size, coeff_count, coeff_modulus, arg1);
+                        utils::negate_bps(arg2, enc2_size - enc1_size, coeff_count, coeff_modulus, arg1, pool);
                     }
                 } else if (enc1_size > enc2_size) {
                     auto arg1 = batch_utils::pcollect_polys(destination, enc2_size, enc1_size);
                     auto arg2 = batch_utils::pcollect_const_polys(encrypted1, enc2_size, enc1_size);
-                    utils::copy_slice_b(arg2, arg1);
+                    utils::copy_slice_b(arg2, arg1, pool);
                 }
             }
         }
@@ -307,7 +307,7 @@ namespace troy {
             
             {
                 auto arg = batch_utils::pcollect_reference(encrypted1);
-                utils::multiply_scalar_inplace_bps(arg, f1, enc1_size, coeff_count, coeff_modulus);
+                utils::multiply_scalar_inplace_bps(arg, f1, enc1_size, coeff_count, coeff_modulus, pool);
             }
 
             std::vector<Ciphertext> encrypted2_copy; encrypted2_copy.reserve(encrypted2.size());
@@ -316,7 +316,7 @@ namespace troy {
             {
                 auto arg1 = batch_utils::pcollect_const_reference(encrypted2);
                 auto arg2 = batch_utils::rcollect_reference(encrypted2_copy);
-                utils::multiply_scalar_bps(arg1, f2, enc2_size, coeff_count, coeff_modulus, arg2);
+                utils::multiply_scalar_bps(arg1, f2, enc2_size, coeff_count, coeff_modulus, arg2, pool);
             }
             
             // Set new correction factor
@@ -336,9 +336,9 @@ namespace troy {
                 auto arg1 = batch_utils::pcollect_reference(encrypted1);
                 auto arg2 = batch_utils::pcollect_const_reference(encrypted2);
                 if (!subtract) {
-                    utils::add_inplace_bps(arg1, arg2, min_size, coeff_count, coeff_modulus);
+                    utils::add_inplace_bps(arg1, arg2, min_size, coeff_count, coeff_modulus, pool);
                 } else {
-                    utils::sub_inplace_bps(arg1, arg2, min_size, coeff_count, coeff_modulus);
+                    utils::sub_inplace_bps(arg1, arg2, min_size, coeff_count, coeff_modulus, pool);
                 }
             }
 
@@ -348,9 +348,9 @@ namespace troy {
                     auto arg1 = batch_utils::pcollect_polys(encrypted1, enc1_size, enc2_size);
                     auto arg2 = batch_utils::pcollect_const_polys(encrypted2, enc1_size, enc2_size);
                     if (!subtract) {
-                        utils::copy_slice_b(arg2, arg1);
+                        utils::copy_slice_b(arg2, arg1, pool);
                     } else {
-                        utils::negate_bps(arg2, enc2_size - enc1_size, coeff_count, coeff_modulus, arg1);
+                        utils::negate_bps(arg2, enc2_size - enc1_size, coeff_count, coeff_modulus, arg1, pool);
                     }
                 }
             }
