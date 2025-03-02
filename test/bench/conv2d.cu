@@ -331,8 +331,8 @@ namespace bench::conv2d {
             GeneralVector x = context.random_polynomial(bs * ic * ih * iw);
             GeneralVector w = context.random_polynomial(oc * ic * kh * kw);
             GeneralVector s = context.random_polynomial(bs * oc * oh * ow);
-            for (size_t i = 0; i < s.size(); i++) s.integers()[i] = 0;
-            for (size_t i = 0; i < x.size(); i++) x.integers()[i] = 0;
+            // for (size_t i = 0; i < s.size(); i++) s.integers()[i] = 0;
+            // for (size_t i = 0; i < x.size(); i++) x.integers()[i] = 0;
             // for (size_t i = 0; i < w.size(); i++) w.integers()[i] = 0;
 
             // create helper
@@ -455,7 +455,7 @@ namespace bench::conv2d {
                 x_encrypted = Cipher2d::load_new(x_serialized_stream, context.context());
                 timer.tock(timer_single_handle);
                 
-                timer_single_handle = timer.register_timer("Matmul");
+                timer_single_handle = timer.register_timer("Conv2d");
                 timer.tick(timer_single_handle);
                 Cipher2d y_encrypted = helper.conv2d(evaluator, x_encrypted, w_encoded);
                 timer.tock(timer_single_handle);
@@ -545,11 +545,10 @@ namespace bench::conv2d {
                     } else {
                         GeneralVector y_truth = conv2d_plaintext(x, w, s);
                         success = y_decoded.near_equal(y_truth, context.tolerance());
-                        for (size_t i = 0; i < y_truth.size(); i++) {
-                            uint64_t diff = y_decoded.integers()[i] - y_truth.integers()[i];
-                            std::cout << "diff at " << i << " = " << diff << std::endl;
-
-                        }
+                        // for (size_t i = 0; i < y_truth.size(); i++) {
+                        //     uint64_t diff = y_decoded.integers()[i] - y_truth.integers()[i];
+                        //     std::cout << "diff at " << i << " = " << diff << std::endl;
+                        // }
                     }
                 }
             }

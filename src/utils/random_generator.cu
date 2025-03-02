@@ -24,14 +24,20 @@ namespace troy {namespace utils {
 
     __global__ static void kernel_fill_uint128s_batched(SliceArrayRef<uint8_t> bytes, ruint128_t seed, ruint128_t counter, bool skip_one) {
         size_t idx = blockIdx.y;
-        ruint128_t ci = counter.add(idx * (bytes[idx].size() / sizeof(ruint128_t) + static_cast<size_t>(skip_one)));
-        device_fill_uint128s(bytes[idx], seed, ci);
+        while (idx < bytes.size()) {
+            ruint128_t ci = counter.add(idx * (bytes[idx].size() / sizeof(ruint128_t) + static_cast<size_t>(skip_one)));
+            device_fill_uint128s(bytes[idx], seed, ci);
+            idx += gridDim.y;
+        }
     }
     
     __global__ static void kernel_fill_uint128s_many(SliceArrayRef<uint8_t> bytes, ConstSlice<uint64_t> seed) {
         size_t idx = blockIdx.y;
-        ruint128_t this_seed = ruint128_t(seed[idx], 0);
-        device_fill_uint128s(bytes[idx], this_seed, 0);
+        while (idx < bytes.size()) {
+            ruint128_t ci = ruint128_t(seed[idx], 0);
+            device_fill_uint128s(bytes[idx], ci, 0);
+            idx += gridDim.y;
+        }
     }
 
     void fill_uint128s(Slice<uint8_t> bytes, ruint128_t seed, ruint128_t& counter) {
@@ -74,7 +80,7 @@ namespace troy {namespace utils {
             size_t block_count = utils::ceil_div(length, utils::KERNEL_THREAD_COUNT);
             auto bytes_batched = construct_batch(bytes, pool, bytes[0]);
             utils::set_device(bytes[0].device_index());
-            dim3 block_dims(block_count, bytes.size());
+            dim3 block_dims(block_count, utils::kernel_grid_y(bytes.size()));
             kernel_fill_uint128s_batched<<<block_dims, utils::KERNEL_THREAD_COUNT>>>(
                 bytes_batched, seed, counter, skip_one
             );
@@ -100,7 +106,7 @@ namespace troy {namespace utils {
             size_t block_count = utils::ceil_div(length, utils::KERNEL_THREAD_COUNT);
             auto bytes_batched = construct_batch(bytes, pool, bytes[0]);
             utils::set_device(bytes[0].device_index());
-            dim3 block_dims(block_count, bytes.size());
+            dim3 block_dims(block_count, utils::kernel_grid_y(bytes.size()));
             kernel_fill_uint128s_many<<<block_dims, utils::KERNEL_THREAD_COUNT>>>(
                 bytes_batched, seed
             );
@@ -311,8 +317,11 @@ namespace troy {namespace utils {
         ruint128_t seed, ruint128_t counter
     ) {
         size_t idx = blockIdx.y;
-        ruint128_t ci = counter.add((degree + 15ul) / 16ul * idx);
-        device_sample_poly_ternary(destination[idx], degree, moduli, seed, ci);
+        while (idx < destination.size()) {
+            ruint128_t ci = counter.add((degree + 15ul) / 16ul * idx);
+            device_sample_poly_ternary(destination[idx], degree, moduli, seed, ci);
+            idx += gridDim.y;
+        }
     }
     
     void RandomGenerator::sample_poly_ternary(Slice<uint64_t> destination, size_t degree, ConstSlice<Modulus> moduli) {
@@ -360,7 +369,7 @@ namespace troy {namespace utils {
             size_t block_count = utils::ceil_div(degree, utils::KERNEL_THREAD_COUNT);
             auto destination_batched = construct_batch(destination, pool, moduli);
             utils::set_device(moduli.device_index());
-            dim3 block_dims(block_count, destination.size());
+            dim3 block_dims(block_count, utils::kernel_grid_y(destination.size()));
             kernel_sample_poly_ternary_batched<<<block_dims, utils::KERNEL_THREAD_COUNT>>>(
                 destination_batched, degree, moduli,
                 this->seed, this->counter
@@ -416,8 +425,11 @@ namespace troy {namespace utils {
         ruint128_t seed, ruint128_t counter
     ) {
         size_t idx = blockIdx.y;
-        ruint128_t ci = counter.add((degree + 1ul) / 2ul * idx);
-        device_sample_poly_centered_binomial(destination[idx], degree, moduli, seed, ci);
+        while (idx < destination.size()) {
+            ruint128_t ci = counter.add((degree + 1ul) / 2ul * idx);
+            device_sample_poly_centered_binomial(destination[idx], degree, moduli, seed, ci);
+            idx += gridDim.y;
+        }
     }
 
     void RandomGenerator::sample_poly_centered_binomial(Slice<uint64_t> destination, size_t degree, ConstSlice<Modulus> moduli) {
@@ -462,7 +474,7 @@ namespace troy {namespace utils {
             size_t block_count = utils::ceil_div(degree, utils::KERNEL_THREAD_COUNT);
             auto destination_batched = construct_batch(destination, pool, moduli);
             utils::set_device(moduli.device_index());
-            dim3 block_dims(block_count, destination.size());
+            dim3 block_dims(block_count, utils::kernel_grid_y(destination.size()));
             kernel_sample_poly_centered_binomial_batched<<<block_dims, utils::KERNEL_THREAD_COUNT>>>(
                 destination_batched, degree, moduli,
                 this->seed, this->counter

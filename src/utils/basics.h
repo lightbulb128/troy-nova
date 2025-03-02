@@ -8,6 +8,11 @@ namespace troy { namespace utils {
 
     const double EPSILON = 1e-8;
     const size_t KERNEL_THREAD_COUNT = 256;
+    const size_t KERNEL_GRID_Y_BOUND = 32768;
+
+    inline size_t kernel_grid_y(size_t n) {
+        return std::min(KERNEL_GRID_Y_BOUND, n);
+    }
 
     inline bool same(bool a, bool b) {
         return a == b;

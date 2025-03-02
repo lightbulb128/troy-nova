@@ -167,7 +167,10 @@ namespace troy {
 
     __global__ static void kernel_mod_switch_drop_to_batched(utils::ConstSliceArrayRef<uint64_t> source, size_t poly_count, size_t source_modulus_size, size_t remain_modulus_size, size_t degree, utils::SliceArrayRef<uint64_t> destination) {
         size_t i = blockIdx.y;
-        device_mod_switch_drop_to(source[i], poly_count, source_modulus_size, remain_modulus_size, degree, destination[i]);
+        while (i < source.size()) {
+            device_mod_switch_drop_to(source[i], poly_count, source_modulus_size, remain_modulus_size, degree, destination[i]);
+            i += gridDim.y;
+        }
     }
 
     void Evaluator::mod_switch_drop_to_internal(const Ciphertext& encrypted, Ciphertext& destination, ParmsID target_parms_id, MemoryPoolHandle pool) const {
@@ -259,7 +262,7 @@ namespace troy {
         }
         
         size_t block_count = utils::ceil_div(target_coeff_modulus_size * coeff_count, utils::KERNEL_THREAD_COUNT);
-        dim3 block_dims(block_count, n);
+        dim3 block_dims(block_count, utils::kernel_grid_y(n));
         auto comp_ref = parms.coeff_modulus();
         auto encrypted_batched = batch_utils::construct_batch(batch_utils::pcollect_const_reference(encrypted), pool, comp_ref);
         auto destination_batched = batch_utils::construct_batch(batch_utils::pcollect_reference(destination), pool, comp_ref);

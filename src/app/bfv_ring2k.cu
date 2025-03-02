@@ -238,7 +238,10 @@ namespace troy::linear {
         utils::SliceArrayRef<uint64_t> out
     ) {
         size_t i = blockIdx.y;
-        device_scale_up(source[i], modulus, Q_div_t_mod_qi, Q_mod_t, t_half, base_mod_bitlen, out[i]);
+        while (i < source.size()) {
+            device_scale_up(source[i], modulus, Q_div_t_mod_qi, Q_mod_t, t_half, base_mod_bitlen, out[i]);
+            i += gridDim.y;
+        }
     }
 
 
@@ -297,7 +300,10 @@ namespace troy::linear {
         utils::SliceArrayRef<uint64_t> out
     ) {
         size_t i = blockIdx.y;
-        device_scale_up_uint128(source[i], modulus, Q_div_t_mod_qi, Q_mod_t, t_half, base_mod_bitlen, out[i]);
+        while (i < source.size()) {
+            device_scale_up_uint128(source[i], modulus, Q_div_t_mod_qi, Q_mod_t, t_half, base_mod_bitlen, out[i]);
+            i += gridDim.y;
+        }
     }
 
     template<typename T>
@@ -379,7 +385,7 @@ namespace troy::linear {
             }
             size_t block_count = ceil_div(max_source_size, KERNEL_THREAD_COUNT);
             utils::set_device(context.device_index());
-            dim3 block_dims(block_count, n);
+            dim3 block_dims(block_count, utils::kernel_grid_y(n));
             auto source_batched = batch_utils::construct_batch(source, pool, coeff_modulus);
             auto destination_batched = batch_utils::construct_batch(batch_utils::pcollect_reference(destination), pool, coeff_modulus);
             kernel_scale_up_batched<T><<<block_dims, KERNEL_THREAD_COUNT>>>(
@@ -474,7 +480,7 @@ namespace troy::linear {
             }
             size_t block_count = ceil_div(max_source_size, KERNEL_THREAD_COUNT);
             utils::set_device(context.device_index());
-            dim3 block_dims(block_count, n);
+            dim3 block_dims(block_count, utils::kernel_grid_y(n));
             auto source_batched = batch_utils::construct_batch(source, pool, coeff_modulus);
             auto destination_batched = batch_utils::construct_batch(batch_utils::pcollect_reference(destination), pool, coeff_modulus);
             kernel_scale_up_uint128_batched<<<block_dims, KERNEL_THREAD_COUNT>>>(
@@ -528,7 +534,10 @@ namespace troy::linear {
         utils::SliceArrayRef<uint64_t> out
     ) {
         size_t i = blockIdx.y;
-        device_centralize(source[i], mod_qs, t_half, mod_t_mask, out[i]);
+        while (i < source.size()) {
+            device_centralize(source[i], mod_qs, t_half, mod_t_mask, out[i]);
+            i += gridDim.y;
+        }
     }
 
     template <typename T>
@@ -603,7 +612,7 @@ namespace troy::linear {
             }
             size_t block_count = ceil_div(max_source_size, KERNEL_THREAD_COUNT);
             utils::set_device(context.device_index());
-            dim3 block_dims(block_count, n);
+            dim3 block_dims(block_count, utils::kernel_grid_y(n));
             auto source_batched = batch_utils::construct_batch(source, pool, coeff_modulus);
             auto destination_batched = batch_utils::construct_batch(batch_utils::pcollect_reference(destination), pool, coeff_modulus);
             kernel_centralize_batched<T><<<block_dims, KERNEL_THREAD_COUNT>>>(

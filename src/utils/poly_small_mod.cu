@@ -11,20 +11,26 @@ namespace troy {namespace utils {
     static __global__ void kernel_copy_slice_b(ConstSliceArrayRef<uint64_t> from, SliceArrayRef<uint64_t> to) {
         size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
         size_t i = blockIdx.y;
-        ConstSlice<uint64_t> from_i = from[i];
-        Slice<uint64_t> to_i = to[i];
-        if (idx < from_i.size()) {
-            to_i[idx] = from_i[idx];
+        while (i < from.size()) {
+            ConstSlice<uint64_t> from_i = from[i];
+            Slice<uint64_t> to_i = to[i];
+            if (idx < from_i.size()) {
+                to_i[idx] = from_i[idx];
+            }
+            i += gridDim.y;
         }
     }
     
     static __global__ void kernel_copy_slice_b(ConstSliceArrayRef<uint8_t> from, SliceArrayRef<uint8_t> to) {
         size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
         size_t i = blockIdx.y;
-        ConstSlice<uint8_t> from_i = from[i];
-        Slice<uint8_t> to_i = to[i];
-        if (idx < from_i.size()) {
-            to_i[idx] = from_i[idx];
+        while (i < from.size()) {
+            ConstSlice<uint8_t> from_i = from[i];
+            Slice<uint8_t> to_i = to[i];
+            if (idx < from_i.size()) {
+                to_i[idx] = from_i[idx];
+            }
+            i += gridDim.y;
         }
     }
 
@@ -38,8 +44,11 @@ namespace troy {namespace utils {
     static __global__ void kernel_set_slice_b(uint64_t value, SliceArrayRef<uint64_t> to) {
         size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
         size_t i = blockIdx.y;
-        if (idx < to[i].size()) {
-            to[i][idx] = value;
+        while (i < to.size()) {
+            if (idx < to[i].size()) {
+                to[i][idx] = value;
+            }
+            i += gridDim.y;
         }
     }
 
@@ -59,7 +68,7 @@ namespace troy {namespace utils {
             SliceArray<uint64_t> to_arr = construct_batch(to, pool, device_reference);
             size_t block_count = ceil_div<size_t>(device_reference.size(), KERNEL_THREAD_COUNT);
             set_device(device_reference.device_index());
-            dim3 block_dims(block_count, from.size());
+            dim3 block_dims(block_count, utils::kernel_grid_y(from.size()));
             kernel_copy_slice_b<<<block_dims, KERNEL_THREAD_COUNT>>>(from_arr, to_arr);
             utils::stream_sync();
         }
@@ -82,7 +91,7 @@ namespace troy {namespace utils {
             SliceArray<uint8_t> to_arr = construct_batch(to, pool, device_reference);
             size_t block_count = ceil_div<size_t>(device_reference.size(), KERNEL_THREAD_COUNT);
             set_device(device_reference.device_index());
-            dim3 block_dims(block_count, from.size());
+            dim3 block_dims(block_count, utils::kernel_grid_y(from.size()));
             kernel_copy_slice_b<<<block_dims, KERNEL_THREAD_COUNT>>>(from_arr, to_arr);
             utils::stream_sync();
         }
@@ -108,9 +117,13 @@ namespace troy {namespace utils {
             }
         } else {
             SliceArray<uint64_t> to_arr = construct_batch(to, pool, device_reference);
-            size_t block_count = ceil_div<size_t>(device_reference.size(), KERNEL_THREAD_COUNT);
+            size_t max_len = 0;
+            for (size_t i = 0; i < to.size(); i++) {
+                max_len = std::max(max_len, to[i].size());
+            }
+            size_t block_count = ceil_div<size_t>(max_len, KERNEL_THREAD_COUNT);
             set_device(device_reference.device_index());
-            dim3 block_dims(block_count, to.size());
+            dim3 block_dims(block_count, utils::kernel_grid_y(to.size()));
             kernel_set_slice_b<<<block_dims, KERNEL_THREAD_COUNT>>>(value, to_arr);
             utils::stream_sync();
         }
@@ -265,7 +278,10 @@ namespace troy {namespace utils {
     }
     static __global__ void kernel_add_bps(ConstSliceArrayRef<uint64_t> polys1, ConstSliceArrayRef<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, SliceArrayRef<uint64_t> result) {
         size_t i = blockIdx.y;
-        device_add_ps(polys1[i], polys2[i], pcount, degree, moduli, result[i]);
+        while (i < polys1.size()) {
+            device_add_ps(polys1[i], polys2[i], pcount, degree, moduli, result[i]);
+            i += gridDim.y;
+        }
     }
 
     void add_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
@@ -297,7 +313,7 @@ namespace troy {namespace utils {
             SliceArray<uint64_t> result_arr = construct_batch(result, pool, moduli);
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
             set_device(moduli.device_index());
-            dim3 block_dims(block_count, polys1.size());
+            dim3 block_dims(block_count, utils::kernel_grid_y(polys1.size()));
             kernel_add_bps<<<block_dims, KERNEL_THREAD_COUNT>>>(polys1_arr, polys2_arr, pcount, degree, moduli, result_arr);
             utils::stream_sync();
         }
@@ -326,7 +342,10 @@ namespace troy {namespace utils {
     }
     static __global__ void kernel_sub_bps(ConstSliceArrayRef<uint64_t> polys1, ConstSliceArrayRef<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, SliceArrayRef<uint64_t> result) {
         size_t i = blockIdx.y;
-        device_sub_ps(polys1[i], polys2[i], pcount, degree, moduli, result[i]);
+        while (i < polys1.size()) {
+            device_sub_ps(polys1[i], polys2[i], pcount, degree, moduli, result[i]);
+            i += gridDim.y;
+        }
     }
 
     void sub_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
@@ -358,7 +377,7 @@ namespace troy {namespace utils {
             SliceArray<uint64_t> result_arr = construct_batch(result, pool, moduli);
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
             set_device(moduli.device_index());
-            dim3 block_dims(block_count, polys1.size());
+            dim3 block_dims(block_count, utils::kernel_grid_y(polys1.size()));
             kernel_sub_bps<<<block_dims, KERNEL_THREAD_COUNT>>>(polys1_arr, polys2_arr, pcount, degree, moduli, result_arr);
             utils::stream_sync();
         }
@@ -774,7 +793,10 @@ namespace troy {namespace utils {
 
     __global__ void kernel_multiply_uint64operand_bps(ConstSliceArrayRef<uint64_t> polys, ConstSlice<MultiplyUint64Operand> operand, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, SliceArrayRef<uint64_t> result) {
         size_t i = blockIdx.y;
-        device_multiply_uint64operand_ps(polys[i], operand, pcount, degree, moduli, result[i]);
+        while (i < polys.size()) {
+            device_multiply_uint64operand_ps(polys[i], operand, pcount, degree, moduli, result[i]);
+            i += gridDim.y;
+        }
     }
 
     void multiply_uint64operand_ps(ConstSlice<uint64_t> polys, ConstSlice<MultiplyUint64Operand> operand, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
@@ -804,11 +826,11 @@ namespace troy {namespace utils {
             }
         } else {
             size_t block_count = ceil_div<size_t>(pcount * moduli.size() * degree, KERNEL_THREAD_COUNT);
-            dim3 block_dims(block_count, polys.size());
+            dim3 block_dims(block_count, utils::kernel_grid_y(polys.size()));
             auto polys_batched = construct_batch(polys, pool, moduli);
             auto result_batched = construct_batch(result, pool, moduli);
             set_device(moduli.device_index());
-            kernel_multiply_uint64operand_bps<<<dim3(block_count, polys.size()), KERNEL_THREAD_COUNT>>>(polys_batched, operand, pcount, degree, moduli, result_batched);
+            kernel_multiply_uint64operand_bps<<<block_dims, KERNEL_THREAD_COUNT>>>(polys_batched, operand, pcount, degree, moduli, result_batched);
             utils::stream_sync();
         }
     }
@@ -859,7 +881,10 @@ namespace troy {namespace utils {
     }
     __global__ void kernel_dyadic_product_bps(ConstSliceArrayRef<uint64_t> polys1, ConstSliceArrayRef<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, SliceArrayRef<uint64_t> result) {
         size_t i = blockIdx.y;
-        device_dyadic_product_ps(polys1[i], polys2[i], pcount, degree, moduli, result[i]);
+        while (i < polys1.size()) { 
+            device_dyadic_product_ps(polys1[i], polys2[i], pcount, degree, moduli, result[i]);
+            i += gridDim.y;
+        }
     }
 
     void dyadic_product_ps(ConstSlice<uint64_t> polys1, ConstSlice<uint64_t> polys2, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, Slice<uint64_t> result) {
@@ -893,7 +918,7 @@ namespace troy {namespace utils {
             auto polys2_batched = construct_batch(polys2, pool, moduli);
             auto result_batched = construct_batch(result, pool, moduli);
             utils::set_device(moduli.device_index());
-            dim3 block_dims(block_count, polys1.size());
+            dim3 block_dims(block_count, utils::kernel_grid_y(polys1.size()));
             kernel_dyadic_product_bps<<<block_dims, KERNEL_THREAD_COUNT>>>(polys1_batched, polys2_batched, pcount, degree, moduli, result_batched);
             utils::stream_sync();
         }
@@ -948,7 +973,10 @@ namespace troy {namespace utils {
     }
     __global__ void kernel_negacyclic_shift_bps(ConstSliceArrayRef<uint64_t> polys, size_t shift, size_t pcount, size_t degree, ConstSlice<Modulus> moduli, SliceArrayRef<uint64_t> result) {
         size_t i = blockIdx.y;
-        device_negacyclic_shift_ps(polys[i], shift, pcount, degree, moduli, result[i]);
+        while (i < polys.size()) {  
+            device_negacyclic_shift_ps(polys[i], shift, pcount, degree, moduli, result[i]);
+            i += gridDim.y;
+        }
     }
     
 
@@ -981,7 +1009,7 @@ namespace troy {namespace utils {
             ConstSliceArray<uint64_t> polys_arr = construct_batch(polys, pool, moduli);
             SliceArray<uint64_t> result_arr = construct_batch(result, pool, moduli);
             set_device(moduli.device_index());
-            dim3 block_dims(block_count, polys.size());
+            dim3 block_dims(block_count, utils::kernel_grid_y(polys.size()));
             kernel_negacyclic_shift_bps<<<block_dims, KERNEL_THREAD_COUNT>>>(polys_arr, shift, pcount, degree, moduli, result_arr);
             utils::stream_sync();
         }

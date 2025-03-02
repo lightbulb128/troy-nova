@@ -415,7 +415,10 @@ namespace troy {namespace utils {
         ConstSliceArrayRef<uint64_t> input, size_t input_pcount, SliceArrayRef<uint64_t> destination
     ) {
         size_t i = blockIdx.y;
-        device_divide_and_round_q_last(base_q, coeff_count, q_last_half, inv_q_last_mod_q, input[i], input_pcount, destination[i]);
+        while (i < input.size()) {
+            device_divide_and_round_q_last(base_q, coeff_count, q_last_half, inv_q_last_mod_q, input[i], input_pcount, destination[i]);
+            i += gridDim.y;
+        }
     }
 
     void RNSTool::divide_and_round_q_last(ConstSlice<uint64_t> input, size_t input_pcount, Slice<uint64_t> destination) const {
@@ -483,7 +486,7 @@ namespace troy {namespace utils {
             auto input_batched = construct_batch(input, pool, comp_ref);
             auto destination_batched = construct_batch(destination, pool, comp_ref);
             utils::set_device(comp_ref.device_index());
-            dim3 block_dims(block_count, n);
+            dim3 block_dims(block_count, utils::kernel_grid_y(n));
             kernel_divide_and_round_q_last_batched<<<block_dims, utils::KERNEL_THREAD_COUNT>>>(
                 this->base_q().base(),
                 this->coeff_count(),
@@ -561,7 +564,10 @@ namespace troy {namespace utils {
         ConstSliceArrayRef<uint64_t> input, size_t pcount, SliceArrayRef<uint64_t> temp
     ) {
         size_t i = blockIdx.y;
-        device_divide_and_round_q_last_ntt_step1(base_q, coeff_count, q_last_half, input[i], pcount, temp[i]);
+        while (i < input.size()) {
+            device_divide_and_round_q_last_ntt_step1(base_q, coeff_count, q_last_half, input[i], pcount, temp[i]);
+            i += gridDim.y;
+        }
     }
 
     static void divide_and_round_q_last_ntt_step1(const RNSTool& self, Slice<uint64_t> input, size_t pcount, Slice<uint64_t> temp) {
@@ -721,7 +727,7 @@ namespace troy {namespace utils {
                 temp.push_back(Buffer<uint64_t>(input_pcount, base_q_size - 1, coeff_count, device, pool));
             }
             size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
-            dim3 block_dims(block_count, n);
+            dim3 block_dims(block_count, utils::kernel_grid_y(n));
             utils::set_device(this->device_index());
             auto comp_ref = this->base_q().base();
 
@@ -1317,18 +1323,21 @@ namespace troy {namespace utils {
         SliceArrayRef<uint64_t> fast_convert_temp
     ) {
         size_t i = blockIdx.y;
-        device_decrypt_scale_and_round_fused(
-            phase[i], coeff_count, 
-            prod_t_gamma_mod_q, 
-            neg_inv_q_mod_t_gamma,
-            base_q, base_t_gamma,
-            base_q_inv_punctured_product_mod_base,
-            fast_convert_base_change_matrix,
-            gamma, t, inv_gamma_mod_t,
-            destination[i],
-            temp[i],
-            fast_convert_temp[i]
-        );
+        while (i < phase.size()) {
+            device_decrypt_scale_and_round_fused(
+                phase[i], coeff_count, 
+                prod_t_gamma_mod_q, 
+                neg_inv_q_mod_t_gamma,
+                base_q, base_t_gamma,
+                base_q_inv_punctured_product_mod_base,
+                fast_convert_base_change_matrix,
+                gamma, t, inv_gamma_mod_t,
+                destination[i],
+                temp[i],
+                fast_convert_temp[i]
+            );
+            i += gridDim.y;
+        }
     }
     
     void RNSTool::decrypt_scale_and_round(ConstSlice<uint64_t> phase, size_t phase_coeff_count, Slice<uint64_t> destination, MemoryPoolHandle pool) const {
@@ -1406,7 +1415,7 @@ namespace troy {namespace utils {
                 fast_convert_temp.emplace_back(phase_coeff_count * this->base_q().size(), this->on_device(), pool);
             }
             size_t block_count = utils::ceil_div(phase_coeff_count, utils::KERNEL_THREAD_COUNT);
-            dim3 block_dims(block_count, phase.size());
+            dim3 block_dims(block_count, utils::kernel_grid_y(phase.size()));
             auto comp_ref = this->base_q().base();
             auto phase_batched = construct_batch(phase, pool, comp_ref);
             auto destination_batched = construct_batch(destination, pool, comp_ref);
@@ -1655,7 +1664,10 @@ namespace troy {namespace utils {
         SliceArrayRef<uint64_t> delta_mod_q_i
     ) {
         size_t i = blockIdx.y;
-        device_mod_t_and_divide_q_last_ntt_step1(base_q, t, coeff_count, input_intt[i], pcount, inv_q_last_mod_t, delta_mod_q_i[i]);
+        while (i < input_intt.size()) {
+            device_mod_t_and_divide_q_last_ntt_step1(base_q, t, coeff_count, input_intt[i], pcount, inv_q_last_mod_t, delta_mod_q_i[i]);
+            i += gridDim.y;
+        }
     }
 
     __device__ static void device_mod_t_and_divide_q_last_ntt_step2(
@@ -1794,7 +1806,7 @@ namespace troy {namespace utils {
             auto comp_ref = this->base_q().base();
 
             size_t block_count = utils::ceil_div(coeff_count, utils::KERNEL_THREAD_COUNT);
-            dim3 block_dims(block_count, n);
+            dim3 block_dims(block_count, utils::kernel_grid_y(n));
 
             std::vector<Buffer<uint64_t>> delta_mod_q_i; delta_mod_q_i.reserve(n);
             for (size_t i = 0; i < n; i++) {

@@ -367,7 +367,7 @@ namespace troy {
         } else if (!encrypted_ntt && !plain_ntt) {
             this->multiply_plain_normal_accumulate(encrypted, plain, destination, set_zero, pool);
         } else if (encrypted_ntt && !plain_ntt) {
-            printf("multiply_plain_accumulate: encrypted_ntt && !plain_ntt\n");
+            // printf("multiply_plain_accumulate: encrypted_ntt && !plain_ntt\n");
             std::vector<Plaintext> plain_ntt(plain.size());
             auto plain_ntt_ptr = batch_utils::collect_pointer(plain_ntt);
             auto plain_ntt_const_ptr = batch_utils::collect_const_pointer(plain_ntt);

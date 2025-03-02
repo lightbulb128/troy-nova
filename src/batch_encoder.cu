@@ -118,7 +118,10 @@ namespace troy {
         utils::ConstSliceArrayRef<uint64_t> values, ConstSlice<size_t> index_map, utils::SliceArrayRef<uint64_t> destination
     ) {
         size_t i = blockIdx.y;
-        device_encode_set_values(values[i], index_map, destination[i]);
+        while (i < values.size()) {
+            device_encode_set_values(values[i], index_map, destination[i]);
+            i += gridDim.y;
+        }
     }
 
     static void encode_set_values(ConstSlice<uint64_t> values, ConstSlice<size_t> index_map, Slice<uint64_t> destination) {
@@ -160,7 +163,7 @@ namespace troy {
             }
             size_t block_count = utils::ceil_div(destination_size, utils::KERNEL_THREAD_COUNT);
             utils::set_device(index_map.device_index());
-            dim3 block_dims(block_count, values.size());
+            dim3 block_dims(block_count, utils::kernel_grid_y(values.size()));
             kernel_encode_set_values_batched<<<block_dims, utils::KERNEL_THREAD_COUNT>>>(values_batched, index_map, destination_batched);
             utils::stream_sync();
         }
@@ -358,7 +361,10 @@ namespace troy {
         utils::ConstSliceArrayRef<uint64_t> values, ConstSlice<size_t> index_map, utils::SliceArrayRef<uint64_t> destination
     ) {
         size_t i = blockIdx.y;
-        device_decode_set_values(values[i], index_map, destination[i]);
+        while (i < values.size()) {
+            device_decode_set_values(values[i], index_map, destination[i]);
+            i += gridDim.y;
+        }
     }
 
     static void decode_set_values(ConstSlice<uint64_t> values, ConstSlice<size_t> index_map, Slice<uint64_t> destination) {
@@ -398,7 +404,7 @@ namespace troy {
             }
             size_t block_count = utils::ceil_div(destination_size, utils::KERNEL_THREAD_COUNT);
             utils::set_device(index_map.device_index());
-            dim3 block_dims(block_count, values.size());
+            dim3 block_dims(block_count, utils::kernel_grid_y(values.size()));
             kernel_decode_set_values_batched<<<block_dims, utils::KERNEL_THREAD_COUNT>>>(values_batched, index_map, destination_batched);
             utils::stream_sync();
         }
