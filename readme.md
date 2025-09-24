@@ -203,4 +203,12 @@ If you wish to use **multiple GPUs, you must** create multiple memory pools to h
 
 # Contribute
 Feel free to fork / pull request.
-Please cite this repository if you use it in your work.
+Please cite this paper if you use it in your work!
+```
+@inproceedings{liu2024pencil,
+  title={{Pencil: Private and Extensible Collaborative Learning without the Non-Colluding Assumption}},
+  author={Liu, Xuanqi and Liu, Zhuotao and Li, Qi and Xu, Ke and Xu, Mingwei},
+  journal={NDSS},
+  year={2024}
+}
+```
